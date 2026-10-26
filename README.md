@@ -54,7 +54,7 @@ Type a download percent, an upload percent, or both (1 to 100). Leave a field bl
 
 The header shows the interface, whether this process is root, and the active unit (`Mbit/s` or `MB/s`). `b` toggles the unit. Percents stay percents. Budgets and the usage numbers follow the toggle.
 
-If sysfs has no positive link speed (common on Wi-Fi), the capacity line says unset. Type a budget in the down and up fields and press Enter. The number is in the unit currently shown: `100` in Mbit/s is 100 Mbit/s, and the same digits in MB/s are 100 megabytes per second. An empty budget means "use the detected speed".
+If sysfs has no positive link speed (common on Wi-Fi), the capacity line says unset. Type a budget in the down and up fields. Apply uses that number, and so does Enter in the budget field. The number is in the unit currently shown: `100` in Mbit/s is 100 Mbit/s, and the same digits in MB/s are 100 megabytes per second. An empty budget means "use the detected speed".
 
 Keys:
 

@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import unittest
 
-from textual.widgets import DataTable
+from rich.text import Text
+from textual.widgets import DataTable, Input
 
+from bandctl.app import BandctlApp
 from bandctl.procscan import ProcessInfo
 from bandctl.rates import Unit
 from bandctl.shaper import Share, ShaperError
@@ -60,14 +62,12 @@ class FakeShaper:
         return dict(self._shares)
 
 
-def _app(fake, *, root=True):
-    from bandctl.app import BandctlApp
-
+def _app(fake, *, root=True, link_bps=100_000_000):
     return BandctlApp(
         iface="eth0",
         shaper=fake,
         processes=lambda: list(PROCS),
-        link_bps=100_000_000,
+        link_bps=link_bps,
         is_root=root,
     )
 
@@ -111,6 +111,14 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("30%", app._status_text)
             cell = table.get_cell("42", "down_pct")
             self.assertEqual(str(cell), "30")
+            self.assertNotIsInstance(cell, Text)
+
+            await pilot.press("escape", "down")
+            await pilot.pause()
+            moved = table.get_cell("42", "down_pct")
+            self.assertIsInstance(moved, Text)
+            self.assertIn("f0a35e", str(moved.style))
+            await pilot.press("up")
 
             await pilot.press("u")
             self.assertEqual(fake.removed, [42])
@@ -151,6 +159,20 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("not running as root", app._status_text)
             self.assertEqual(fake.applied, [])
         self.assertFalse(fake.torn)
+
+    async def test_apply_uses_a_budget_that_was_not_submitted(self):
+        fake = FakeShaper()
+        app = _app(fake, link_bps=None)
+        async with app.run_test(size=(120, 36)) as pilot:
+            await pilot.pause()
+            self.assertIsNone(app._down_budget)
+            await pilot.click("#down-budget")
+            await pilot.press("1", "0", "0")
+            await pilot.click("#down-pct")
+            await pilot.press("3", "0")
+            await pilot.click("#apply")
+            self.assertEqual(fake.applied[-1][:5], (42, 30, None, 100_000_000, None))
+            self.assertEqual(app.query_one("#down-budget", Input).value, "100")
 
 
 if __name__ == "__main__":

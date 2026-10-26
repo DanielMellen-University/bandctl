@@ -225,6 +225,9 @@ class BandctlApp(App):
             return
         self._selected = pid
         self._fill_inputs(pid)
+        # Limited rows are orange except the cursor. Repaint now, otherwise
+        # the previous row stays plain and this one stays orange for a second.
+        self._render_table()
         self._paint_detail()
 
     def on_key(self, event) -> None:
@@ -270,6 +273,9 @@ class BandctlApp(App):
             return
         if self.shaper is None:
             self._note("no interface to shape", bad=True)
+            return
+        # A budget typed in the header counts even if that field never saw Enter.
+        if not self._commit_budgets(announce=False):
             return
         try:
             down = parse_percent(self.query_one("#down-pct", Input).value, allow_empty=True)
@@ -325,6 +331,12 @@ class BandctlApp(App):
             self._usage = usage
             self._push_caps()
             self._render()
+            if self._status_text.startswith("refresh failed:"):
+                self._note("ready")
+        except Exception as exc:  # one bad scan must not stop the clock
+            message = f"refresh failed: {exc}"
+            if message != self._status_text:
+                self._note(message, bad=True)
         finally:
             self._busy = False
 

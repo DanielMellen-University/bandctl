@@ -36,7 +36,7 @@ The status line and the log confirm the share, for example `pid 4242 download 30
 
 The header shows the detected link speed from `/sys/class/net/<iface>/speed`. That file is in megabits per second. `-1` or `0` (typical for Wi-Fi and some virtual devices) is shown as `unknown`, and the capacity line says `unset` until you type a budget.
 
-The two budget fields are in the unit shown in the header. `b` flips between Mbit/s and MB/s and rewrites a budget you already typed so the underlying bit rate stays the same. Press Enter in a budget field to commit it. Empty means "use the detected speed again".
+The two budget fields are in the unit shown in the header. `b` flips between Mbit/s and MB/s and rewrites a budget you already typed so the underlying bit rate stays the same. Apply reads those fields, and so does Enter while the cursor is in one of them. Empty means "use the detected speed again".
 
 Example. The link is unknown. You are in Mbit/s and type `100` as the download budget. A 30% download share then ceilings at 30 Mbit/s. Press `b` and the same budget reads `12.5`, which is 100 Mbit/s expressed in MB/s.
 

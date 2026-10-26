@@ -151,7 +151,10 @@ class Shaper:
                 self._shares = old_shares
                 self._down_cap, self._up_cap = old_caps
                 if created:
-                    self._restore_pid(pid, share.original_cgroup)
+                    try:
+                        self._restore_pid(pid, share.original_cgroup)
+                    except ShaperError:
+                        pass
                 try:
                     self._sync()
                 except ShaperError:
@@ -305,7 +308,7 @@ class Shaper:
             dest = "/sys/fs/cgroup" + original.rstrip("/") + "/cgroup.procs"
         try:
             self.host.write(dest, f"{pid}\n")
-        except OSError as exc:
+        except (OSError, ShaperError) as exc:
             raise ShaperError(f"could not restore pid {pid}: {exc}") from exc
 
     def _rmdir_leaf(self, pid: int) -> None:
@@ -389,6 +392,10 @@ class Shaper:
             return
         try:
             self._run(["modprobe", "ifb"])
+            self._run(["modprobe", "sch_ingress"])
+            self._run(["modprobe", "cls_matchall"])
+            self._run(["modprobe", "act_ctinfo"])
+            self._run(["modprobe", "act_mirred"])
             try:
                 self._run(["ip", "link", "add", IFB, "type", "ifb"])
             except ShaperError as exc:
@@ -400,10 +407,12 @@ class Shaper:
             except ShaperError as exc:
                 if "exists" not in str(exc).lower():
                     raise
+            # u32 rejects protocol all, so a catch-all has to be matchall.
+            # prio 10 leaves room for a more specific filter to run first.
             self._run(
                 [
                     "tc", "filter", "add", "dev", self.iface, "parent", "ffff:",
-                    "protocol", "all", "prio", "1", "u32", "match", "u32", "0", "0",
+                    "prio", "10", "matchall",
                     "action", "ctinfo", "cpmark", "pipe",
                     "action", "mirred", "egress", "redirect", "dev", IFB,
                 ]

@@ -148,6 +148,8 @@ class ApplyTests(unittest.TestCase):
         shaper.apply(42, 20, None, 100_000_000, None)
         commands = _joined(host)
         self.assertFalse(any("dev eth0 root handle 1:" in cmd for cmd in commands))
+        self.assertTrue(any("parent ffff:" in cmd and "matchall" in cmd for cmd in commands))
+        self.assertFalse(any("protocol all" in cmd for cmd in commands))
         self.assertTrue(shaper.download_active)
         self.assertFalse(shaper.upload_active)
 
@@ -234,6 +236,17 @@ class ApplyTests(unittest.TestCase):
         self.assertTrue(any("restored pid 42" in note for note in notes))
         self.assertTrue(any("qdisc add dev eth0 root fq_codel" in cmd for cmd in _joined(host)))
         self.assertNotIn("/run/bandctl.json", host.files)
+
+    def test_restore_reports_a_cgroup_write_error(self):
+        shaper, host = _shaper()
+
+        def boom(path: str, data: str) -> None:
+            raise ShaperError(f"{path}: Device or resource busy")
+
+        host.write = boom  # type: ignore[method-assign]
+        with self.assertRaises(ShaperError) as caught:
+            shaper._restore_pid(42, "/user.slice/session-1.scope")
+        self.assertIn("could not restore pid 42", str(caught.exception))
 
 
 if __name__ == "__main__":

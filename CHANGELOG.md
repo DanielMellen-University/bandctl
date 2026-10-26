@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Apply commits the budget fields. A number typed in the header is used even when Enter was not pressed there.
+- Moving the highlight repaints limited rows immediately. The selected row stays green. The other limited rows stay orange.
+- A failed refresh is written to the log once. The next successful refresh clears that status.
+- Putting a process back in its original cgroup reports the write error. The host raises that as a shaper error, and the old handler only caught `OSError`.
+- The ingress redirect is a `matchall` filter. `u32` rejects `protocol all`, so download setup could fail before any class existed.
+
 ## 0.1.0 (2026-10-26)
 
 First usable UI.

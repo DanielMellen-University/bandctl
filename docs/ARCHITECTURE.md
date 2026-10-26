@@ -58,12 +58,12 @@ modprobe ifb
 ip link add ifb-bandctl type ifb
 ip link set ifb-bandctl up
 tc qdisc add dev IFACE handle ffff: ingress
-tc filter add dev IFACE parent ffff: protocol all u32 match u32 0 0 \
+tc filter add dev IFACE parent ffff: prio 10 matchall \
     action ctinfo cpmark pipe \
     action mirred egress redirect dev ifb-bandctl
 ```
 
-The same HTB shape is then added on `ifb-bandctl`. `ctinfo` is `pipe` so the redirect still runs. The default for a tc action is to stop the action list.
+The same HTB shape is then added on `ifb-bandctl`. `ctinfo` is `pipe` so the redirect still runs. The default for a tc action is to stop the action list. The filter is `matchall` at priority 10. The `u32` classifier rejects `protocol all`, so that form never installed the redirect. Priority 10 leaves a lower number free for a filter that should match first.
 
 Class rates are replaced in place when a percent or the capacity changes. Filters are added once per class. Removing the last share in a direction deletes that direction's qdisc. Removing the last share overall also deletes the nft table.
 
