@@ -112,6 +112,7 @@ class BandctlApp(App):
         self._procs: list[ProcessInfo] = []
         self._usage: dict[int, tuple[float, float]] = {}
         self._history = RateHistory()
+        self._process_starts: dict[int, int | None] = {}
         self._selected: int | None = None
         self._shown: list[int] = []
         self._cols: tuple[str, ...] = ()
@@ -370,6 +371,15 @@ class BandctlApp(App):
                 self._detected_bps = detected
             self._procs = procs
             self._usage = usage
+            for proc in procs:
+                previous = self._process_starts.get(proc.pid)
+                if previous is not None and proc.start_ticks is not None and previous != proc.start_ticks:
+                    self._history.forget(proc.pid)
+                    usage.pop(proc.pid, None)
+            self._process_starts = {
+                proc.pid: proc.start_ticks if proc.start_ticks is not None else self._process_starts.get(proc.pid)
+                for proc in procs
+            }
             valid = self._rates_source is not None or (not self._ss_failed and self._sampler.primed)
             self._history.record(time.monotonic(), {proc.pid for proc in procs}, usage if valid else None)
             self._push_caps()

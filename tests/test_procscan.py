@@ -10,6 +10,7 @@ from pathlib import Path
 from bandctl.procscan import (
     format_cmdline,
     parse_proc_net,
+    parse_start_ticks,
     parse_socket_inodes,
     scan_processes,
     user_from_status,
@@ -24,6 +25,12 @@ TCP = """\
 
 
 class ParseTests(unittest.TestCase):
+    def test_start_ticks_with_spaces_and_parentheses_in_name(self):
+        text = "42 (worker ) name) S " + "0 " * 18 + "12345 0 0\n"
+        self.assertEqual(parse_start_ticks(text), 12345)
+        self.assertIsNone(parse_start_ticks("42 (bad) S 0"))
+        self.assertIsNone(parse_start_ticks("42 (bad) S " + "0 " * 18 + "oops"))
+
     def test_inodes(self):
         self.assertEqual(parse_socket_inodes(TCP), {"555", "777"})
 
@@ -96,6 +103,7 @@ class ScanTests(unittest.TestCase):
         self.assertEqual(found[7].sockets, 1)
         self.assertEqual(found[7].cmdline, "curl https://example")
         self.assertEqual(found[7].comm, "curl")
+        self.assertEqual(found[7].start_ticks, 12345)
         self.assertEqual(found[8].sockets, 0)
 
     def test_live_proc_skips_self(self):
@@ -111,6 +119,7 @@ class ScanTests(unittest.TestCase):
         (entry / "comm").write_text(comm + "\n", encoding="utf-8")
         (entry / "cmdline").write_bytes(cmdline)
         (entry / "status").write_text(status, encoding="utf-8")
+        (entry / "stat").write_text(f"{pid} ({comm}) S " + "0 " * 18 + "12345 0\n", encoding="utf-8")
         if inode is not None:
             os.symlink(f"socket:[{inode}]", fd / "3")
 

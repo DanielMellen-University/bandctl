@@ -21,6 +21,7 @@ class ProcessInfo:
     cmdline: str
     user: str
     sockets: int
+    start_ticks: int | None = None
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,21 @@ class SockFlow:
 
 
 _UID_RE = re.compile(r"^Uid:\s+(\d+)", re.MULTILINE)
+
+
+def parse_start_ticks(text: str) -> int | None:
+    """Read field 22 from /proc/<pid>/stat, including names with parentheses."""
+    end = text.rfind(")")
+    if end < 0:
+        return None
+    fields = text[end + 1 :].split()
+    if len(fields) < 20:
+        return None
+    try:
+        value = int(fields[19])
+    except ValueError:
+        return None
+    return value if value >= 0 else None
 
 
 def parse_socket_inodes(text: str) -> set[str]:
@@ -166,6 +182,7 @@ def _collect_inodes(root: Path) -> set[str]:
 
 def _one(entry: Path, inodes: set[str]) -> ProcessInfo | None:
     try:
+        start_ticks = _start_ticks(entry)
         comm = (entry / "comm").read_text(encoding="utf-8", errors="replace").strip() or "?"
         cmdline = format_cmdline((entry / "cmdline").read_bytes(), comm)
         status = (entry / "status").read_text(encoding="utf-8", errors="replace")
@@ -173,13 +190,24 @@ def _one(entry: Path, inodes: set[str]) -> ProcessInfo | None:
     except (FileNotFoundError, ProcessLookupError, PermissionError, OSError):
         return None
     sockets = _socket_count(entry / "fd", inodes)
+    end_ticks = _start_ticks(entry)
+    if start_ticks is not None and end_ticks != start_ticks:
+        return None
     return ProcessInfo(
         pid=int(entry.name),
         comm=comm,
         cmdline=cmdline,
         user=user_from_status(status, uid),
         sockets=sockets,
+        start_ticks=start_ticks,
     )
+
+
+def _start_ticks(entry: Path) -> int | None:
+    try:
+        return parse_start_ticks((entry / "stat").read_text(encoding="utf-8", errors="replace"))
+    except OSError:
+        return None
 
 
 def _socket_count(fd_dir: Path, inodes: set[str]) -> int:

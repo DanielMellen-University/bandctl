@@ -224,6 +224,20 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("█", str(app.query_one("#down-history", Static).render()))
             self.assertIn("▁", str(app.query_one("#up-history", Static).render()))
 
+    async def test_graph_history_is_cleared_when_pid_is_reused(self):
+        processes = [ProcessInfo(42, "old", "old", "user", 1, 10)]
+        app = BandctlApp(iface="eth0", shaper=FakeShaper(), processes=lambda: list(processes),
+                         link_bps=100_000_000, is_root=True, rates=lambda: {42: (5_000_000, 0)})
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            import time
+            app._history.record(time.monotonic() - 10, {42}, {42: (9_000_000, 0)})
+            processes[0] = ProcessInfo(42, "new", "new", "user", 1, 20)
+            await app._refresh()
+            graph = app._history.graph(42, 0, time.monotonic(), 60)
+            self.assertEqual(graph[:-1], " " * 59)
+            self.assertEqual(graph[-1], "▁")
+
     async def test_narrow_capped_rate_caption_fits(self):
         fake = FakeShaper()
         fake._shares[42] = Share(42, 30, None, 10, "/", "curl")

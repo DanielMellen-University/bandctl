@@ -12,6 +12,9 @@ class RateHistory:
     def __init__(self) -> None:
         self._samples: dict[int, dict[int, tuple[float, float]]] = {}
 
+    def forget(self, pid: int) -> None:
+        self._samples.pop(pid, None)
+
     def record(self, now: float, pids: set[int], rates: dict[int, tuple[float, float]] | None) -> None:
         """Record a second, or leave a gap when the measurement failed."""
         second = int(now)
