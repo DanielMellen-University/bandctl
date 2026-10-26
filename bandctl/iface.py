@@ -23,12 +23,20 @@ def parse_ip_route(text: str) -> str | None:
 
 
 def parse_proc_route(text: str) -> str | None:
-    """Interface whose destination is ``00000000`` in ``/proc/net/route``."""
+    """Interface on the lowest-metric active IPv4 default route."""
+    best: tuple[int, str] | None = None
     for line in text.splitlines()[1:]:
         parts = line.split()
-        if len(parts) >= 2 and parts[1] == "00000000":
-            return parts[0]
-    return None
+        if len(parts) < 8 or parts[1] != "00000000" or parts[7] != "00000000":
+            continue
+        try:
+            flags = int(parts[3], 16)
+            metric = int(parts[6])
+        except ValueError:
+            continue
+        if flags & 1 and (best is None or metric < best[0]):
+            best = (metric, parts[0])
+    return best[1] if best else None
 
 
 def parse_speed_mbps(text: str) -> int | None:

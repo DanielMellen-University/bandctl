@@ -25,11 +25,18 @@ class ParseTests(unittest.TestCase):
 
     def test_proc_route(self):
         text = (
-            "Iface\tDestination\tGateway\tFlags\n"
-            "eth0\t00000000\t0101A8C0\t0003\n"
-            "eth0\t0001A8C0\t00000000\t0001\n"
+            "Iface Destination Gateway Flags RefCnt Use Metric Mask\n"
+            "down0 00000000 0101A8C0 0002 0 0 1 00000000\n"
+            "eth1 00000000 0101A8C0 0003 0 0 600 00000000\n"
+            "eth0 00000000 0101A8C0 0003 0 0 100 00000000\n"
+            "other 00000000 00000000 0001 0 0 0 00FFFFFF\n"
+            "bad 00000000 00000000 invalid 0 0 0 00000000\n"
         )
         self.assertEqual(parse_proc_route(text), "eth0")
+        self.assertIsNone(parse_proc_route(
+            "Iface Destination Gateway Flags RefCnt Use Metric Mask\n"
+            "down0 00000000 0101A8C0 0002 0 0 1 00000000\n"
+        ))
 
     def test_speed(self):
         self.assertEqual(parse_speed_mbps("1000\n"), 1000)
@@ -45,7 +52,7 @@ class LookupTests(unittest.TestCase):
     def test_proc_fallback(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "route"
-            path.write_text("Iface Destination\nwlan0 00000000 0\n", encoding="utf-8")
+            path.write_text("Iface Destination Gateway Flags RefCnt Use Metric Mask\nwlan0 00000000 0 0001 0 0 10 00000000\n", encoding="utf-8")
             name = default_iface(run=lambda _args: "", proc_route=path)
         self.assertEqual(name, "wlan0")
 
