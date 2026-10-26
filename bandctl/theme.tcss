@@ -280,6 +280,10 @@ RulesScreen {
 }
 
 #rule-status {
+    color: #8fd19a;
+}
+
+#rule-status.-error {
     color: #f0a35e;
 }
 

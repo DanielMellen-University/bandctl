@@ -88,32 +88,46 @@ class RulesScreen(ModalScreen[list[AutoRule]]):
             window = "-" if rule.window is None else f"{rule.window.start:%H:%M}-{rule.window.end:%H:%M}"
             table.add_row(rule.name, str(rule.down_pct or "-"), str(rule.up_pct or "-"), window)
 
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        # Enter in any rule field adds the rule, like Enter in a percent field
+        # on the main screen applies a limit.
+        event.stop()
+        self._add_rule()
+
+    def _status(self, text: str, *, bad: bool = False) -> None:
+        status = self.query_one("#rule-status", Static)
+        status.set_class(bad, "-error")
+        status.update(text)
+
+    def _add_rule(self) -> None:
+        try:
+            down = parse_percent(self.query_one("#rule-down", Input).value, allow_empty=True)
+            up = parse_percent(self.query_one("#rule-up", Input).value, allow_empty=True)
+            start = self.query_one("#rule-start", Input).value.strip()
+            end = self.query_one("#rule-end", Input).value.strip()
+            if bool(start) != bool(end):
+                raise ValueError("enter both times or leave both blank")
+            window = DailyWindow(parse_time(start), parse_time(end)) if start else None
+            rule = AutoRule(self.query_one("#rule-name", Input).value, down, up, window)
+        except (RateError, ValueError) as exc:
+            self._status(str(exc), bad=True)
+            return
+        self.rules.append(rule)
+        self._render_rules()
+        for query in ("#rule-name", "#rule-down", "#rule-up", "#rule-start", "#rule-end"):
+            self.query_one(query, Input).value = ""
+        self._status("Rule added")
+        self.query_one("#rule-name", Input).focus()
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "rule-add":
-            try:
-                down = parse_percent(self.query_one("#rule-down", Input).value, allow_empty=True)
-                up = parse_percent(self.query_one("#rule-up", Input).value, allow_empty=True)
-                start = self.query_one("#rule-start", Input).value.strip()
-                end = self.query_one("#rule-end", Input).value.strip()
-                if bool(start) != bool(end):
-                    raise ValueError("enter both times or leave both blank")
-                window = DailyWindow(parse_time(start), parse_time(end)) if start else None
-                rule = AutoRule(self.query_one("#rule-name", Input).value, down, up, window)
-            except (RateError, ValueError) as exc:
-                self.query_one("#rule-status", Static).update(str(exc))
-                return
-            self.rules.append(rule)
-            self._render_rules()
-            for query in ("#rule-name", "#rule-down", "#rule-up", "#rule-start", "#rule-end"):
-                self.query_one(query, Input).value = ""
-            self.query_one("#rule-status", Static).update("Rule added")
-            self.query_one("#rule-name", Input).focus()
+            self._add_rule()
         elif event.button.id == "rule-delete":
             table = self.query_one("#rule-table", DataTable)
             if self.rules:
                 self.rules.pop(table.cursor_row)
                 self._render_rules()
-                self.query_one("#rule-status", Static).update("Rule deleted")
+                self._status("Rule deleted")
         elif event.button.id == "rule-close":
             self.action_close()
 

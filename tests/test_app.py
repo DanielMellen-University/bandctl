@@ -298,6 +298,29 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             await app._refresh()
             self.assertEqual(fake.shares[42].up_pct, 70)
 
+    async def test_rule_editor_enter_adds_and_colors_errors_only(self):
+        app = _app(FakeShaper())
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.press("t")
+            await pilot.pause()
+            self.assertIsInstance(app.screen, RulesScreen)
+            screen = app.screen
+            status = screen.query_one("#rule-status", Static)
+            screen.query_one("#rule-name", Input).value = "steam"
+            screen.query_one("#rule-down", Input).value = "abc"
+            screen.query_one("#rule-down", Input).focus()
+            await pilot.press("enter")
+            await pilot.pause()
+            self.assertEqual(screen.query_one("#rule-table", DataTable).row_count, 0)
+            self.assertTrue(status.has_class("-error"))
+            screen.query_one("#rule-down", Input).value = "20"
+            await pilot.press("enter")
+            await pilot.pause()
+            self.assertEqual(screen.query_one("#rule-table", DataTable).row_count, 1)
+            self.assertIn("Rule added", str(status.render()))
+            self.assertFalse(status.has_class("-error"))
+            self.assertIs(app.screen, screen)
+
     async def test_rule_editor_adds_and_deletes_rules(self):
         fake = FakeShaper()
         fake._shares[42] = Share(42, 30, None, 10, "/", "curl")
