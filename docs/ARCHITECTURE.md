@@ -30,7 +30,7 @@ add rule inet bandctl prerouting socket cgroupv2 level 2 "bandctl-<pid>" \
 
 The minor (10, 11, ...) is both the fwmark and the HTB class id `1:<minor>`.
 
-The kernel stores a socket's cgroup when the socket is created and does not update it when the process is moved. An already-open connection would miss the nft rule. bandctl therefore also reads `/proc/<pid>/fd` and `/proc/net/{tcp,tcp6,udp,udp6}` and installs a flower filter per socket:
+The kernel stores a socket's cgroup when the socket is created and does not update it when the process is moved. An already-open connection would miss the nft rule. So bandctl also reads `/proc/<pid>/fd` and `/proc/net/{tcp,tcp6,udp,udp6}` and installs a flower filter per socket:
 
 ```
 tc filter add dev IFACE parent 1: protocol ip prio 2 handle <n> flower \
@@ -47,7 +47,7 @@ Upload filters send the packet straight to the class. Download filters run befor
 
 Upload: the output hook runs before the device qdisc, so `meta mark` is visible to `tc filter ... fw` on the real interface.
 
-Download: the ingress qdisc runs before netfilter, so a mark set in prerouting is too late for that packet. The output rule also sets the conntrack mark. On ingress, a `ctinfo cpmark` action copies that connmark onto the skb, then `mirred` redirects the packet to `ifb-bandctl`, where a second HTB class caps it. Return traffic of a flow the process has already sent on is therefore shaped. The first inbound packet of a brand new inbound connection is not, until something the process sends (an ACK is enough) has stored the connmark.
+Download: the ingress qdisc runs before netfilter, so a mark set in prerouting is too late for that packet. The output rule also sets the conntrack mark. On ingress, a `ctinfo cpmark` action copies that connmark onto the skb, then `mirred` redirects the packet to `ifb-bandctl`, where a second HTB class caps it. So return traffic of a flow the process has already sent on is shaped. The first inbound packet of a brand new inbound connection is not, until something the process sends (an ACK is enough) has stored the connmark.
 
 If the IFB setup fails, the apply is rolled back and the status line shows the `tc` or `ip` error. Download is not silently treated as capped.
 
@@ -84,12 +84,27 @@ Class rates are replaced in place when a percent or the capacity changes. Filter
 
 ## Failure and exit
 
-`apply` copies the previous share map. On any error it restores that map, writes the pid back to its old cgroup if this call had moved it, and runs sync again so the qdisc matches the restored map. A partial IFB setup is deleted before the error is raised.
+`apply` copies the previous share map. On any error it restores that map, writes the pid back to its old cgroup if this call had moved it, removes the leaf cgroup it made, and runs sync again so the qdisc matches the restored map. A partial IFB setup is deleted before the error is raised.
 
-`teardown` is idempotent (`_torn`). It restores every pid, syncs to an empty share map (which restores the root qdisc and deletes IFB and nft), removes the cgroup directories, and deletes the state file. `recover` does the same from the state file on the next start. SIGTERM and `atexit` call teardown as well as the Textual unmount hook. The second call returns immediately.
+`remove` writes the pid back to its old cgroup before it forgets the share. If that write fails and the pid still exists, the share is kept and the error is raised, so a later Remove or the exit cleanup can try again. If the pid is gone, the share is dropped.
+
+`teardown` is idempotent (`_torn`). It restores every pid, syncs to an empty share map (which restores the root qdisc and deletes IFB and nft), removes the cgroup directories, and deletes the state file. If that sync fails, it falls back to a scrub that deletes what bandctl may have created. The scrub restores the root qdisc only when this run had replaced it. `recover` does the same from the state file on the next start. SIGTERM and `atexit` call teardown as well as the Textual unmount hook. The second call returns immediately.
 
 ## UI
 
-`app.py` refreshes once a second on a worker thread (`asyncio.to_thread`) so the `/proc` walk, `ss -tinp`, and `tc -s class show` do not block the keyboard. The Down and Up columns are the change in `bytes_received` and `bytes_acked` on non-loopback TCP sockets. The table hides a process at or below 1% of link capacity, or of that measured total when the link speed is unknown. `tc -s class show` still drives the flower refresh. The shaper lock is an `RLock` shared with Apply. Selection is a pid, not a row index, so a rescan does not lose the highlight. Column widths are chosen so the table fits the terminal. User and sockets are dropped first. The command column takes the leftover width. Below 108 columns the percent fields sit above the meters instead of beside them. Below 32 rows the log gets shorter, and at 42 rows or more it gets taller. Below 64 columns or 24 rows the screen is a request to make the terminal bigger. Sizes come from the resize event, because `App.size` can still be the old size while that handler runs.
+`app.py` refreshes once a second on a worker thread (`asyncio.to_thread`) so the `/proc` walk, `ss -tinp`, and `tc -s class show` do not block the keyboard. The Down and Up columns are the change in `bytes_received` and `bytes_acked` on non-loopback TCP sockets. The table hides a process at or below 1% of link capacity, or of that measured total when the link speed is unknown. `tc -s class show` still drives the flower refresh. The shaper lock is an `RLock` shared with Apply. Selection is a pid, not a row index, so a rescan does not lose the highlight. Column widths are chosen so the table fits the terminal. User and sockets are dropped first. The command column takes the leftover width. If that would leave it under 16 cells, the percent headers become `Dn%` and `Up%` and the rate columns lose a cell. The table has no horizontal scrollbar.
+
+The screen gets size classes that `theme.tcss` keys off:
+
+| Class | When | Effect |
+| --- | --- | --- |
+| `-stacked` | under 108 columns | percent fields above the meters |
+| `-narrow` | under 80 columns | short header, tighter footer |
+| `-compact` | under 32 rows | one-row inputs and buttons, one-line meters, borderless log |
+| `-short` | under 22 rows | two-line log |
+| `-tall` | 42 rows or more | taller log |
+| `-too-small` | under 60 columns or 18 rows | a message asking for a bigger terminal |
+
+Sizes come from the resize event, because `App.size` can still be the old size while that handler runs.
 
 The on-screen rate is the socket delta times 8, divided by the sample interval. The first `ss` sample is a baseline and shows zero. Class byte counters are still read so the flower filters stay in sync.

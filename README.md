@@ -4,7 +4,7 @@ Terminal UI for per-process bandwidth shares on Linux.
 
 Pick a running process and give it a download percent and an upload percent. Each percent is a ceiling on that direction's link capacity: 30% of a 100 Mbit/s link is 30 Mbit/s, and the process cannot go past it while bandctl is running. Under the UI this is a cgroup, nftables marks, and an HTB qdisc. Quit, and those rules are removed.
 
-> Status: **0.1.0**. Separate download and upload shares, a bits/bytes display toggle, sort by measured usage, and a scrolling log of tc, nft, and cgroup errors. Shares are not saved across runs.
+Version 0.1.0. Download and upload are capped separately, rates can be shown in bits or bytes, the table sorts by measured usage, and a log shows any tc, nft, or cgroup errors. Shares are not saved across runs.
 
 ## Layout
 
@@ -27,7 +27,7 @@ docs/            usage, architecture, testing
 
 ## Install
 
-One command. It installs `python3`, `iproute2`, and `nftables` if they are missing, puts bandctl in `/opt/bandctl`, and links `bandctl` onto `PATH`.
+The installer installs `python3`, `iproute2`, and `nftables` if they are missing, puts bandctl in `/opt/bandctl`, and links `bandctl` onto `PATH`.
 
 ```
 curl -fsSL https://raw.githubusercontent.com/DanielMellen-University/bandctl/main/install.sh | sudo bash
@@ -72,11 +72,22 @@ sudo .venv/bin/python -m bandctl
 
 Name the venv interpreter. `sudo python` is often a different install and will not see Textual.
 
-`--iface` overrides the device on the IPv4 default route. There is no interface switch inside the UI. Quit and start again with the flag.
+`--iface` overrides the device on the IPv4 default route. bandctl checks that the device exists before it starts. A typo stops with an error that lists the interfaces it found. There is no interface switch inside the UI. Quit and start again with the flag.
 
 ## Usage
 
-The window needs 64 columns and 24 rows. Below that, bandctl asks you to make the terminal bigger. Wider windows put the meters next to the percent fields and add the user and socket columns. The process table fills the width instead of scrolling sideways.
+The window needs at least 60 columns and 18 rows. Below that, bandctl asks you to make the terminal bigger. The layout changes with the window size:
+
+| Size | Layout |
+| --- | --- |
+| 108 columns or more | Meters sit beside the percent fields. |
+| Under 108 columns | Meters sit under the percent fields. |
+| Under 80 columns | Shorter header, `Dn%` and `Up%` columns, and a tighter footer. The user and socket columns go first when space runs out. |
+| Under 32 rows | Inputs and buttons take one row each, with a colored edge instead of a box, so the table keeps more rows. |
+| Under 22 rows | The log shows two lines. |
+| 42 rows or more | The log shows more lines. |
+
+The process table always fits the width instead of scrolling sideways. The table, the percent fields, the meters, the log, and the status line stay on screen at every supported size.
 
 The table lists processes using more than 1% of the link. When the link speed is unknown, that 1% is of the TCP traffic measured right now, ignoring loopback. `n` lists every process. A process that already has a share stays on screen so you can remove it. Type `/` to filter by name, pid, or user. Select a row with the arrow keys or a click.
 
@@ -100,7 +111,7 @@ Keys:
 | `b` | Toggle Mbit/s and MB/s |
 | `q` | Quit and remove every rule this process installed |
 
-The log under the bars keeps the last successes and failures. A failed `tc`, `nft`, or cgroup write is one line there and in the status bar. The previous share is left in place when an update fails, and a brand new share is rolled back.
+The log under the bars keeps the last successes and failures. A failed `tc`, `nft`, or cgroup write is one line there and in the status bar. The previous share is left in place when an update fails. A brand new share is rolled back, and the empty cgroup made for it is removed. If Remove cannot put a running process back in its old cgroup, the share stays listed so you can try again. A process that has already exited is dropped.
 
 Full steps and the manual check with a real download are in [docs/USAGE.md](docs/USAGE.md) and [docs/TESTING.md](docs/TESTING.md).
 
@@ -108,7 +119,7 @@ Full steps and the manual check with a real download are in [docs/USAGE.md](docs
 
 The ceiling is a percent of capacity, not of whatever the link happens to be doing this second. Capacity is the detected link speed, unless you typed a budget. Several shares may add up to more than 100%. Each process still cannot pass its own percent. The guaranteed HTB rates are scaled down so they fit, and the status line says so.
 
-Rules exist only while bandctl is running. Exit restores each process to the cgroup it had before, deletes the nftables table `inet bandctl`, deletes `ifb-bandctl`, and puts the previous root qdisc back. A crash writes `/run/bandctl.json`. The next start uses that file to finish the cleanup.
+Rules exist only while bandctl is running. Exit restores each process to the cgroup it had before, deletes the nftables table `inet bandctl`, deletes `ifb-bandctl`, and puts the previous root qdisc back if bandctl replaced it. A qdisc bandctl never touched is left alone, even when another part of the cleanup fails. A crash writes `/run/bandctl.json`. The next start uses that file to finish the cleanup.
 
 While a share is active, bandctl replaces the root qdisc on the chosen interface with HTB. Unmarked traffic can still use the full link. Do not point bandctl at an interface that already has an `htb` qdisc. It will refuse.
 
@@ -123,8 +134,30 @@ Connections that are already open are shaped too. Moving a process does not move
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). In short: run the unit tests before pushing, and change the docs in the same commit as the behaviour they describe.
+See [CONTRIBUTING.md](CONTRIBUTING.md). Run the unit tests before pushing, and change the docs in the same commit as the behaviour they describe.
 
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+## Screenshots
+
+A 120 by 36 terminal. `curl` has a 30% download share and is close to its cap. `rsync` has a 10% upload share, so its row is orange.
+
+![Main screen at 120x36](docs/screenshots/main-120x36.png)
+
+80 by 24. Under 32 rows the inputs and buttons take one row each, and each meter fits on one line.
+
+![Compact layout at 80x24](docs/screenshots/compact-80x24.png)
+
+77 by 38. Narrow and tall. The meters sit under the percent fields and the column headers get shorter.
+
+![Narrow layout at 77x38](docs/screenshots/narrow-77x38.png)
+
+60 by 20, close to the smallest size bandctl supports.
+
+![Small layout at 60x20](docs/screenshots/small-60x20.png)
+
+Started without root. The dialog shows the command to run instead, and Apply and Remove are off.
+
+![Not-root dialog at 100x30](docs/screenshots/not-root-100x30.png)

@@ -2,7 +2,14 @@
 
 ## Unreleased
 
-- The layout fits the terminal. Column widths fill the window instead of scrolling sideways, and below 108 columns the meters sit under the percent fields. Below 64 columns or 24 rows, bandctl asks for a bigger window.
+- The layout fits the terminal. Column widths fill the window instead of scrolling sideways, and below 108 columns the meters sit under the percent fields. Below 60 columns or 18 rows, bandctl asks for a bigger window.
+- Under 32 rows the inputs and buttons take one row each and each meter fits on one line, so an 80 by 24 terminal shows ten process rows instead of two. Under 80 columns the percent headers become `Dn%` and `Up%` so the command column stays readable. The log keeps at least two visible lines, and its scrollbar only shows when there is something to scroll.
+- The Remove button label no longer wraps onto two lines. The table no longer shows a horizontal scrollbar when the vertical one appears.
+- Footer keys are listed most used first: Quit, Apply, Remove, Search, Sort, All, Unit, Refresh.
+- `--iface` is checked at start. An unknown or malformed name exits with an error that lists the real interfaces.
+- Quitting no longer replaces a root qdisc bandctl never touched. Before, a failed nft cleanup at exit could swap the interface's qdisc for `fq_codel`.
+- Remove keeps the share when the process cannot be moved back to its old cgroup. Before, bandctl forgot the share while the process stayed in the bandctl cgroup.
+- A new share that fails to apply also removes the empty cgroup made for it.
 - The process table lists processes using more than 1% of the link. With no link speed, the cutoff is 1% of the non-loopback TCP traffic measured from `ss`. `n` shows every process. A process that already has a share stays visible after its traffic drops.
 - Footer keys are black on pastel green, and the key labels and the status line are white, so the bottom bar stays readable.
 - Apply commits the budget fields. A number typed in the header is used even when Enter was not pressed there.
