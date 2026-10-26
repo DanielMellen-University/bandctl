@@ -128,3 +128,5 @@ The on-screen rate is each socket's counter delta times 8, divided by its sample
 `traffic.parse_ss_sockets` can identify individual TCP sockets by the `ss` socket cookie, then inode, then endpoint pair. This keeps counters for separate sockets distinct. Shared sockets are attributed to each listed process.
 
 The sampler accumulates observed socket deltas per PID. Live processes keep their totals while idle; totals for processes absent from scans expire after five minutes. When a scanned PID has a new start time, the app clears its previous total.
+
+Byte counts use decimal units such as kB and MB. They remain byte counts when the rate display switches between bits and bytes per second.

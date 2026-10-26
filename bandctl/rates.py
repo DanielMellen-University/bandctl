@@ -86,6 +86,24 @@ def format_budget_input(bps: int, unit: Unit) -> str:
     return text
 
 
+def format_bytes(count: int) -> str:
+    """Format a byte count using decimal units."""
+    count = max(0, count)
+    if count < 1_000:
+        return f"{count} B"
+    value = float(count)
+    suffix = "B"
+    for suffix in ("kB", "MB", "GB", "TB", "PB", "EB"):
+        value /= 1_000
+        if value < 1_000:
+            break
+    if value >= 100:
+        return f"{value:.0f} {suffix}"
+    if value >= 10:
+        return f"{value:.1f} {suffix}"
+    return f"{value:.2f} {suffix}"
+
+
 def over_commit_message(direction: str, percents: list[int]) -> str | None:
     total = sum(percents)
     if total <= 100:
