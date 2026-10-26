@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from bandctl.procscan import ProcessInfo
+
 
 @dataclass(frozen=True)
 class AutoRule:
@@ -33,3 +35,45 @@ class AutoRule:
 def first_match(rules: list[AutoRule], process_name: str) -> AutoRule | None:
     """The earliest matching rule wins."""
     return next((rule for rule in rules if rule.matches(process_name)), None)
+
+
+class RuleTracker:
+    """Select matching process instances without undoing a manual removal."""
+
+    def __init__(self) -> None:
+        self._handled: set[tuple[int, int]] = set()
+        self._retry_at: dict[tuple[int, int], float] = {}
+        self._last_seen: dict[tuple[int, int], float] = {}
+
+    def candidates(
+        self, processes: list[ProcessInfo], rules: list[AutoRule], limited: set[int], now: float
+    ) -> list[tuple[ProcessInfo, AutoRule]]:
+        found = []
+        for proc in processes:
+            if proc.start_ticks is None:
+                continue
+            key = (proc.pid, proc.start_ticks)
+            self._last_seen[key] = now
+            rule = first_match(rules, proc.comm)
+            if rule is None:
+                continue
+            if proc.pid in limited:
+                self._handled.add(key)
+            if key not in self._handled and now >= self._retry_at.get(key, 0):
+                found.append((proc, rule))
+        for key, seen in list(self._last_seen.items()):
+            if now - seen > 300:
+                self._last_seen.pop(key, None)
+                self._handled.discard(key)
+                self._retry_at.pop(key, None)
+        return found
+
+    def applied(self, proc: ProcessInfo) -> None:
+        if proc.start_ticks is not None:
+            key = (proc.pid, proc.start_ticks)
+            self._handled.add(key)
+            self._retry_at.pop(key, None)
+
+    def failed(self, proc: ProcessInfo, now: float) -> None:
+        if proc.start_ticks is not None:
+            self._retry_at[(proc.pid, proc.start_ticks)] = now + 15
