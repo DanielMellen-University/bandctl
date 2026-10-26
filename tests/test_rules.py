@@ -4,7 +4,7 @@ import unittest
 from datetime import time
 
 from bandctl.procscan import ProcessInfo
-from bandctl.rules import AutoRule, RuleTracker, first_match
+from bandctl.rules import AutoRule, RuleTracker, ScheduledOwnership, first_match
 from bandctl.schedule import DailyWindow
 
 
@@ -47,6 +47,9 @@ class RuleTests(unittest.TestCase):
         self.assertEqual(tracker.candidates([first, unknown], [rule], set(), 1), [(first, rule)])
         tracker.applied(first)
         self.assertEqual(tracker.candidates([first], [rule], set(), 2), [])
+        tracker.released(first)
+        self.assertEqual(tracker.candidates([first], [rule], set(), 2), [(first, rule)])
+        tracker.applied(first)
         replacement = ProcessInfo(42, "steam", "steam", "user", 1, 200)
         self.assertEqual(tracker.candidates([replacement], [rule], set(), 3), [(replacement, rule)])
         self.assertEqual(tracker.candidates([replacement], [rule], {42}, 4), [])
@@ -63,6 +66,30 @@ class RuleTests(unittest.TestCase):
         tracker.applied(proc)
         tracker.candidates([], [rule], set(), 400)
         self.assertEqual(tracker.candidates([proc], [rule], set(), 401), [(proc, rule)])
+
+    def test_scheduled_ownership_expires_and_preserves_manual_changes(self):
+        owner = ScheduledOwnership()
+        rule = AutoRule("steam", 30, None, DailyWindow(time(9), time(17)))
+        proc = ProcessInfo(42, "steam", "steam", "user", 1, 100)
+        owner.applied(proc, rule)
+        self.assertEqual(owner.expired([proc], [rule], {42: (30, None)}, time(16), 1), [])
+        self.assertEqual(owner.expired([], [rule], {42: (30, None)}, time(17), 1), [])
+        self.assertEqual(owner.expired([proc], [rule], {42: (30, None)}, time(17), 2), [proc])
+        owner.failed(proc, 2)
+        self.assertEqual(owner.expired([proc], [rule], {42: (30, None)}, time(17), 16), [])
+        self.assertEqual(owner.expired([proc], [rule], {42: (30, None)}, time(17), 17), [proc])
+        self.assertEqual(owner.expired([proc], [rule], {42: (50, None)}, time(17), 18), [])
+        self.assertEqual(owner.expired([proc], [rule], {42: (30, None)}, time(18), 19), [])
+
+    def test_schedule_rule_removal_and_pid_reuse_do_not_take_unowned_limits(self):
+        owner = ScheduledOwnership()
+        rule = AutoRule("steam", 30, None, DailyWindow(time(9), time(17)))
+        proc = ProcessInfo(42, "steam", "steam", "user", 1, 100)
+        owner.applied(proc, rule)
+        self.assertEqual(owner.expired([proc], [], {42: (30, None)}, time(10), 1), [proc])
+        replacement = ProcessInfo(42, "steam", "steam", "user", 1, 101)
+        self.assertEqual(owner.expired([replacement], [], {42: (30, None)}, time(10), 2), [])
+        self.assertEqual(owner.expired([proc], [], {42: (30, None)}, time(10), 3), [])
 
 
 if __name__ == "__main__":

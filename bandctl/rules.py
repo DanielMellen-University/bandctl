@@ -84,3 +84,52 @@ class RuleTracker:
     def failed(self, proc: ProcessInfo, now: float) -> None:
         if proc.start_ticks is not None:
             self._retry_at[(proc.pid, proc.start_ticks)] = now + 15
+
+    def released(self, proc: ProcessInfo) -> None:
+        if proc.start_ticks is not None:
+            key = (proc.pid, proc.start_ticks)
+            self._handled.discard(key)
+            self._retry_at.pop(key, None)
+
+
+class ScheduledOwnership:
+    """Track limits installed by a scheduled rule until they should end."""
+
+    def __init__(self) -> None:
+        self._owned: dict[tuple[int, int], AutoRule] = {}
+        self._retry_at: dict[tuple[int, int], float] = {}
+
+    def applied(self, proc: ProcessInfo, rule: AutoRule) -> None:
+        if proc.start_ticks is not None and rule.window is not None:
+            self._owned[(proc.pid, proc.start_ticks)] = rule
+
+    def forget(self, proc: ProcessInfo) -> None:
+        if proc.start_ticks is not None:
+            key = (proc.pid, proc.start_ticks)
+            self._owned.pop(key, None)
+            self._retry_at.pop(key, None)
+
+    def failed(self, proc: ProcessInfo, now: float) -> None:
+        if proc.start_ticks is not None:
+            self._retry_at[(proc.pid, proc.start_ticks)] = now + 15
+
+    def expired(
+        self, processes: list[ProcessInfo], rules: list[AutoRule],
+        limits: dict[int, tuple[int | None, int | None]], current: time, now: float,
+    ) -> list[ProcessInfo]:
+        instances = {(proc.pid, proc.start_ticks): proc for proc in processes if proc.start_ticks is not None}
+        by_pid = {proc.pid: proc for proc in processes}
+        found = []
+        for key, rule in list(self._owned.items()):
+            proc = instances.get(key)
+            replacement = by_pid.get(key[0])
+            changed_instance = replacement is not None and replacement.start_ticks is not None and replacement.start_ticks != key[1]
+            if limits.get(key[0]) != (rule.down_pct, rule.up_pct) or changed_instance:
+                self._owned.pop(key, None)
+                self._retry_at.pop(key, None)
+                continue
+            if proc is None:
+                continue
+            if first_match(rules, proc.comm, current) != rule and now >= self._retry_at.get(key, 0):
+                found.append(proc)
+        return found
