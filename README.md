@@ -4,7 +4,7 @@ Terminal UI for per-process bandwidth shares on Linux.
 
 Pick a running process and give it a download percent and an upload percent. Each percent is a ceiling on that direction's link capacity: 30% of a 100 Mbit/s link is 30 Mbit/s, and the process cannot go past it while bandctl is running. Under the UI this is a cgroup, nftables marks, and an HTB qdisc. Quit, and those rules are removed.
 
-Version 0.1.0. Download and upload are capped separately, rates can be shown in bits or bytes, the table sorts by measured usage, and a log shows any tc, nft, or cgroup errors. Shares are not saved across runs.
+Version 0.1.0. Download and upload are capped separately. Each process has a one-minute graph of its download and upload rates and an estimated count of the TCP data it has moved since bandctl started. Auto-apply rules put a limit on matching processes as they show up, optionally only during a daily time window. `/` searches the process list by name, pid, or user. Rates can be shown in bits or bytes, the table sorts by measured usage, and a log shows any tc, nft, or cgroup errors. Shares and rules are not saved across runs.
 
 ## Layout
 
@@ -12,10 +12,13 @@ Version 0.1.0. Download and upload are capped separately, rates can be shown in 
 bandctl/
   __main__.py    python -m bandctl
   app.py         Textual screens, keys, and the 1 second refresh
-  widgets.py     the not-root dialog
+  widgets.py     the not-root dialog and the rule editor
+  history.py     the one-minute rate history behind the graphs
+  rules.py       auto-apply rule matching and ownership
+  schedule.py    daily HH:MM windows for rules
   theme.tcss     dark grey, pastel green, orange
   procscan.py    /proc process list and socket counts
-  traffic.py     per-process TCP rates from ss
+  traffic.py     per-process TCP rates and session totals from ss
   rates.py       percents, units, HTB split
   iface.py       default route and link speed
   shaper.py      cgroup, nft, tc
@@ -89,7 +92,7 @@ The window needs at least 60 columns and 18 rows. Below that, bandctl asks you t
 
 The process table always fits the width instead of scrolling sideways. When space is tight, the percent headers become `Dn%` and `Up%`. The table, the percent fields, the meters, the log, and the status line stay on screen at every supported size.
 
-The table lists processes using more than 1% of the link. When the link speed is unknown, that 1% is of the TCP traffic measured right now, ignoring loopback. `n` lists every process. A process that already has a share stays on screen so you can remove it. Type `/` to filter by name, pid, or user. Select a row with the arrow keys or a click.
+The table lists processes using more than 1% of the link. When the link speed is unknown, that 1% is of the TCP traffic measured right now, ignoring loopback. `n` lists every process. A process that already has a share stays on screen so you can remove it. Type `/` to filter by name, pid, or user. A search looks through every process, including idle ones under 1%. Esc goes back to the table. Select a row with the arrow keys or a click.
 
 Type a download percent, an upload percent, or both (1 to 100). Leave a field blank to leave that direction uncapped. Enter in a percent field, the Apply button, or `a` installs the share. `u` removes it. Limited rows are orange, except the selected row, which stays green so the text stays readable. The bar is green while usage is under the ceiling and orange when it is at the cap.
 
@@ -118,7 +121,7 @@ Keys:
 
 The log under the bars keeps the last successes and failures. A failed `tc`, `nft`, or cgroup write is one line there and in the status bar. The previous share is left in place when an update fails. A brand new share is rolled back, and the empty cgroup made for it is removed. If Remove cannot put a running process back in its old cgroup, the share stays listed so you can try again. A process that has already exited is dropped.
 
-Press `t` to add or delete auto-apply rules. Enter part of a process name and a download percent, an upload percent, or both. Optionally enter daily start and end times in `HH:MM`; the limit is removed when the window ends. Matching ignores case; the first active matching rule wins. Rules apply to matching running processes and new processes while bandctl is open. Existing limits are left alone. A manual change takes precedence for that process instance. Rules are kept for this session only and are cleared on exit. The log reports failures and retries them after 15 seconds.
+Press `t` to add or delete auto-apply rules. Enter part of a process name and a download percent, an upload percent, or both, then press Enter or Add. Optionally enter daily start and end times in `HH:MM`. The limit is removed when the window ends. Matching ignores case, and the first active matching rule wins. Rules need root, like Apply. Rules apply to matching running processes and new processes while bandctl is open. Existing limits are left alone. A manual change takes precedence for that process instance. Rules are kept for this session only and are cleared on exit. The log reports failures and retries them after 15 seconds.
 
 Full steps and the manual check with a real download are in [docs/USAGE.md](docs/USAGE.md) and [docs/TESTING.md](docs/TESTING.md).
 
@@ -172,3 +175,11 @@ Started without root. The dialog shows the command to run instead, and Apply and
 The auto-apply rule editor at 80 by 24.
 
 ![Auto-apply rules at 80x24](docs/screenshots/rules-80x24.png)
+
+120 by 36 at 19:30 with two rules: `steam` gets 20% down and 5% up from 18:00 to 23:00, and `discord` gets 10% up all day. Both rows turned orange on their own, and the log says which rule did it.
+
+![Auto-apply rules in effect at 120x36](docs/screenshots/auto-rules-120x36.png)
+
+A search for `resolve` finds `systemd-resolved` even though it is idle and below the 1% cutoff.
+
+![Search at 100x30](docs/screenshots/search-100x30.png)

@@ -2,10 +2,16 @@
 
 ## Unreleased
 
+- Each process has a one-minute graph of its download and upload rates beside the bars.
+- `TCP total` shows an estimate of the TCP bytes each process has moved since bandctl started, in the table when there is room and always on the detail line.
+- Auto-apply rules (`t`): part of a process name plus a download percent, an upload percent, or both. Matching processes get the limit when they appear. A rule can have a daily `HH:MM` window, and the limit comes off when the window ends. Rules last for the session only.
+- A search in the filter box covers every process, including idle ones under the 1% cutoff. Before, it only searched the rows already listed, and the hint to press `n` could not be used while typing.
+- Enter in a rule editor field adds the rule. Success messages in the editor are green, and only errors are orange.
+- Budget fields refuse values that are not finite or are below 1 bit/s. The default route with the lowest metric is used when there are several.
 - The layout fits the terminal. Column widths fill the window instead of scrolling sideways, and below 108 columns the meters sit under the percent fields. Below 60 columns or 18 rows, bandctl asks for a bigger window.
 - Under 32 rows the inputs and buttons take one row each and each meter fits on one line, so an 80 by 24 terminal shows ten process rows instead of two. Under 80 columns the percent headers become `Dn%` and `Up%` so the command column stays readable. The log keeps at least two visible lines, and its scrollbar only shows when there is something to scroll.
 - The Remove button label no longer wraps onto two lines. The table no longer shows a horizontal scrollbar when the vertical one appears.
-- Footer keys are listed most used first: Quit, Apply, Remove, Search, Sort, All, Unit, Refresh.
+- Footer keys are listed most used first: Quit, Apply, Remove, Search, Sort, All, Unit, Rules. Refresh (`r`) still works but is no longer shown.
 - `--iface` is checked at start. An unknown or malformed name exits with an error that lists the real interfaces.
 - Quitting no longer replaces a root qdisc bandctl never touched. Before, a failed nft cleanup at exit could swap the interface's qdisc for `fq_codel`.
 - Remove keeps the share when the process cannot be moved back to its old cgroup. Before, bandctl forgot the share while the process stayed in the bandctl cgroup.
