@@ -135,6 +135,20 @@ class ParseTests(unittest.TestCase):
 
 
 class ApplyTests(unittest.TestCase):
+    def test_conditional_remove_refuses_a_changed_limit(self):
+        shaper, host = _shaper()
+        shaper.apply(42, None, 10, None, 100_000_000)
+        old_revision = shaper.shares[42].revision
+        shaper.apply(42, None, 10, None, 100_000_000)
+        self.assertNotEqual(shaper.shares[42].revision, old_revision)
+        with patch.object(host, "write", wraps=host.write) as write:
+            with self.assertRaises(ShaperError):
+                shaper.remove(42, expected_revision=old_revision)
+            write.assert_not_called()
+        self.assertIn(42, shaper.shares)
+        shaper.remove(42, expected_revision=shaper.shares[42].revision)
+        self.assertNotIn(42, shaper.shares)
+
     def test_new_share_refuses_an_occupied_old_leaf(self):
         shaper, host = _shaper()
         leaf = "/sys/fs/cgroup/bandctl/bandctl-42/cgroup.procs"

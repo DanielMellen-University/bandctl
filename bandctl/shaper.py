@@ -81,6 +81,7 @@ class Share:
     original_cgroup: str
     command: str = ""
     start_ticks: int | None = None
+    revision: int = 0
 
 
 @dataclass
@@ -114,6 +115,7 @@ class Shaper:
     _lock: threading.RLock = field(default_factory=threading.RLock)
     _shares: dict[int, Share] = field(default_factory=dict)
     _next_minor: int = 10
+    _revision: int = 0
     _down_cap: int | None = None
     _up_cap: int | None = None
     _egress: bool = False
@@ -171,18 +173,20 @@ class Shaper:
                 self._check_leaf_empty(pid)
             old_shares = {pid_: _copy_share(share) for pid_, share in self._shares.items()}
             old_caps = (self._down_cap, self._up_cap)
+            self._revision += 1
             self._down_cap = down_cap
             self._up_cap = up_cap
             created = pid not in self._shares
             if created:
                 minor = self._alloc_minor()
                 original = self._read_cgroup(pid)
-                share = Share(pid, down_pct, up_pct, minor, original, command, expected_start_ticks)
+                share = Share(pid, down_pct, up_pct, minor, original, command, expected_start_ticks, self._revision)
             else:
                 share = self._shares[pid]
                 share.down_pct = down_pct
                 share.up_pct = up_pct
                 share.command = command or share.command
+                share.revision = self._revision
             try:
                 self._require_caps()
                 if created:
@@ -207,11 +211,13 @@ class Shaper:
                 raise
         return _applied_text(share)
 
-    def remove(self, pid: int) -> str:
+    def remove(self, pid: int, *, expected_revision: int | None = None) -> str:
         with self._lock:
             share = self._shares.get(pid)
             if share is None:
                 raise ShaperError(f"pid {pid} has no limit")
+            if expected_revision is not None and share.revision != expected_revision:
+                raise ShaperError(f"limit for pid {pid} changed")
             if self._torn:
                 raise ShaperError("shaper is shut down")
             restored = False
@@ -851,7 +857,8 @@ class Shaper:
 
 
 def _copy_share(share: Share) -> Share:
-    return Share(share.pid, share.down_pct, share.up_pct, share.minor, share.original_cgroup, share.command, share.start_ticks)
+    return Share(share.pid, share.down_pct, share.up_pct, share.minor, share.original_cgroup, share.command,
+                 share.start_ticks, share.revision)
 
 
 def _applied_text(share: Share) -> str:
