@@ -1,7 +1,7 @@
 """Per-process TCP rates from ``ss``.
 
-``ss -tinp`` prints ``bytes_received`` and ``bytes_acked`` for each socket.
-The difference over a second is the rate. Loopback sockets are skipped, so
+``ss -tinpe`` prints ``bytes_received`` and ``bytes_acked`` for each socket.
+The difference over a sample interval is the rate. Loopback sockets are skipped, so
 local services do not look like link traffic. The first sample has no
 previous total, so it returns no rates.
 """
@@ -101,45 +101,72 @@ def parse_ss_sockets(text: str) -> dict[tuple[int, str], tuple[int, int]]:
 
 
 class TrafficSampler:
-    """Byte totals in, bit/s out. The first call only stores a baseline."""
+    """Track socket counters and return per-process rates and session totals."""
 
     def __init__(self) -> None:
-        self._prev: dict[int, tuple[int, int]] | None = None
+        self._prev: dict[tuple[int, str], tuple[int, int, float]] | None = None
         self._prev_at: float | None = None
+        self._totals: dict[int, tuple[int, int]] = {}
+        self._seen_pids: dict[int, float] = {}
         self.primed = False
 
+    @property
+    def totals(self) -> dict[int, tuple[int, int]]:
+        return dict(self._totals)
+
+    def forget_total(self, pid: int) -> None:
+        """Discard a process total while retaining its latest socket baselines."""
+        self._totals.pop(pid, None)
+        self._seen_pids.pop(pid, None)
+
+    def retain_processes(self, live_pids: set[int], now: float) -> None:
+        """Keep totals for live processes and discard long-absent ones."""
+        for pid in self._totals:
+            if pid in live_pids:
+                self._seen_pids[pid] = now
+        for pid, seen in list(self._seen_pids.items()):
+            if now - seen > 300:
+                self._seen_pids.pop(pid, None)
+                self._totals.pop(pid, None)
+
     def rates(self, text: str, now: float) -> dict[int, tuple[float, float]]:
-        current = parse_ss(text)
+        current = parse_ss_sockets(text)
         prev = self._prev
         prev_at = self._prev_at
-        self._prev = current
-        self._prev_at = now
         if prev is None or prev_at is None:
+            self._prev = {key: (received, acked, now) for key, (received, acked) in current.items()}
+            self._prev_at = now
+            for pid, _socket in current:
+                self._totals.setdefault(pid, (0, 0))
+                self._seen_pids[pid] = now
             return {}
         dt = now - prev_at
-        self.primed = True
         if dt <= 0:
             return {}
-        found: dict[int, tuple[float, float]] = {}
-        for pid, (received, acked) in current.items():
-            old = prev.get(pid)
-            if old is None:
-                continue
-            down = received - old[0]
-            up = acked - old[1]
-            if down < 0:
-                down = 0
-            if up < 0:
-                up = 0
-            found[pid] = (down * 8 / dt, up * 8 / dt)
-        return found
+        self.primed = True
+        self._prev_at = now
+        self._prev = {key: value for key, value in prev.items() if now - value[2] <= 60}
+        rates: dict[int, list[float]] = {}
+        for (pid, socket), (received, acked) in current.items():
+            old = prev.get((pid, socket))
+            elapsed = now - old[2] if old is not None else dt
+            down = max(0, received - old[0]) if old is not None else received
+            up = max(0, acked - old[1]) if old is not None else acked
+            total_down, total_up = self._totals.get(pid, (0, 0))
+            self._totals[pid] = (total_down + down, total_up + up)
+            self._seen_pids[pid] = now
+            slot = rates.setdefault(pid, [0.0, 0.0])
+            slot[0] += down * 8 / elapsed
+            slot[1] += up * 8 / elapsed
+            self._prev[(pid, socket)] = (received, acked, now)
+        return {pid: (pair[0], pair[1]) for pid, pair in rates.items()}
 
 
 def read_ss() -> str | None:
-    """Stdout of ``ss -tinpH``, or None when ``ss`` cannot be run."""
+    """Stdout of ``ss -tinpeH``, or None when ``ss`` cannot be run."""
     try:
         result = subprocess.run(
-            ["ss", "-tinpH"],
+            ["ss", "-tinpeH"],
             check=False,
             capture_output=True,
             text=True,

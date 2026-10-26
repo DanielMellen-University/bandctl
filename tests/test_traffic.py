@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 
-from bandctl.traffic import TrafficSampler, above_share, parse_ss, parse_ss_sockets
+from bandctl.traffic import TrafficSampler, above_share, parse_ss, parse_ss_sockets, read_ss
 
 _SS = """\
 ESTAB 0 0 192.168.1.97:57532 35.173.84.232:443 users:(("curl",pid=42,fd=7))
@@ -25,6 +27,11 @@ ESTAB 0 0 192.168.1.97:10 9.9.9.9:443 users:(("old",pid=4,fd=1))
 
 
 class ParseTests(unittest.TestCase):
+    def test_read_ss_requests_socket_identity(self):
+        with patch("bandctl.traffic.subprocess.run", return_value=SimpleNamespace(returncode=0, stdout="")) as run:
+            self.assertEqual(read_ss(), "")
+        self.assertEqual(run.call_args.args[0], ["ss", "-tinpeH"])
+
     def test_socket_counters_use_cookie_or_inode_and_keep_zero_baselines(self):
         text = (
             'ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 users:(("a",pid=5,fd=1),("b",pid=6,fd=2)) ino:42 sk:ab12\n'
@@ -68,6 +75,47 @@ class ParseTests(unittest.TestCase):
         after = 'ESTAB 0 0 10.0.0.2:1 1.1.1.1:1 users:(("x",pid=5,fd=1))\n\t bytes_received:10 bytes_acked:10\n'
         sampler.rates(before, 1.0)
         self.assertEqual(sampler.rates(after, 2.0)[5], (0.0, 0.0))
+
+    def test_closing_one_socket_does_not_erase_another_sockets_traffic(self):
+        first = ('ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 users:(("x",pid=5,fd=1)) sk:a\n'
+                 '\t bytes_received:1000 bytes_acked:200\n')
+        second = ('ESTAB 0 0 10.0.0.2:2 1.1.1.1:443 users:(("x",pid=5,fd=2)) sk:b\n'
+                  '\t bytes_received:100 bytes_acked:20\n')
+        sampler = TrafficSampler()
+        sampler.rates(first + second, 1)
+        later = second.replace("received:100", "received:150").replace("acked:20", "acked:30")
+        self.assertEqual(sampler.rates(later, 2)[5], (400.0, 80.0))
+        self.assertEqual(sampler.totals[5], (50, 10))
+
+    def test_new_sockets_and_gaps_contribute_without_recounting(self):
+        socket = ('ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 users:(("x",pid=5,fd=1)) sk:a\n'
+                  '\t bytes_received:100 bytes_acked:20\n')
+        sampler = TrafficSampler()
+        sampler.rates("", 1)
+        self.assertEqual(sampler.rates(socket, 2)[5], (800.0, 160.0))
+        sampler.rates("", 3)
+        later = socket.replace("received:100", "received:120").replace("acked:20", "acked:30")
+        self.assertEqual(sampler.rates(later, 4)[5], (80.0, 40.0))
+        self.assertEqual(sampler.totals[5], (120, 30))
+        sampler.forget_total(5)
+        self.assertNotIn(5, sampler.totals)
+
+    def test_non_increasing_clock_does_not_consume_a_sample(self):
+        sampler = TrafficSampler()
+        sampler.rates(_SS, 10)
+        later = _SS.replace("bytes_received:5000", "bytes_received:6000")
+        self.assertEqual(sampler.rates(later, 10), {})
+        self.assertEqual(sampler.rates(later, 11)[42][0], 8000.0)
+
+    def test_totals_for_idle_live_processes_are_kept_and_absent_ones_expire(self):
+        sampler = TrafficSampler()
+        sampler.rates(_SS, 1)
+        sampler.retain_processes({42}, 200)
+        sampler.retain_processes({42}, 400)
+        self.assertIn(42, sampler.totals)
+        self.assertNotIn(7, sampler.totals)
+        sampler.retain_processes(set(), 701)
+        self.assertNotIn(42, sampler.totals)
 
     def test_one_percent_is_not_enough(self):
         self.assertFalse(above_share(1_000_000, 0, 100_000_000, 100_000_000))
