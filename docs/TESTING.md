@@ -17,6 +17,7 @@ python3 -m venv .venv
 | `tests/test_procscan.py` | Socket inodes and flower endpoints against a fake `/proc`, plus one read of the real `/proc` that must not include this process. Listeners are dropped. IPv4-mapped IPv6 rows come back as IPv4. |
 | `tests/test_shaper.py` | The command list a fake host records: cgroup move, nft leaf match, flower filters for sockets that are already open, HTB rates, upload-only skips IFB, nft failure rolls the qdisc and the cgroup back, remove restores `fq_codel`, class byte counters become bit/s, crash recovery reads the state file. |
 | `tests/test_app.py` | Headless Textual pilot. Filter, sort, unit toggle, apply, remove, a bad percent, a narrow resize that drops the user column, and the not-root dialog. |
+| `tests/test_install.py` | `install.sh` and `uninstall.sh` syntax, the sudo re-exec, and an uninstall against a fake prefix. No apt and no qdisc. |
 
 CI (`.github/workflows/ci.yml`) runs the same command on Ubuntu for Python 3.10 and 3.12.
 
@@ -25,7 +26,7 @@ CI (`.github/workflows/ci.yml`) runs the same command on Ubuntu for Python 3.10 
 Do this on a machine where losing the current qdisc for a minute is acceptable. It replaces the root qdisc and redirects ingress through IFB until you quit.
 
 1. Note the current qdisc: `tc qdisc show dev eth0` (use your interface).
-2. `sudo .venv/bin/python -m bandctl --iface eth0`
+2. `sudo bandctl --iface eth0` after `sudo ./install.sh`, or `sudo .venv/bin/python -m bandctl --iface eth0` from a checkout.
 3. If the header says the link is unknown, set a download budget of `10` while the unit is Mbit/s. That is a 10 Mbit/s pipe.
 4. In another terminal start `curl -o /dev/null https://speed.cloudflare.com/__down?bytes=100000000` (or any multi-megabyte download).
 5. Select that `curl`, set download to `10`, leave upload blank, Apply.

@@ -1,1 +1,2 @@
+# Runtime dependency. install.sh installs the project from pyproject.toml.
 textual==8.2.8

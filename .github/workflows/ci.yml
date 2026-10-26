@@ -20,3 +20,14 @@ jobs:
         run: pip install -r requirements.txt
       - name: Unit tests
         run: python -m unittest discover -s tests -v
+      - name: Install and uninstall under a temp prefix
+        if: matrix.python == '3.12'
+        run: |
+          prefix="${RUNNER_TEMP}/bandctl"
+          bindir="${RUNNER_TEMP}/bin"
+          ./install.sh --prefix "$prefix" --bindir "$bindir" --skip-deps
+          "$bindir/bandctl" --version
+          "$prefix/venv/bin/python" -c 'from bandctl.app import BandctlApp; assert BandctlApp.CSS_PATH.is_file()'
+          "$bindir/bandctl-uninstall"
+          test ! -e "$bindir/bandctl"
+          test ! -d "$prefix"

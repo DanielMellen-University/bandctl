@@ -3,18 +3,35 @@
 ## Install and start
 
 ```
+curl -fsSL https://raw.githubusercontent.com/DanielMellen-University/bandctl/main/install.sh | sudo bash
+sudo bandctl
+```
+
+From a git checkout, `sudo ./install.sh` does the same thing. It installs `python3`, `iproute2`, and `nftables` when they are missing, and links `bandctl` onto `PATH`.
+
+```
+sudo bandctl --iface wlan0
+```
+
+Host packages the limits need: `iproute2`, `nftables`, and the `ifb` module (`modprobe ifb` needs to work, which it does on a normal desktop kernel).
+
+To remove it, quit any open bandctl (`q` drops the limits), then:
+
+```
+sudo bandctl-uninstall
+```
+
+Uninstall deletes `/opt/bandctl` and the commands. A crashed run's qdisc, nft table, and cgroup are cleared too. `iproute2` and `nftables` stay.
+
+A checkout can skip the installer:
+
+```
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 sudo .venv/bin/python -m bandctl
 ```
 
-Host packages: `iproute2`, `nftables`, and the `ifb` module (`modprobe ifb` needs to work, which it does on a normal desktop kernel).
-
-`sudo python -m bandctl` often fails because `sudo` resets `PATH` and picks a Python that does not have Textual. Always name the venv interpreter.
-
-```
-sudo .venv/bin/python -m bandctl --iface wlan0
-```
+`sudo python -m bandctl` often fails because `sudo` resets `PATH` and picks a Python that does not have Textual. The installed `bandctl` command does not have that problem. A checkout has to name the venv interpreter.
 
 `--iface` is the device whose root qdisc will be replaced while an upload share exists, and whose ingress is redirected while a download share exists. The default is the device on the IPv4 default route.
 

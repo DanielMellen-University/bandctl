@@ -18,31 +18,58 @@ bandctl/
   rates.py       percents, units, HTB split
   iface.py       default route and link speed
   shaper.py      cgroup, nft, tc
+install.sh       system install
+uninstall.sh     remove that install
 tests/           unittest, no root required
 docs/            usage, architecture, testing
 ```
 
 ## Install
 
-Needs Python 3.10 or newer, and these on the machine that will enforce limits: `iproute2` (`tc`, `ip`), `nftables` (`nft`), and the `ifb` kernel module.
+One command. It installs `python3`, `iproute2`, and `nftables` if they are missing, puts bandctl in `/opt/bandctl`, and links `bandctl` onto `PATH`.
+
+```
+curl -fsSL https://raw.githubusercontent.com/DanielMellen-University/bandctl/main/install.sh | sudo bash
+```
+
+From a git checkout:
+
+```
+sudo ./install.sh
+```
+
+Then:
+
+```
+sudo bandctl
+sudo bandctl --iface wlan0
+```
+
+bandctl has to be root to move processes between cgroups and to change qdiscs. The installer is what makes `sudo bandctl` find Textual. `sudo python -m bandctl` often does not.
+
+Without root the UI still opens. It lists processes and tells you the exact command to re-run. Apply and remove stay disabled, and nothing is installed on the interface.
+
+## Uninstall
+
+Quit bandctl first if it is open. `q` removes the limits. Then:
+
+```
+sudo bandctl-uninstall
+```
+
+That deletes `/opt/bandctl` and the `bandctl` command. If the last run crashed, it also clears the qdisc, nft table, and cgroup that run left behind. It does not remove `iproute2` or `nftables`.
+
+## Run from a checkout
+
+Skip the installer when you are working on the code. Debian and Ubuntu need the `python3-venv` package before `venv` will work.
 
 ```
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-```
-
-Debian and Ubuntu need `python3-venv` before `venv` will work. The tests do not need the venv if Textual is already installed, but the app does.
-
-## Run
-
-bandctl has to be root to move processes between cgroups and to change qdiscs. Use the venv interpreter. `sudo python` is often a different install and will not see Textual.
-
-```
 sudo .venv/bin/python -m bandctl
-sudo .venv/bin/python -m bandctl --iface wlan0
 ```
 
-Without root the UI still opens. It lists processes and tells you the exact command to re-run. Apply and remove stay disabled, and nothing is installed.
+Name the venv interpreter. `sudo python` is often a different install and will not see Textual.
 
 `--iface` overrides the device on the IPv4 default route. There is no interface switch inside the UI. Quit and start again with the flag.
 

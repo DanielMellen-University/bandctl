@@ -8,6 +8,7 @@
 - Putting a process back in its original cgroup reports the write error. The host raises that as a shaper error, and the old handler only caught `OSError`.
 - The ingress redirect is a `matchall` filter. `u32` rejects `protocol all`, so download setup could fail before any class existed.
 - Open sockets are shaped even though the kernel leaves them in the cgroup where they were created. Each of the process's connections gets a flower filter, refreshed when rates are sampled. Listeners are skipped. A socket that closes loses its filter.
+- `sudo ./install.sh` installs bandctl under `/opt/bandctl` and links `bandctl` onto `PATH`, so the run command is `sudo bandctl`. The same script can be piped to `sudo bash` from GitHub. `sudo bandctl-uninstall` removes that install and clears qdisc, nft, and cgroup state left by a crash.
 
 ## 0.1.0 (2026-10-26)
 

@@ -178,6 +178,9 @@ class BandctlApp(App):
 
     def sudo_command(self) -> str:
         extra = f" --iface {self._iface_arg}" if self._iface_arg else ""
+        # The installed command's argv is `bandctl`. A checkout is `python -m`.
+        if Path(sys.argv[0]).name == "bandctl":
+            return f"sudo bandctl{extra}"
         return f"sudo {sys.executable} -m bandctl{extra}"
 
     def on_resize(self, event) -> None:

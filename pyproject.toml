@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bandctl"
+description = "Terminal UI for per-process bandwidth shares on Linux"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "DanielMellen-University" }]
+dependencies = ["textual==8.2.8"]
+dynamic = ["version"]
+
+[project.scripts]
+bandctl = "bandctl.__main__:main"
+
+[tool.setuptools]
+packages = ["bandctl"]
+
+[tool.setuptools.dynamic]
+version = { attr = "bandctl.__version__" }
+
+[tool.setuptools.package-data]
+bandctl = ["*.tcss"]
