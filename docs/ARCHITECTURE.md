@@ -4,6 +4,8 @@ bandctl is a Textual app in front of one `Shaper` object. The app never shells o
 
 ## Shares
 
+`rules.py` validates automatic-rule values and matches a case-insensitive substring of the process name. When several rules match, the first rule takes precedence.
+
 A share is two optional integers, download and upload, each from 1 to 100. Blank means that direction is not enforced.
 
 Capacity for a direction is the budget the user typed, or else the sysfs link speed, in bit/s. `rates.percent_to_bps` is integer arithmetic: 30% of 100_000_000 is 30_000_000. Display divides by 1_000_000 for Mbit/s and by 8_000_000 for MB/s.
