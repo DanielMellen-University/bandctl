@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 import unittest
+from unittest.mock import patch
 
 from bandctl.rates import htb_plan, percent_to_bps
 from bandctl.procscan import SockFlow
@@ -134,6 +135,66 @@ class ParseTests(unittest.TestCase):
 
 
 class ApplyTests(unittest.TestCase):
+    def test_new_share_refuses_an_occupied_old_leaf(self):
+        shaper, host = _shaper()
+        leaf = "/sys/fs/cgroup/bandctl/bandctl-42/cgroup.procs"
+        host.files[leaf] = "99\n"
+        with self.assertRaises(ShaperError) as caught:
+            shaper.apply(42, None, 10, None, 100_000_000)
+        self.assertIn("still contains processes", str(caught.exception))
+        self.assertEqual(host.files[leaf], "99\n")
+        self.assertEqual(host.commands, [])
+        self.assertFalse(shaper.shares)
+
+    def test_remove_does_not_move_reused_pid_even_when_sync_fails(self):
+        shaper, host = _shaper()
+        stat = "/proc/42/stat"
+        host.files[stat] = "42 (steam) S " + "0 " * 18 + "100"
+        shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+        host.files[stat] = "42 (other) S " + "0 " * 18 + "200"
+        with patch.object(shaper, "_sync", side_effect=ShaperError("sync failed")):
+            with patch.object(host, "write", wraps=host.write) as write:
+                with self.assertRaises(ShaperError):
+                    shaper.remove(42)
+                write.assert_not_called()
+        self.assertIn(42, shaper.shares)
+
+    def test_sample_retires_reused_pid_without_moving_replacement(self):
+        shaper, host = _shaper()
+        stat = "/proc/42/stat"
+        host.files[stat] = "42 (steam) S " + "0 " * 18 + "100"
+        shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+        host.files[stat] = "42 (other) S " + "0 " * 18 + "200"
+        original = "/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs"
+        self.assertNotIn(original, host.files)
+        shaper.sample()
+        self.assertNotIn(42, shaper.shares)
+        self.assertNotIn(original, host.files)
+        self.assertFalse(shaper.upload_active)
+
+    def test_sample_retires_exited_process(self):
+        shaper, host = _shaper()
+        stat = "/proc/42/stat"
+        host.files[stat] = "42 (steam) S " + "0 " * 18 + "100"
+        shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+        host.files.pop(stat)
+        host.files.pop("/proc/42/cgroup")
+        shaper.sample()
+        self.assertNotIn(42, shaper.shares)
+        self.assertFalse(shaper.upload_active)
+
+    def test_sample_keeps_share_when_identity_is_unreadable(self):
+        shaper, host = _shaper()
+        stat = "/proc/42/stat"
+        host.files[stat] = "42 (steam) S " + "0 " * 18 + "100"
+        shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+        host.files[stat] = "not a stat record"
+        shaper.sample()
+        self.assertIn(42, shaper.shares)
+        with self.assertRaises(ShaperError):
+            shaper.remove(42)
+        self.assertIn(42, shaper.shares)
+
     def test_expected_start_time_is_checked_before_changing_anything(self):
         shaper, host = _shaper()
         stat_path = "/proc/42/stat"

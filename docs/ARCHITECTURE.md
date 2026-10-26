@@ -8,6 +8,8 @@ bandctl is a Textual app in front of one `Shaper` object. The app never shells o
 
 An automatic caller can pass the process start time from the scan to `Shaper.apply`. The shaper checks it again before changing anything and rejects a missing or changed process. This check reduces the chance of acting on a reused PID; the process may still exit after the check.
 
+Shares created with a verified start time are retired during sampling when that process exits or its PID is reused. The replacement PID is not moved to the old process's cgroup. If the start time cannot be read, the share is kept for a later check. A new share is refused if its old leaf cgroup still has processes in it.
+
 A share is two optional integers, download and upload, each from 1 to 100. Blank means that direction is not enforced.
 
 Capacity for a direction is the budget the user typed, or else the sysfs link speed, in bit/s. `rates.percent_to_bps` is integer arithmetic: 30% of 100_000_000 is 30_000_000. Display divides by 1_000_000 for Mbit/s and by 8_000_000 for MB/s.

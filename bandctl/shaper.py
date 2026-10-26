@@ -80,6 +80,7 @@ class Share:
     minor: int
     original_cgroup: str
     command: str = ""
+    start_ticks: int | None = None
 
 
 @dataclass
@@ -166,6 +167,8 @@ class Shaper:
                     raise ShaperError(f"cannot verify pid {pid}") from exc
                 if parse_start_ticks(stat) != expected_start_ticks:
                     raise ShaperError(f"pid {pid} changed since the process scan")
+            if pid not in self._shares:
+                self._check_leaf_empty(pid)
             old_shares = {pid_: _copy_share(share) for pid_, share in self._shares.items()}
             old_caps = (self._down_cap, self._up_cap)
             self._down_cap = down_cap
@@ -174,7 +177,7 @@ class Shaper:
             if created:
                 minor = self._alloc_minor()
                 original = self._read_cgroup(pid)
-                share = Share(pid, down_pct, up_pct, minor, original, command)
+                share = Share(pid, down_pct, up_pct, minor, original, command, expected_start_ticks)
             else:
                 share = self._shares[pid]
                 share.down_pct = down_pct
@@ -211,8 +214,9 @@ class Shaper:
                 raise ShaperError(f"pid {pid} has no limit")
             if self._torn:
                 raise ShaperError("shaper is shut down")
+            restored = False
             try:
-                self._restore_pid(pid, share.original_cgroup)
+                restored = self._restore_share(share)
             except ShaperError:
                 # A pid that has exited has nothing left to move back. A live
                 # one stays tracked so the share is not lost.
@@ -223,10 +227,11 @@ class Shaper:
                 self._sync()
             except ShaperError:
                 self._shares[pid] = share
-                try:
-                    self._move_to_leaf(share)
-                except ShaperError:
-                    pass
+                if restored:
+                    try:
+                        self._move_to_leaf(share)
+                    except ShaperError:
+                        pass
                 raise
             self._rmdir_leaf(pid)
         return f"removed limits on pid {pid}"
@@ -254,6 +259,7 @@ class Shaper:
             if self._torn:
                 return {}
             try:
+                self._retire_exited()
                 self._sync_flows()
             except ShaperError as exc:
                 warning = str(exc)
@@ -273,6 +279,43 @@ class Shaper:
                 )
             self._sample_at = now
             return result
+
+    def _process_status(self, share: Share) -> str:
+        if share.start_ticks is None:
+            return "unknown"
+        try:
+            stat = self.host.read(f"/proc/{share.pid}/stat")
+        except FileNotFoundError:
+            return "gone"
+        except OSError:
+            return "unknown"
+        start = parse_start_ticks(stat)
+        if start is None:
+            return "unknown"
+        return "same" if start == share.start_ticks else "changed"
+
+    def _retire_exited(self) -> None:
+        stale = [share for share in self._shares.values() if self._process_status(share) in ("gone", "changed")]
+        if not stale:
+            return
+        for share in stale:
+            self._shares.pop(share.pid)
+        try:
+            self._sync()
+        except ShaperError:
+            self._shares.update({share.pid: share for share in stale})
+            raise
+        for share in stale:
+            self._rmdir_leaf(share.pid)
+
+    def _restore_share(self, share: Share) -> bool:
+        status = self._process_status(share)
+        if status in ("gone", "changed"):
+            return False
+        if share.start_ticks is not None and status == "unknown":
+            raise ShaperError(f"cannot verify pid {share.pid}")
+        self._restore_pid(share.pid, share.original_cgroup)
+        return True
 
     def recover(self) -> list[str]:
         """Best-effort cleanup of a previous run. Never raises."""
@@ -309,7 +352,7 @@ class Shaper:
             self._torn = True
             for share in list(self._shares.values()):
                 try:
-                    self._restore_pid(share.pid, share.original_cgroup)
+                    self._restore_share(share)
                 except ShaperError as exc:
                     notes.append(str(exc))
             self._shares.clear()
@@ -359,6 +402,16 @@ class Shaper:
         self.host.mkdir(parent)
         self.host.mkdir(leaf)
         self.host.write(f"{leaf}/cgroup.procs", f"{share.pid}\n")
+
+    def _check_leaf_empty(self, pid: int) -> None:
+        try:
+            members = self.host.read(f"{CGROUP_PARENT}/bandctl-{pid}/cgroup.procs")
+        except FileNotFoundError:
+            return
+        except OSError as exc:
+            raise ShaperError(f"cannot inspect cgroup for pid {pid}") from exc
+        if members.strip():
+            raise ShaperError(f"cgroup for pid {pid} still contains processes")
 
     def _restore_pid(self, pid: int, original: str) -> None:
         if original == "/":
@@ -798,7 +851,7 @@ class Shaper:
 
 
 def _copy_share(share: Share) -> Share:
-    return Share(share.pid, share.down_pct, share.up_pct, share.minor, share.original_cgroup, share.command)
+    return Share(share.pid, share.down_pct, share.up_pct, share.minor, share.original_cgroup, share.command, share.start_ticks)
 
 
 def _applied_text(share: Share) -> str:
