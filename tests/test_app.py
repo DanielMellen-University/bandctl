@@ -30,6 +30,7 @@ class FakeShaper:
         self.removed: list[int] = []
         self.caps: list[tuple] = []
         self.expected_starts: list[int | None] = []
+        self.revision = 0
         self._shares: dict[int, Share] = {}
         self.torn = False
 
@@ -43,14 +44,21 @@ class FakeShaper:
             raise ShaperError("upload capacity is unknown; enter an upload budget")
         self.applied.append((pid, down_pct, up_pct, down_cap, up_cap, command))
         self.expected_starts.append(expected_start_ticks)
-        self._shares[pid] = Share(pid, down_pct, up_pct, 10, "/", command)
+        self.revision += 1
+        self._shares[pid] = Share(pid, down_pct, up_pct, 10, "/", command, expected_start_ticks, self.revision)
         down = "unlimited" if down_pct is None else f"{down_pct}%"
         up = "unlimited" if up_pct is None else f"{up_pct}%"
         return f"pid {pid} download {down}, upload {up}"
 
-    def remove(self, pid):
+    def apply_tracked(self, pid, *args, **kwargs):
+        message = self.apply(pid, *args, **kwargs)
+        return message, self._shares[pid].revision
+
+    def remove(self, pid, *, expected_revision=None):
         if pid not in self._shares:
             raise ShaperError(f"pid {pid} has no limit")
+        if expected_revision is not None and self._shares[pid].revision != expected_revision:
+            raise ShaperError(f"limit for pid {pid} changed")
         self._shares.pop(pid)
         self.removed.append(pid)
         return f"removed limits on pid {pid}"
@@ -91,6 +99,61 @@ def _app(fake, *, root=True, link_bps=100_000_000, rates=None):
 
 
 class AppTests(unittest.IsolatedAsyncioTestCase):
+    async def test_scheduled_rule_applies_expires_and_respects_manual_override(self):
+        from datetime import time
+        from bandctl.rules import AutoRule
+        from bandctl.schedule import DailyWindow
+
+        fake = FakeShaper()
+        proc = ProcessInfo(42, "steam", "steam", "user", 1, 100)
+        current = [time(8, 59)]
+        app = BandctlApp(iface="eth0", shaper=fake, processes=lambda: [proc],
+                         link_bps=100_000_000, is_root=True, rates=lambda: {42: (2_000_000, 0)},
+                         clock=lambda: current[0])
+        async with app.run_test(size=(100, 30)) as pilot:
+            app._rules = [AutoRule("steam", 30, None, DailyWindow(time(9), time(17)))]
+            await app._apply_rules([proc])
+            self.assertFalse(fake.shares)
+            current[0] = time(9)
+            await app._apply_rules([proc])
+            self.assertEqual(fake.shares[42].down_pct, 30)
+            current[0] = time(17)
+            await app._apply_rules([proc])
+            self.assertFalse(fake.shares)
+            current[0] = time(9)
+            await app._apply_rules([proc])
+            self.assertIn(42, fake.shares)
+            app.query_one("#down-pct", Input).value = "30"
+            app.action_apply_limit()
+            current[0] = time(17)
+            await app._apply_rules([proc])
+            self.assertIn(42, fake.shares)
+
+    async def test_schedule_does_not_remove_a_concurrent_manual_change(self):
+        from datetime import time
+        from bandctl.rules import AutoRule
+        from bandctl.schedule import DailyWindow
+
+        class RacingRemove(FakeShaper):
+            def remove(self, pid, *, expected_revision=None):
+                if expected_revision is not None:
+                    self.apply(pid, None, 70, None, 100_000_000)
+                return super().remove(pid, expected_revision=expected_revision)
+
+        fake = RacingRemove()
+        proc = ProcessInfo(42, "steam", "steam", "user", 1, 100)
+        current = [time(9)]
+        app = BandctlApp(iface="eth0", shaper=fake, processes=lambda: [proc],
+                         link_bps=100_000_000, is_root=True, rates=lambda: {}, clock=lambda: current[0])
+        async with app.run_test(size=(100, 30)) as pilot:
+            app._rules = [AutoRule("steam", 30, None, DailyWindow(time(9), time(17)))]
+            await app._apply_rules([proc])
+            current[0] = time(17)
+            await app._apply_rules([proc])
+            self.assertEqual(fake.shares[42].up_pct, 70)
+            await app._apply_rules([proc])
+            self.assertEqual(fake.shares[42].up_pct, 70)
+
     def test_late_table_event_after_screen_closes_is_ignored(self):
         app = _app(FakeShaper())
         event = SimpleNamespace(data_table=SimpleNamespace(id="procs"))

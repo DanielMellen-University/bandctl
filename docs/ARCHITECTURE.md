@@ -14,6 +14,8 @@ Each successful apply gives its share a new in-memory revision. A caller can req
 
 Automatic applies also require that the PID still has no share while the shaper lock is held. A concurrent manual limit is left alone.
 
+The app reconciles scheduled ownership during refresh using the current local clock. It removes an expired share only if its revision still matches, then allows the next active matching rule to apply. A successful manual apply or removal releases scheduled ownership for that process instance.
+
 An automatic caller can pass the process start time from the scan to `Shaper.apply`. The shaper checks it again before changing anything and rejects a missing or changed process. This check reduces the chance of acting on a reused PID; the process may still exit after the check.
 
 Shares created with a verified start time are retired during sampling when that process exits or its PID is reused. The replacement PID is not moved to the old process's cgroup. If the start time cannot be read, the share is kept for a later check. A new share is refused if its old leaf cgroup still has processes in it.

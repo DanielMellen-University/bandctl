@@ -6,6 +6,7 @@ import asyncio
 import os
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 from rich.text import Text
@@ -30,7 +31,7 @@ from bandctl.rates import (
     percent_to_bps,
 )
 from bandctl.shaper import Shaper, ShaperError
-from bandctl.rules import AutoRule, RuleTracker
+from bandctl.rules import AutoRule, RuleTracker, ScheduledOwnership
 from bandctl.traffic import TrafficSampler, above_share, read_ss
 from bandctl.widgets import RootRequired, RulesScreen
 
@@ -95,12 +96,14 @@ class BandctlApp(App):
         link_bps: int | None | object = _MISSING,
         is_root: bool | None = None,
         rates=None,
+        clock=None,
     ) -> None:
         super().__init__()
         self._iface_arg = iface
         self._shaper_arg = shaper
         self._process_source = processes
         self._rates_source = rates
+        self._clock = clock or (lambda: datetime.now().astimezone().time())
         self._link_bps_arg = link_bps
         self.is_root = os.geteuid() == 0 if is_root is None else is_root
         self.iface = iface or ""
@@ -116,6 +119,7 @@ class BandctlApp(App):
         self._history = RateHistory()
         self._rules: list[AutoRule] = []
         self._rule_tracker = RuleTracker()
+        self._scheduled = ScheduledOwnership()
         self._process_starts: dict[int, int | None] = {}
         self._selected: int | None = None
         self._shown: list[int] = []
@@ -359,6 +363,9 @@ class BandctlApp(App):
         except ShaperError as exc:
             self._note(str(exc), bad=True)
             return
+        if proc is not None:
+            self._scheduled.forget(proc)
+            self._rule_tracker.applied(proc)
         self._pushed_caps = (down_cap, up_cap)
         extra = self._over_commit()
         if extra:
@@ -380,6 +387,7 @@ class BandctlApp(App):
             return
         proc = self._proc(self._selected)
         if proc is not None:
+            self._scheduled.forget(proc)
             self._rule_tracker.applied(proc)
         self.query_one("#down-pct", Input).value = ""
         self.query_one("#up-pct", Input).value = ""
@@ -429,18 +437,31 @@ class BandctlApp(App):
             self._busy = False
 
     async def _apply_rules(self, procs: list[ProcessInfo]) -> None:
-        if not self.is_root or self.shaper is None or not self._rules:
+        if not self.is_root or self.shaper is None:
             return
         now = time.monotonic()
-        candidates = self._rule_tracker.candidates(procs, self._rules, set(self.shaper.shares), now)
+        current = self._clock()
+        shares = self.shaper.shares
+        limits = {pid: (share.down_pct, share.up_pct, share.revision) for pid, share in shares.items()}
+        for proc, revision in self._scheduled.expired(procs, self._rules, limits, current, now):
+            try:
+                message = await asyncio.to_thread(self.shaper.remove, proc.pid, expected_revision=revision)
+            except (ShaperError, OSError) as exc:
+                self._scheduled.failed(proc, time.monotonic())
+                self._note(f"scheduled limit for pid {proc.pid}: {exc}", bad=True)
+            else:
+                self._scheduled.forget(proc)
+                self._rule_tracker.released(proc)
+                self._note(f"schedule ended: {message}")
+        candidates = self._rule_tracker.candidates(procs, self._rules, set(self.shaper.shares), now, current)
         for proc, rule in candidates:
             if proc.pid in self.shaper.shares:
                 self._rule_tracker.applied(proc)
                 continue
             down_cap, up_cap = self._effective_caps()
             try:
-                message = await asyncio.to_thread(
-                    self.shaper.apply, proc.pid, rule.down_pct, rule.up_pct, down_cap, up_cap,
+                message, revision = await asyncio.to_thread(
+                    self.shaper.apply_tracked, proc.pid, rule.down_pct, rule.up_pct, down_cap, up_cap,
                     proc.cmdline, expected_start_ticks=proc.start_ticks, only_if_unlimited=True,
                 )
             except (ShaperError, OSError) as exc:
@@ -451,6 +472,7 @@ class BandctlApp(App):
                 self._note(f"auto rule for pid {proc.pid}: {exc}", bad=True)
             else:
                 self._rule_tracker.applied(proc)
+                self._scheduled.applied(proc, rule, revision)
                 self._pushed_caps = (down_cap, up_cap)
                 self._note(f"auto rule: {message}")
 
