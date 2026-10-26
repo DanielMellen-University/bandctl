@@ -156,12 +156,15 @@ class Shaper:
         command: str = "",
         *,
         expected_start_ticks: int | None = None,
+        only_if_unlimited: bool = False,
     ) -> str:
         if down_pct is None and up_pct is None:
             raise ShaperError("enter a download percent, an upload percent, or both")
         if self._torn:
             raise ShaperError("shaper is shut down")
         with self._lock:
+            if only_if_unlimited and pid in self._shares:
+                raise ShaperError(f"pid {pid} already has a limit")
             if expected_start_ticks is not None:
                 try:
                     stat = self.host.read(f"/proc/{pid}/stat")
@@ -210,6 +213,17 @@ class Shaper:
                     pass
                 raise
         return _applied_text(share)
+
+    def apply_tracked(
+        self, pid: int, down_pct: int | None, up_pct: int | None,
+        down_cap: int | None, up_cap: int | None, command: str = "", *,
+        expected_start_ticks: int | None = None, only_if_unlimited: bool = False,
+    ) -> tuple[str, int]:
+        """Apply and return the installed revision while holding the lock."""
+        with self._lock:
+            message = self.apply(pid, down_pct, up_pct, down_cap, up_cap, command,
+                                 expected_start_ticks=expected_start_ticks, only_if_unlimited=only_if_unlimited)
+            return message, self._shares[pid].revision
 
     def remove(self, pid: int, *, expected_revision: int | None = None) -> str:
         with self._lock:

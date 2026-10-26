@@ -12,6 +12,8 @@ bandctl is a Textual app in front of one `Shaper` object. The app never shells o
 
 Each successful apply gives its share a new in-memory revision. A caller can require that revision when removing a share, so a concurrent change does not get removed using an old decision.
 
+Automatic applies also require that the PID still has no share while the shaper lock is held. A concurrent manual limit is left alone.
+
 An automatic caller can pass the process start time from the scan to `Shaper.apply`. The shaper checks it again before changing anything and rejects a missing or changed process. This check reduces the chance of acting on a reused PID; the process may still exit after the check.
 
 Shares created with a verified start time are retired during sampling when that process exits or its PID is reused. The replacement PID is not moved to the old process's cgroup. If the start time cannot be read, the share is kept for a later check. A new share is refused if its old leaf cgroup still has processes in it.

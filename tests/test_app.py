@@ -33,7 +33,10 @@ class FakeShaper:
         self._shares: dict[int, Share] = {}
         self.torn = False
 
-    def apply(self, pid, down_pct, up_pct, down_cap, up_cap, command="", *, expected_start_ticks=None):
+    def apply(self, pid, down_pct, up_pct, down_cap, up_cap, command="", *, expected_start_ticks=None,
+              only_if_unlimited=False):
+        if only_if_unlimited and pid in self._shares:
+            raise ShaperError("already limited")
         if down_pct and not down_cap:
             raise ShaperError("download capacity is unknown; enter a download budget")
         if up_pct and not up_cap:
@@ -133,6 +136,25 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("forced failure", app._status_text)
             await app._refresh()
             self.assertEqual(fake.attempts, 1)
+
+    async def test_auto_rule_leaves_a_limit_added_during_apply(self):
+        from bandctl.rules import AutoRule
+
+        class RacingShaper(FakeShaper):
+            def apply(self, pid, *args, **kwargs):
+                self._shares[pid] = Share(pid, None, 70, 10, "/", "manual")
+                return super().apply(pid, *args, **kwargs)
+
+        fake = RacingShaper()
+        proc = ProcessInfo(42, "steam", "steam", "user", 1, 100)
+        app = BandctlApp(iface="eth0", shaper=fake, processes=lambda: [proc],
+                         link_bps=100_000_000, is_root=True, rates=lambda: {})
+        async with app.run_test(size=(100, 30)) as pilot:
+            app._rules = [AutoRule("steam", 30, None)]
+            await app._refresh()
+            self.assertEqual(fake.shares[42].up_pct, 70)
+            await app._refresh()
+            self.assertEqual(fake.shares[42].up_pct, 70)
 
     async def test_rule_editor_adds_and_deletes_rules(self):
         fake = FakeShaper()

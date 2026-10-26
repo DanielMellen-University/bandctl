@@ -135,6 +135,18 @@ class ParseTests(unittest.TestCase):
 
 
 class ApplyTests(unittest.TestCase):
+    def test_conditional_apply_preserves_an_existing_limit(self):
+        shaper, host = _shaper()
+        message, revision = shaper.apply_tracked(42, None, 10, None, 100_000_000)
+        self.assertIn("10%", message)
+        self.assertEqual(shaper.shares[42].revision, revision)
+        with patch.object(host, "write", wraps=host.write) as write:
+            with self.assertRaises(ShaperError):
+                shaper.apply(42, None, 30, None, 100_000_000, only_if_unlimited=True)
+            write.assert_not_called()
+        self.assertEqual(shaper.shares[42].up_pct, 10)
+        self.assertEqual(shaper.shares[42].revision, revision)
+
     def test_conditional_remove_refuses_a_changed_limit(self):
         shaper, host = _shaper()
         shaper.apply(42, None, 10, None, 100_000_000)

@@ -441,9 +441,12 @@ class BandctlApp(App):
             try:
                 message = await asyncio.to_thread(
                     self.shaper.apply, proc.pid, rule.down_pct, rule.up_pct, down_cap, up_cap,
-                    proc.cmdline, expected_start_ticks=proc.start_ticks,
+                    proc.cmdline, expected_start_ticks=proc.start_ticks, only_if_unlimited=True,
                 )
             except (ShaperError, OSError) as exc:
+                if proc.pid in self.shaper.shares:
+                    self._rule_tracker.applied(proc)
+                    continue
                 self._rule_tracker.failed(proc, time.monotonic())
                 self._note(f"auto rule for pid {proc.pid}: {exc}", bad=True)
             else:
