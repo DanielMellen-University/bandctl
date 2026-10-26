@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import unittest
+from types import SimpleNamespace
+from unittest.mock import PropertyMock, patch
 
 from rich.text import Text
 from textual.widgets import Button, DataTable, Footer, Input, RichLog, Static
@@ -12,7 +14,7 @@ from bandctl.app import BandctlApp, fit_columns, _COL_PAD, _MIN_HEIGHT, _MIN_WID
 from bandctl.procscan import ProcessInfo
 from bandctl.rates import Unit
 from bandctl.shaper import Share, ShaperError
-from bandctl.widgets import RootRequired
+from bandctl.widgets import RootRequired, RulesScreen
 
 
 PROCS = [
@@ -27,15 +29,17 @@ class FakeShaper:
         self.applied: list[tuple] = []
         self.removed: list[int] = []
         self.caps: list[tuple] = []
+        self.expected_starts: list[int | None] = []
         self._shares: dict[int, Share] = {}
         self.torn = False
 
-    def apply(self, pid, down_pct, up_pct, down_cap, up_cap, command=""):
+    def apply(self, pid, down_pct, up_pct, down_cap, up_cap, command="", *, expected_start_ticks=None):
         if down_pct and not down_cap:
             raise ShaperError("download capacity is unknown; enter a download budget")
         if up_pct and not up_cap:
             raise ShaperError("upload capacity is unknown; enter an upload budget")
         self.applied.append((pid, down_pct, up_pct, down_cap, up_cap, command))
+        self.expected_starts.append(expected_start_ticks)
         self._shares[pid] = Share(pid, down_pct, up_pct, 10, "/", command)
         down = "unlimited" if down_pct is None else f"{down_pct}%"
         up = "unlimited" if up_pct is None else f"{up_pct}%"
@@ -84,6 +88,94 @@ def _app(fake, *, root=True, link_bps=100_000_000, rates=None):
 
 
 class AppTests(unittest.IsolatedAsyncioTestCase):
+    def test_late_table_event_after_screen_closes_is_ignored(self):
+        app = _app(FakeShaper())
+        event = SimpleNamespace(data_table=SimpleNamespace(id="procs"))
+        with patch.object(BandctlApp, "screen_stack", new_callable=PropertyMock, return_value=[]):
+            app.on_data_table_row_highlighted(event)
+
+    async def test_auto_rule_applies_to_new_process_and_respects_manual_removal(self):
+        from bandctl.rules import AutoRule
+
+        fake = FakeShaper()
+        procs = [ProcessInfo(42, "steam", "steam", "user", 1, 100)]
+        app = BandctlApp(iface="eth0", shaper=fake, processes=lambda: list(procs),
+                         link_bps=100_000_000, is_root=True, rates=lambda: {42: (2_000_000, 0)})
+        async with app.run_test(size=(100, 30)) as pilot:
+            app._rules = [AutoRule("steam", 30, None)]
+            await app._refresh()
+            self.assertEqual(fake.applied[-1][:5], (42, 30, None, 100_000_000, 100_000_000))
+            self.assertEqual(fake.expected_starts[-1], 100)
+            app.action_remove_limit()
+            await app._refresh()
+            self.assertEqual(len(fake.applied), 1)
+            procs.append(ProcessInfo(43, "steamwebhelper", "steamwebhelper", "user", 0, 101))
+            await app._refresh()
+            self.assertEqual(fake.applied[-1][0], 43)
+
+    async def test_failed_auto_rule_reports_error_and_waits_before_retry(self):
+        from bandctl.rules import AutoRule
+
+        class FailingShaper(FakeShaper):
+            attempts = 0
+
+            def apply(self, *args, **kwargs):
+                self.attempts += 1
+                raise ShaperError("forced failure")
+
+        fake = FailingShaper()
+        proc = ProcessInfo(42, "steam", "steam", "user", 1, 100)
+        app = BandctlApp(iface="eth0", shaper=fake, processes=lambda: [proc],
+                         link_bps=100_000_000, is_root=True, rates=lambda: {})
+        async with app.run_test(size=(100, 30)) as pilot:
+            app._rules = [AutoRule("steam", 30, None)]
+            await app._refresh()
+            self.assertIn("forced failure", app._status_text)
+            await app._refresh()
+            self.assertEqual(fake.attempts, 1)
+
+    async def test_rule_editor_adds_and_deletes_rules(self):
+        fake = FakeShaper()
+        fake._shares[42] = Share(42, 30, None, 10, "/", "curl")
+        app = _app(fake)
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.press("t")
+            await pilot.pause()
+            self.assertIsInstance(app.screen, RulesScreen)
+            app.screen.query_one("#rule-name", Input).value = "steam"
+            app.screen.query_one("#rule-down", Input).value = "30"
+            await pilot.click("#rule-add")
+            self.assertEqual(app.screen.query_one("#rule-table", DataTable).row_count, 1)
+            app.screen.query_one("#rule-table", DataTable).focus()
+            await pilot.press("u", "q")
+            self.assertIsInstance(app.screen, RulesScreen)
+            self.assertIn(42, fake.shares)
+            await pilot.click("#rule-delete")
+            self.assertEqual(app.screen.query_one("#rule-table", DataTable).row_count, 0)
+            app.screen.query_one("#rule-name", Input).value = "steam"
+            app.screen.query_one("#rule-up", Input).value = "10"
+            await pilot.click("#rule-add")
+            await pilot.click("#rule-close")
+            await pilot.pause()
+            self.assertEqual([(rule.name, rule.down_pct, rule.up_pct) for rule in app._rules], [("steam", None, 10)])
+
+    async def test_rule_editor_fits_supported_sizes(self):
+        for width, height in ((60, 20), (80, 24), (100, 30), (120, 40), (160, 50), (77, 38)):
+            with self.subTest(size=(width, height)):
+                app = _app(FakeShaper())
+                async with app.run_test(size=(width, height)) as pilot:
+                    await pilot.press("t")
+                    await pilot.pause()
+                    dialog = app.screen.query_one("#rules-dialog").region
+                    self.assertLessEqual(dialog.right, width)
+                    self.assertLessEqual(dialog.bottom, height)
+                    for query in ("#rules-title", "#rules-help", "#rule-table", "#rule-name", "#rule-down",
+                                  "#rule-up", "#rule-status", "#rule-add", "#rule-delete", "#rule-close"):
+                        region = app.screen.query_one(query).region
+                        self.assertGreaterEqual(region.width, 3, query)
+                        self.assertGreaterEqual(region.height, 1, query)
+                        self.assertTrue(dialog.contains_region(region), f"{width}x{height} {query}")
+
     async def test_table_keys_apply_and_resize(self):
         fake = FakeShaper()
         app = _app(fake)

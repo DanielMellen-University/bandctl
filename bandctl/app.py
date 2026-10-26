@@ -30,8 +30,9 @@ from bandctl.rates import (
     percent_to_bps,
 )
 from bandctl.shaper import Shaper, ShaperError
+from bandctl.rules import AutoRule, RuleTracker
 from bandctl.traffic import TrafficSampler, above_share, read_ss
-from bandctl.widgets import RootRequired
+from bandctl.widgets import RootRequired, RulesScreen
 
 _MISSING = object()
 
@@ -80,7 +81,8 @@ class BandctlApp(App):
         Binding("s", "cycle_sort", "Sort"),
         Binding("n", "toggle_all", "All"),
         Binding("b", "toggle_unit", "Unit"),
-        Binding("r", "refresh_now", "Refresh"),
+        Binding("t", "edit_rules", "Rules"),
+        Binding("r", "refresh_now", "Refresh", show=False),
         Binding("escape", "focus_table", "Table", show=False),
     ]
 
@@ -112,6 +114,8 @@ class BandctlApp(App):
         self._procs: list[ProcessInfo] = []
         self._usage: dict[int, tuple[float, float]] = {}
         self._history = RateHistory()
+        self._rules: list[AutoRule] = []
+        self._rule_tracker = RuleTracker()
         self._process_starts: dict[int, int | None] = {}
         self._selected: int | None = None
         self._shown: list[int] = []
@@ -214,6 +218,13 @@ class BandctlApp(App):
             return f"sudo bandctl{extra}"
         return f"sudo {sys.executable} -m bandctl{extra}"
 
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        if self.is_mounted and self.screen_stack and isinstance(self.screen, (RootRequired, RulesScreen)):
+            if action in {"quit", "apply_limit", "remove_limit", "focus_filter", "cycle_sort", "toggle_all",
+                          "toggle_unit", "edit_rules", "refresh_now", "focus_table"}:
+                return False
+        return super().check_action(action, parameters)
+
     def on_resize(self, event) -> None:
         # The Resize message carries the new size. self.size can still be the
         # previous one while this handler runs.
@@ -221,13 +232,13 @@ class BandctlApp(App):
         if size is not None:
             self._width = size.width
             self._height = size.height
-        if self.is_mounted:
+        if self.is_mounted and self.screen_stack and not isinstance(self.screen, (RootRequired, RulesScreen)):
             self._render()
 
     def _on_screen_size(self, _old, new) -> None:
         self._width = new.width
         self._height = new.height
-        if self.is_mounted:
+        if self.is_mounted and self.screen_stack and not isinstance(self.screen, (RootRequired, RulesScreen)):
             self._render()
 
     def _dims(self) -> tuple[int, int]:
@@ -254,6 +265,9 @@ class BandctlApp(App):
             self.action_remove_limit()
 
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
+        if (not self.screen_stack or isinstance(self.screen, (RootRequired, RulesScreen))
+                or event.data_table.id != "procs"):
+            return
         try:
             pid = int(str(event.row_key.value))
         except (TypeError, ValueError):
@@ -268,7 +282,8 @@ class BandctlApp(App):
     def on_key(self, event) -> None:
         # Enter in the table applies. Enter inside a percent field is handled
         # by Input.Submitted, and a click only moves the highlight.
-        if event.key == "enter" and self.focused is self.query_one("#procs", DataTable):
+        if (event.key == "enter" and not isinstance(self.screen, (RootRequired, RulesScreen))
+                and self.focused is self.query_one("#procs", DataTable)):
             self.action_apply_limit()
 
     def action_focus_filter(self) -> None:
@@ -301,6 +316,21 @@ class BandctlApp(App):
 
     def action_refresh_now(self) -> None:
         self.run_worker(self._refresh(), exclusive=True)
+
+    def action_edit_rules(self) -> None:
+        if not self.is_root:
+            self._note("not running as root. " + self.sudo_command(), bad=True)
+            return
+        if self._busy:
+            self._note("refresh in progress; try again")
+            return
+        self.push_screen(RulesScreen(self._rules), self._rules_closed)
+
+    def _rules_closed(self, rules: list[AutoRule] | None) -> None:
+        if rules is not None:
+            self._rules = rules
+            self._note(f"{len(rules)} auto-apply rules")
+            self.action_refresh_now()
 
     def action_apply_limit(self) -> None:
         if not self.is_root:
@@ -348,13 +378,16 @@ class BandctlApp(App):
         except ShaperError as exc:
             self._note(str(exc), bad=True)
             return
+        proc = self._proc(self._selected)
+        if proc is not None:
+            self._rule_tracker.applied(proc)
         self.query_one("#down-pct", Input).value = ""
         self.query_one("#up-pct", Input).value = ""
         self._note(message)
         self._render()
 
     async def _refresh(self) -> None:
-        if self._busy:
+        if self._busy or isinstance(self.screen, (RootRequired, RulesScreen)):
             return
         self._busy = True
         try:
@@ -382,6 +415,7 @@ class BandctlApp(App):
             }
             valid = self._rates_source is not None or (not self._ss_failed and self._sampler.primed)
             self._history.record(time.monotonic(), {proc.pid for proc in procs}, usage if valid else None)
+            await self._apply_rules(procs)
             self._push_caps()
             self._render()
             if self._status_text.startswith("refresh failed:"):
@@ -393,6 +427,29 @@ class BandctlApp(App):
                 self._note(message, bad=True)
         finally:
             self._busy = False
+
+    async def _apply_rules(self, procs: list[ProcessInfo]) -> None:
+        if not self.is_root or self.shaper is None or not self._rules:
+            return
+        now = time.monotonic()
+        candidates = self._rule_tracker.candidates(procs, self._rules, set(self.shaper.shares), now)
+        for proc, rule in candidates:
+            if proc.pid in self.shaper.shares:
+                self._rule_tracker.applied(proc)
+                continue
+            down_cap, up_cap = self._effective_caps()
+            try:
+                message = await asyncio.to_thread(
+                    self.shaper.apply, proc.pid, rule.down_pct, rule.up_pct, down_cap, up_cap,
+                    proc.cmdline, expected_start_ticks=proc.start_ticks,
+                )
+            except (ShaperError, OSError) as exc:
+                self._rule_tracker.failed(proc, time.monotonic())
+                self._note(f"auto rule for pid {proc.pid}: {exc}", bad=True)
+            else:
+                self._rule_tracker.applied(proc)
+                self._pushed_caps = (down_cap, up_cap)
+                self._note(f"auto rule: {message}")
 
     def _report_flow_warning(self) -> None:
         warning = getattr(self.shaper, "flow_warning", None) if self.shaper else None

@@ -63,6 +63,12 @@ The two budget fields are in the unit shown in the header. `b` flips between Mbi
 
 The graphs beside the bars show the selected process's download and upload rates over the last 60 seconds, with the newest sample on the right. Each graph scales to its own peak. When the graph is narrower than 60 characters, each character shows the highest rate in its group of seconds. Blank spaces indicate spans with no samples. History is kept while the process remains in the list and is discarded when it exits or its PID is reused, when the process start time is available.
 
+## Auto-apply rules
+
+Press `t` to open the rule editor. Enter part of a process name and one or both percentages, then choose Add. Rules match process names without regard to case; they do not match command arguments. The first matching rule wins. Select a rule and choose Delete to remove it, or Close to return to the process list. Deleting a rule does not remove limits it already applied. Rules last until bandctl exits.
+
+Rules apply to matching processes already running and to new matches found in later scans. A process that already has a limit is left alone. Removing its limit manually prevents automatic reapplication to that instance. A rule needs a known process start time so bandctl can check that the PID still refers to the scanned process. A failed application appears in the log and is retried after 15 seconds. Rules use the detected link speed or the last submitted budgets. Process scans pause while the editor is open.
+
 A budget must be a finite number that represents at least 1 bit/s.
 
 Example. The link is unknown. You are in Mbit/s and type `100` as the download budget. A 30% download share then ceilings at 30 Mbit/s. Press `b` and the same budget reads `12.5`, which is 100 Mbit/s expressed in MB/s.

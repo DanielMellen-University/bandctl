@@ -111,9 +111,12 @@ Keys:
 | `n` | Show every process, or go back to processes above 1% |
 | `s` | Cycle sort: name, pid, download, upload |
 | `b` | Toggle Mbit/s and MB/s |
+| `t` | Edit auto-apply rules |
 | `q` | Quit and remove every rule this process installed |
 
 The log under the bars keeps the last successes and failures. A failed `tc`, `nft`, or cgroup write is one line there and in the status bar. The previous share is left in place when an update fails. A brand new share is rolled back, and the empty cgroup made for it is removed. If Remove cannot put a running process back in its old cgroup, the share stays listed so you can try again. A process that has already exited is dropped.
+
+Press `t` to add or delete auto-apply rules. Enter part of a process name and a download percent, an upload percent, or both. Matching ignores case; the first matching rule wins. Rules apply to matching running processes and new processes while bandctl is open. Existing limits are left alone. Removing a limit manually keeps it off for that process instance. Rules are kept for this session only and are cleared on exit. The log reports failures and retries them after 15 seconds.
 
 Full steps and the manual check with a real download are in [docs/USAGE.md](docs/USAGE.md) and [docs/TESTING.md](docs/TESTING.md).
 
@@ -163,3 +166,7 @@ A 120 by 36 terminal. `curl` has a 30% download share and is close to its cap. `
 Started without root. The dialog shows the command to run instead, and Apply and Remove are off.
 
 ![Not-root dialog at 100x30](docs/screenshots/not-root-100x30.png)
+
+The auto-apply rule editor at 80 by 24.
+
+![Auto-apply rules at 80x24](docs/screenshots/rules-80x24.png)
