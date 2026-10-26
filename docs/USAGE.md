@@ -61,6 +61,8 @@ When `ip route` is unavailable, bandctl picks the active IPv4 default route with
 
 The two budget fields are in the unit shown in the header. `b` flips between Mbit/s and MB/s and rewrites a budget you already typed so the underlying bit rate stays the same. Apply reads those fields, and so does Enter while the cursor is in one of them. Empty means "use the detected speed again".
 
+The graphs beside the bars show the selected process's download and upload rates over the last 60 seconds, with the newest sample on the right. Each graph scales to its own peak. When the graph is narrower than 60 characters, each character shows the highest rate in its group of seconds. Blank spaces indicate spans with no samples. History is kept while the process remains in the list and is discarded when it exits.
+
 A budget must be a finite number that represents at least 1 bit/s.
 
 Example. The link is unknown. You are in Mbit/s and type `100` as the download budget. A 30% download share then ceilings at 30 Mbit/s. Press `b` and the same budget reads `12.5`, which is 100 Mbit/s expressed in MB/s.

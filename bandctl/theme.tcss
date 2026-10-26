@@ -114,6 +114,20 @@ Screen {
     height: 2;
 }
 
+.meter-values {
+    height: 1;
+    width: 1fr;
+}
+
+.history {
+    width: 1fr;
+    max-width: 60;
+    height: 1;
+    color: #8fd19a;
+    padding-left: 1;
+    text-wrap: nowrap;
+}
+
 #pct-row {
     height: 3;
 }
@@ -348,7 +362,7 @@ RootRequired {
 
 .-compact #down-caption, .-compact #up-caption {
     width: auto;
-    max-width: 70%;
+    max-width: 55%;
     padding: 0 1 0 0;
 }
 

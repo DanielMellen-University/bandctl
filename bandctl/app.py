@@ -17,6 +17,7 @@ from textual.widgets import Button, DataTable, Footer, Input, Label, ProgressBar
 from textual.widgets.data_table import RowDoesNotExist
 
 from bandctl.iface import IfaceError, default_iface, link_speed_bps
+from bandctl.history import RateHistory
 from bandctl.procscan import ProcessInfo, scan_processes
 from bandctl.rates import (
     RateError,
@@ -110,6 +111,7 @@ class BandctlApp(App):
         self._ss_warned = False
         self._procs: list[ProcessInfo] = []
         self._usage: dict[int, tuple[float, float]] = {}
+        self._history = RateHistory()
         self._selected: int | None = None
         self._shown: list[int] = []
         self._cols: tuple[str, ...] = ()
@@ -155,13 +157,13 @@ class BandctlApp(App):
             Vertical(
                 Vertical(
                     Static("download  no cap", id="down-caption"),
-                    ProgressBar(total=100, show_eta=False, show_percentage=False, id="down-bar"),
+                    Horizontal(ProgressBar(total=100, show_eta=False, show_percentage=False, id="down-bar"), Static("", id="down-history", classes="history"), classes="meter-values"),
                     id="down-meter",
                     classes="meter",
                 ),
                 Vertical(
                     Static("upload  no cap", id="up-caption"),
-                    ProgressBar(total=100, show_eta=False, show_percentage=False, id="up-bar"),
+                    Horizontal(ProgressBar(total=100, show_eta=False, show_percentage=False, id="up-bar"), Static("", id="up-history", classes="history"), classes="meter-values"),
                     id="up-meter",
                     classes="meter",
                 ),
@@ -368,6 +370,8 @@ class BandctlApp(App):
                 self._detected_bps = detected
             self._procs = procs
             self._usage = usage
+            valid = self._rates_source is not None or (not self._ss_failed and self._sampler.primed)
+            self._history.record(time.monotonic(), {proc.pid for proc in procs}, usage if valid else None)
             self._push_caps()
             self._render()
             if self._status_text.startswith("refresh failed:"):
@@ -633,6 +637,9 @@ class BandctlApp(App):
         down_cap, up_cap = self._effective_caps()
         self._paint_bar("down", None if not share else share.down_pct, usage[0], down_cap)
         self._paint_bar("up", None if not share else share.up_pct, usage[1], up_cap)
+        for direction, kind in enumerate(("down", "up")):
+            graph = self.query_one(f"#{kind}-history", Static)
+            graph.update(self._history.graph(self._selected, direction, time.monotonic(), graph.content_size.width))
 
     def _paint_bar(self, kind: str, percent: int | None, usage_bps: float, cap: int | None) -> None:
         bar = self.query_one(f"#{kind}-bar", ProgressBar)
@@ -642,9 +649,13 @@ class BandctlApp(App):
             frac = 0.0 if ceil <= 0 else min(100.0, usage_bps / ceil * 100.0)
             bar.update(total=100, progress=frac)
             bar.set_class(frac >= 95, "hot")
-            caption.update(
-                f"{kind}  {format_rate(usage_bps, self.unit)} / {format_rate(ceil, self.unit)}  ({percent}%)"
-            )
+            current = format_rate(usage_bps, self.unit)
+            ceiling = format_rate(ceil, self.unit)
+            if self._dims()[0] < 80:
+                current = current.removesuffix(f" {self.unit.value}")
+                caption.update(f"{kind} {current}/{ceiling} {percent}%")
+            else:
+                caption.update(f"{kind}  {current} / {ceiling}  ({percent}%)")
         else:
             bar.update(total=100, progress=0)
             bar.remove_class("hot")

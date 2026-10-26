@@ -19,8 +19,8 @@ class RootRequired(ModalScreen[None]):
         yield Vertical(
             Static("bandctl needs root to set limits.", id="root-title"),
             Static(
-                "This session can list processes and nothing else. "
-                "Limits are not applied, and no tc rules are installed.",
+                "You can view processes and traffic. "
+                "Limits are off, and no tc rules are installed.",
                 id="root-body",
             ),
             Static(self.command, id="root-command"),

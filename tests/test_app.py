@@ -175,6 +175,7 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             await pilot.pause()
             self.assertIsInstance(app.screen, RootRequired)
             self.assertIn("sudo", str(app.screen.query_one("#root-command").render()))
+            self.assertIn("view processes and traffic", str(app.screen.query_one("#root-body").render()))
             await pilot.click("#root-ok")
             await pilot.pause()
             self.assertNotIsInstance(app.screen, RootRequired)
@@ -210,6 +211,28 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             await pilot.pause()
             self.assertEqual(app._shown, [42])
             self.assertEqual(str(app.query_one("#procs", DataTable).get_cell("42", "down_rate")), "0.00 Mbit/s")
+
+    async def test_graphs_follow_the_selected_process(self):
+        app = _app(FakeShaper())
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause()
+            app._paint_detail()
+            self.assertIn("█", str(app.query_one("#down-history", Static).render()))
+            await pilot.press("n", "down")
+            await pilot.pause()
+            self.assertEqual(app._selected, 1)
+            self.assertIn("█", str(app.query_one("#down-history", Static).render()))
+            self.assertIn("▁", str(app.query_one("#up-history", Static).render()))
+
+    async def test_narrow_capped_rate_caption_fits(self):
+        fake = FakeShaper()
+        fake._shares[42] = Share(42, 30, None, 10, "/", "curl")
+        app = _app(fake)
+        async with app.run_test(size=(60, 20)) as pilot:
+            await pilot.pause()
+            caption = app.query_one("#down-caption", Static)
+            self.assertIn("30%", str(caption.render()))
+            self.assertLessEqual(len(str(caption.render())), caption.content_size.width)
 
     def test_columns_fit_the_width(self):
         for width in (64, 70, 90, 120, 200):
@@ -324,7 +347,7 @@ class LayoutTests(unittest.IsolatedAsyncioTestCase):
 
             detail = app.query_one("#detail").region
             for query in ("#detail-title", "#pct-row", "#down-pct", "#up-pct", "#apply", "#remove",
-                          "#down-caption", "#down-bar", "#up-caption", "#up-bar"):
+                          "#down-caption", "#down-bar", "#down-history", "#up-caption", "#up-bar", "#up-history"):
                 region = app.query_one(query).region
                 self.assertGreaterEqual(region.height, 1, f"{where} {query}")
                 self.assertGreaterEqual(region.width, 3, f"{where} {query}")
