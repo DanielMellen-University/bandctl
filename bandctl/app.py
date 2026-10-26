@@ -15,7 +15,6 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.css.query import NoMatches
 from textual.widgets import Button, DataTable, Footer, Input, Label, ProgressBar, RichLog, Static
-from textual.widgets.data_table import RowDoesNotExist
 
 from bandctl.iface import IfaceError, default_iface, link_speed_bps
 from bandctl.history import RateHistory
@@ -621,7 +620,9 @@ class BandctlApp(App):
         query = self.query_one("#filter", Input).value.strip().lower()
         rows = []
         for proc in self._procs:
-            if not self._show_all and not self._keep_row(proc):
+            # A search looks through every process, not just the busy ones,
+            # so an idle process can still be found by name or pid.
+            if not query and not self._show_all and not self._keep_row(proc):
                 continue
             if query and not _matches(proc, query):
                 continue
@@ -727,7 +728,10 @@ class BandctlApp(App):
     def _paint_detail(self) -> None:
         proc = self._proc(self._selected) if self._selected is not None else None
         if proc is None and self._selected is None:
-            if not self._show_all and self._rates_source is None and not self._sampler.primed:
+            query = self.query_one("#filter", Input).value.strip()
+            if query:
+                title = f"No process matches {query}"
+            elif not self._show_all and self._rates_source is None and not self._sampler.primed:
                 title = "Measuring traffic..."
             elif not self._show_all:
                 title = "Nothing above 1%. Press n to list every process."

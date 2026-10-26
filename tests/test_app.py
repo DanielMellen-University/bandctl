@@ -134,6 +134,28 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             await pilot.pause()
             self.assertEqual(set(app._shown), {1, 7, 42})
 
+    async def test_filter_finds_idle_processes_without_listing_everything(self):
+        app = _app(FakeShaper())
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.pause()
+            self.assertEqual(app._shown, [42])
+            await pilot.press("slash")
+            field = app.query_one("#filter", Input)
+            field.value = "bash"
+            await pilot.pause()
+            self.assertEqual(app._shown, [7])
+            field.value = "1"
+            await pilot.pause()
+            self.assertEqual(set(app._shown), {1})
+            field.value = "no-such-process"
+            await pilot.pause()
+            self.assertEqual(app._shown, [])
+            title = str(app.query_one("#detail-title", Static).render())
+            self.assertIn("No process matches no-such-process", title)
+            field.value = ""
+            await pilot.pause()
+            self.assertEqual(app._shown, [42])
+
     async def test_scheduled_rule_applies_expires_and_respects_manual_override(self):
         from datetime import time
         from bandctl.rules import AutoRule
