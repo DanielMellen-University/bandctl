@@ -41,6 +41,8 @@ The window still opens. A dialog shows the `sudo` command. After you dismiss it,
 
 ## Setting a share
 
+The window needs 64 columns and 24 rows. Make it wider and the meters move beside the percent fields.
+
 1. Select a process. The table starts with processes above 1% of the link (or of the traffic measured right now, when the link speed is unknown). Loopback sockets are not counted. `n` shows every process, and a process that already has a share stays listed either way. Arrow keys or a click. `/` filters by command, pid, or user. `s` cycles the sort: name (sockets first), pid, download rate, upload rate.
 2. Type a whole number from 1 to 100 in `down %`, `up %`, or both. A blank field means that direction is not capped.
 3. Press Enter in either percent field, press `a`, or click Apply.

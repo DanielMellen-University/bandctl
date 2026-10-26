@@ -76,6 +76,8 @@ Name the venv interpreter. `sudo python` is often a different install and will n
 
 ## Usage
 
+The window needs 64 columns and 24 rows. Below that, bandctl asks you to make the terminal bigger. Wider windows put the meters next to the percent fields and add the user and socket columns. The process table fills the width instead of scrolling sideways.
+
 The table lists processes using more than 1% of the link. When the link speed is unknown, that 1% is of the TCP traffic measured right now, ignoring loopback. `n` lists every process. A process that already has a share stays on screen so you can remove it. Type `/` to filter by name, pid, or user. Select a row with the arrow keys or a click.
 
 Type a download percent, an upload percent, or both (1 to 100). Leave a field blank to leave that direction uncapped. Enter in a percent field, the Apply button, or `a` installs the share. `u` removes it. Limited rows are orange, except the selected row, which stays green so the text stays readable. The bar is green while usage is under the ceiling and orange when it is at the cap.

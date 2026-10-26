@@ -8,7 +8,7 @@ from rich.text import Text
 from textual.widgets import DataTable, Input
 from textual.widgets._footer import FooterKey
 
-from bandctl.app import BandctlApp
+from bandctl.app import BandctlApp, fit_columns, _COL_PAD
 from bandctl.procscan import ProcessInfo
 from bandctl.rates import Unit
 from bandctl.shaper import Share, ShaperError
@@ -155,7 +155,9 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             await pilot.pause()
             self.assertLess(app.size.width, 88)
             self.assertNotIn("user", app._cols)
+            self.assertIn("-stacked", app.screen.classes)
             self.assertGreaterEqual(table.row_count, 1)
+            self.assertLessEqual(table.virtual_size.width, table.size.width)
 
             await pilot.resize_terminal(120, 36)
             await pilot.press("escape")
@@ -208,6 +210,38 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             await pilot.pause()
             self.assertEqual(app._shown, [42])
             self.assertEqual(str(app.query_one("#procs", DataTable).get_cell("42", "down_rate")), "0.00 Mbit/s")
+
+    def test_columns_fit_the_width(self):
+        for width in (64, 70, 90, 120, 200):
+            plan = fit_columns(width)
+            total = sum(col_width + _COL_PAD for _key, _label, col_width in plan)
+            self.assertLessEqual(total, width - 1, plan)
+            self.assertIn("command", [key for key, _label, _width in plan])
+        narrow = [key for key, _label, _width in fit_columns(70)]
+        self.assertNotIn("user", narrow)
+        self.assertNotIn("sockets", narrow)
+        self.assertIn("down_rate", narrow)
+        wide = [key for key, _label, _width in fit_columns(120)]
+        self.assertEqual(wide[:4], ["pid", "command", "user", "sockets"])
+
+    async def test_a_tiny_terminal_asks_for_more_room(self):
+        app = _app(FakeShaper())
+        async with app.run_test(size=(40, 12)) as pilot:
+            self.assertIn("-too-small", app.screen.classes)
+            message = str(app.query_one("#too-small").render())
+            self.assertIn("64", message)
+            self.assertIn("24", message)
+            await pilot.resize_terminal(80, 30)
+            await pilot.pause()
+            self.assertNotIn("-too-small", app.screen.classes)
+            self.assertIn("-stacked", app.screen.classes)
+            table = app.query_one("#procs", DataTable)
+            self.assertLessEqual(table.virtual_size.width, table.size.width)
+            await pilot.resize_terminal(140, 40)
+            await pilot.pause()
+            self.assertNotIn("-stacked", app.screen.classes)
+            self.assertIn("user", app._cols)
+            self.assertLessEqual(table.virtual_size.width, table.size.width)
 
 
 if __name__ == "__main__":

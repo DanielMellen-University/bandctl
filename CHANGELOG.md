@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The layout fits the terminal. Column widths fill the window instead of scrolling sideways, and below 108 columns the meters sit under the percent fields. Below 64 columns or 24 rows, bandctl asks for a bigger window.
 - The process table lists processes using more than 1% of the link. With no link speed, the cutoff is 1% of the non-loopback TCP traffic measured from `ss`. `n` shows every process. A process that already has a share stays visible after its traffic drops.
 - Footer keys are black on pastel green, and the key labels and the status line are white, so the bottom bar stays readable.
 - Apply commits the budget fields. A number typed in the header is used even when Enter was not pressed there.

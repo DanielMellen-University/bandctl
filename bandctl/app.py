@@ -33,24 +33,21 @@ from bandctl.widgets import RootRequired
 
 _MISSING = object()
 
-_COLUMNS_WIDE = (
-    ("pid", "PID"),
-    ("command", "Command"),
-    ("user", "User"),
-    ("sockets", "Sockets"),
-    ("down_pct", "Down %"),
-    ("up_pct", "Up %"),
-    ("down_rate", "Down"),
-    ("up_rate", "Up"),
+# (key, header, content width, dropped first when the terminal is narrow).
+# Rendered width is the content width plus two cells of padding.
+_COLUMNS = (
+    ("pid", "PID", 7, False),
+    ("user", "User", 10, True),
+    ("sockets", "Sockets", 7, True),
+    ("down_pct", "Down %", 6, False),
+    ("up_pct", "Up %", 5, False),
+    ("down_rate", "Down", 12, False),
+    ("up_rate", "Up", 12, False),
 )
-_COLUMNS_NARROW = (
-    ("pid", "PID"),
-    ("command", "Command"),
-    ("down_pct", "Down %"),
-    ("up_pct", "Up %"),
-    ("down_rate", "Down"),
-    ("up_rate", "Up"),
-)
+_COL_PAD = 2
+_MIN_WIDTH = 64
+_MIN_HEIGHT = 24
+_STACK_BELOW = 108
 _SORTS = ("name", "pid", "down", "up")
 _SORT_LABEL = {"name": "name", "pid": "pid", "down": "download", "up": "upload"}
 
@@ -102,6 +99,8 @@ class BandctlApp(App):
         self._selected: int | None = None
         self._shown: list[int] = []
         self._cols: tuple[str, ...] = ()
+        self._col_widths: tuple[int, ...] = ()
+        self._command_width = 20
         self._detected_bps: int | None = None
         self._down_budget: int | None = None
         self._up_budget: int | None = None
@@ -116,6 +115,7 @@ class BandctlApp(App):
     def compose(self) -> ComposeResult:
         yield Static("", id="banner")
         yield Static("bandctl", id="titlebar")
+        yield Static("", id="too-small")
         yield Horizontal(
             Static("", id="speed"),
             Input(placeholder="down budget", id="down-budget"),
@@ -442,10 +442,18 @@ class BandctlApp(App):
         if not self.is_mounted:
             return
         width, height = self._dims()
-        narrow = width < 88
-        cramped = height < 28
-        self.screen.set_class(narrow, "-narrow")
-        self.screen.set_class(cramped, "-cramped")
+        too_small = width < _MIN_WIDTH or height < _MIN_HEIGHT
+        self.screen.set_class(too_small, "-too-small")
+        self.screen.set_class(width < _STACK_BELOW, "-stacked")
+        self.screen.set_class(height < 32, "-cramped")
+        self.screen.set_class(height >= 42, "-tall")
+        self.query_one(Footer).compact = width < 100
+        if too_small:
+            self.query_one("#too-small", Static).update(
+                "This terminal is too small.\n\n"
+                f"bandctl needs {_MIN_WIDTH} columns and {_MIN_HEIGHT} rows.\n"
+                "Make the window bigger."
+            )
         self._paint_header()
         self._render_table()
         self._paint_detail()
@@ -457,25 +465,26 @@ class BandctlApp(App):
             link = format_rate(self._detected_bps, self.unit)
         else:
             link = "unknown"
-        text = (
-            f"bandctl  {iface}  {root}  {self.unit.value}  "
-            f"link {link}  sort {_SORT_LABEL[self._sort]}"
-        )
-        if not self._show_all:
-            text += "  above 1%"
+        width, _height = self._dims()
+        if width < 80:
+            text = f"{iface}  {root}  {self.unit.value}  link {link}"
+        else:
+            text = (
+                f"bandctl  {iface}  {root}  {self.unit.value}  "
+                f"link {link}  sort {_SORT_LABEL[self._sort]}"
+            )
+            if not self._show_all:
+                text += "  above 1%"
         self.query_one("#titlebar", Static).update(text)
         down_cap, up_cap = self._effective_caps()
-        self.query_one("#speed", Static).update(
-            _cap_label("down", down_cap, self._down_budget, self.unit)
-            + "    "
-            + _cap_label("up", up_cap, self._up_budget, self.unit)
-        )
+        down_label = _cap_label("down", down_cap, self._down_budget, self.unit)
+        up_label = _cap_label("up", up_cap, self._up_budget, self.unit)
+        gap = "\n" if width < _STACK_BELOW else "    "
+        self.query_one("#speed", Static).update(down_label + gap + up_label)
 
-    def _want_columns(self) -> tuple[tuple[str, str], ...]:
+    def _column_plan(self) -> list[tuple[str, str, int]]:
         width, _height = self._dims()
-        if width < 88:
-            return _COLUMNS_NARROW
-        return _COLUMNS_WIDE
+        return fit_columns(width)
 
     def _visible(self) -> list[ProcessInfo]:
         query = self.query_one("#filter", Input).value.strip().lower()
@@ -521,17 +530,22 @@ class BandctlApp(App):
 
     def _render_table(self) -> None:
         table = self.query_one("#procs", DataTable)
-        columns = self._want_columns()
-        keys = tuple(key for key, _label in columns)
+        columns = self._column_plan()
+        keys = tuple(key for key, _label, _width in columns)
+        widths = tuple(width for _key, _label, width in columns)
+        for key, _label, width in columns:
+            if key == "command":
+                self._command_width = width
         rows = self._visible()
         pids = [proc.pid for proc in rows]
-        if keys != self._cols or pids != self._shown:
+        if keys != self._cols or widths != self._col_widths or pids != self._shown:
             table.clear(columns=True)
-            for key, label in columns:
-                table.add_column(label, key=key)
+            for key, label, width in columns:
+                table.add_column(label, width=width, key=key)
             self._cols = keys
+            self._col_widths = widths
             for proc in rows:
-                table.add_row(*[self._cell(proc, key) for key, _label in columns], key=str(proc.pid))
+                table.add_row(*[self._cell(proc, key) for key, _label, _width in columns], key=str(proc.pid))
             self._shown = pids
             if self._selected not in pids:
                 self._selected = pids[0] if pids else None
@@ -539,7 +553,7 @@ class BandctlApp(App):
                 table.move_cursor(row=table.get_row_index(str(self._selected)), animate=False)
         else:
             for proc in rows:
-                for key, _label in columns:
+                for key, _label, _width in columns:
                     table.update_cell(str(proc.pid), key, self._cell(proc, key))
 
     def _cell(self, proc: ProcessInfo, key: str):
@@ -549,7 +563,7 @@ class BandctlApp(App):
         if key == "pid":
             text = str(proc.pid)
         elif key == "command":
-            text = proc.cmdline
+            text = _clip(proc.cmdline, self._command_width)
         elif key == "user":
             text = proc.user
         elif key == "sockets":
@@ -649,6 +663,42 @@ class BandctlApp(App):
             return
         stamp = time.strftime("%H:%M:%S")
         self.query_one("#log", RichLog).write(f"{stamp}  {text}")
+
+
+def fit_columns(table_width: int) -> list[tuple[str, str, int]]:
+    """Column keys, headers, and content widths that fit in ``table_width``.
+
+    One column is reserved for the scrollbar. The command column takes whatever
+    is left. User and socket columns are the first to go.
+    """
+    budget = max(table_width - 1, 1)
+    chosen = list(_COLUMNS)
+
+    def overhead(columns: list[tuple[str, str, int, bool]], command_width: int) -> int:
+        return sum(width + _COL_PAD for _key, _label, width, _optional in columns) + command_width + _COL_PAD
+
+    while overhead(chosen, 12) > budget:
+        optional = [index for index, item in enumerate(chosen) if item[3]]
+        if not optional:
+            break
+        chosen.pop(optional[0])
+    command_width = budget - overhead(chosen, 0)
+    if command_width < 4:
+        command_width = 4
+    fitted: list[tuple[str, str, int]] = []
+    for key, label, width, _optional in chosen:
+        fitted.append((key, label, width))
+        if key == "pid":
+            fitted.append(("command", "Command", command_width))
+    return fitted
+
+
+def _clip(text: str, width: int) -> str:
+    if width <= 0 or len(text) <= width:
+        return text
+    if width <= 3:
+        return text[:width]
+    return text[: width - 3] + "..."
 
 
 def _matches(proc: ProcessInfo, query: str) -> bool:

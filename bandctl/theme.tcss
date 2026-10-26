@@ -28,10 +28,16 @@ Screen {
 
 #speed {
     width: 1fr;
+    min-width: 16;
     height: 3;
     content-align: left middle;
     color: #e8e8e8;
     padding: 0 1;
+}
+
+#down-budget, #up-budget {
+    width: 18;
+    max-width: 40%;
 }
 
 #filter {
@@ -90,13 +96,20 @@ Screen {
     height: 3;
 }
 
-#down-pct, #up-pct, #down-budget, #up-budget {
-    width: 1fr;
+#pct-row Label {
+    width: auto;
+    height: 3;
+    content-align: left middle;
+    padding: 0 1;
+}
+
+#down-pct, #up-pct {
+    width: 8;
 }
 
 #apply, #remove {
-    width: auto;
-    min-width: 12;
+    width: 9;
+    min-width: 9;
 }
 
 Input {
@@ -150,7 +163,7 @@ ProgressBar.hot Bar > .bar--bar {
 }
 
 #log {
-    height: 4;
+    height: 5;
     background: #242424;
     color: #e8e8e8;
     border: round #3a3a3a;
@@ -224,11 +237,18 @@ RootRequired {
     text-style: bold;
 }
 
-.-narrow #detail {
-    height: auto;
+#too-small {
+    display: none;
 }
 
-.-narrow #pct-row {
+.-stacked #detail {
+    layout: vertical;
+    height: 8;
+}
+
+.-stacked #detail-controls,
+.-stacked #meters {
+    width: 100%;
     height: auto;
 }
 
@@ -236,6 +256,31 @@ RootRequired {
     height: 3;
 }
 
-.-cramped #detail {
-    height: 5;
+.-tall #log {
+    height: 7;
+}
+
+.-too-small #banner,
+.-too-small #titlebar,
+.-too-small #capacity,
+.-too-small #filter,
+.-too-small #procs,
+.-too-small #detail,
+.-too-small #log,
+.-too-small #status,
+.-too-small Footer {
+    display: none;
+}
+
+.-too-small #too-small {
+    display: block;
+    dock: top;
+    width: 100%;
+    height: 100%;
+    background: #2a2a2a;
+    color: #ffffff;
+    content-align: center middle;
+    text-align: center;
+    text-style: bold;
+    padding: 1 2;
 }
