@@ -32,7 +32,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
-from bandctl.procscan import SockFlow, parse_proc_net
+from bandctl.procscan import SockFlow, parse_proc_net, parse_start_ticks
 from bandctl.rates import htb_plan, percent_to_bps
 
 IFB = "ifb-bandctl"
@@ -151,12 +151,21 @@ class Shaper:
         down_cap: int | None,
         up_cap: int | None,
         command: str = "",
+        *,
+        expected_start_ticks: int | None = None,
     ) -> str:
         if down_pct is None and up_pct is None:
             raise ShaperError("enter a download percent, an upload percent, or both")
         if self._torn:
             raise ShaperError("shaper is shut down")
         with self._lock:
+            if expected_start_ticks is not None:
+                try:
+                    stat = self.host.read(f"/proc/{pid}/stat")
+                except OSError as exc:
+                    raise ShaperError(f"cannot verify pid {pid}") from exc
+                if parse_start_ticks(stat) != expected_start_ticks:
+                    raise ShaperError(f"pid {pid} changed since the process scan")
             old_shares = {pid_: _copy_share(share) for pid_, share in self._shares.items()}
             old_caps = (self._down_cap, self._up_cap)
             self._down_cap = down_cap

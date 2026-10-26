@@ -134,6 +134,24 @@ class ParseTests(unittest.TestCase):
 
 
 class ApplyTests(unittest.TestCase):
+    def test_expected_start_time_is_checked_before_changing_anything(self):
+        shaper, host = _shaper()
+        stat_path = "/proc/42/stat"
+        for stat in (None, "42 (curl) S " + "0 " * 18 + "99", "invalid"):
+            if stat is None:
+                host.files.pop(stat_path, None)
+            else:
+                host.files[stat_path] = stat
+            before = dict(host.files)
+            with self.subTest(stat=stat), self.assertRaises(ShaperError):
+                shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+            self.assertEqual(host.files, before)
+            self.assertEqual(host.commands, [])
+            self.assertEqual(shaper.shares, {})
+        host.files[stat_path] = "42 (curl) S " + "0 " * 18 + "100"
+        shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+        self.assertIn(42, shaper.shares)
+
     def test_moves_cgroup_and_sets_both_directions(self):
         shaper, host = _shaper()
         text = shaper.apply(42, 30, 10, 100_000_000, 100_000_000, "curl")
