@@ -1,9 +1,11 @@
 """Automatic rule matching and validation, with no kernel access."""
 
 import unittest
+from datetime import time
 
 from bandctl.procscan import ProcessInfo
 from bandctl.rules import AutoRule, RuleTracker, first_match
+from bandctl.schedule import DailyWindow
 
 
 class RuleTests(unittest.TestCase):
@@ -18,6 +20,17 @@ class RuleTests(unittest.TestCase):
         second = AutoRule("web", None, 10)
         self.assertIs(first_match([first, second], "steamwebhelper"), first)
         self.assertIsNone(first_match([first, second], "curl"))
+
+    def test_only_active_scheduled_rules_match(self):
+        scheduled = AutoRule("steam", 30, None, DailyWindow(time(22), time(6)))
+        fallback = AutoRule("steam", None, 10)
+        self.assertIs(first_match([scheduled, fallback], "steam", time(23)), scheduled)
+        self.assertIs(first_match([scheduled, fallback], "steam", time(6)), fallback)
+        self.assertIs(first_match([scheduled, fallback], "steam"), fallback)
+        tracker = RuleTracker()
+        proc = ProcessInfo(42, "steam", "steam", "user", 1, 100)
+        self.assertEqual(tracker.candidates([proc], [scheduled], set(), 1, time(12)), [])
+        self.assertEqual(tracker.candidates([proc], [scheduled], set(), 2, time(23)), [(proc, scheduled)])
 
     def test_invalid_rules_are_rejected(self):
         for name, down, up in ((" ", 10, None), ("x\n", 10, None), ("x", None, None),

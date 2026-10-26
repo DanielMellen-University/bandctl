@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import time
 
 from bandctl.procscan import ProcessInfo
+from bandctl.schedule import DailyWindow
 
 
 @dataclass(frozen=True)
@@ -14,6 +16,7 @@ class AutoRule:
     name: str
     down_pct: int | None
     up_pct: int | None
+    window: DailyWindow | None = None
 
     def __post_init__(self) -> None:
         if any(ord(char) < 32 or ord(char) == 127 for char in self.name):
@@ -31,10 +34,13 @@ class AutoRule:
     def matches(self, process_name: str) -> bool:
         return self.name.casefold() in process_name.casefold()
 
+    def active(self, current: time | None) -> bool:
+        return self.window is None or (current is not None and self.window.contains(current))
 
-def first_match(rules: list[AutoRule], process_name: str) -> AutoRule | None:
-    """The earliest matching rule wins."""
-    return next((rule for rule in rules if rule.matches(process_name)), None)
+
+def first_match(rules: list[AutoRule], process_name: str, current: time | None = None) -> AutoRule | None:
+    """The earliest active matching rule wins."""
+    return next((rule for rule in rules if rule.active(current) and rule.matches(process_name)), None)
 
 
 class RuleTracker:
@@ -46,7 +52,8 @@ class RuleTracker:
         self._last_seen: dict[tuple[int, int], float] = {}
 
     def candidates(
-        self, processes: list[ProcessInfo], rules: list[AutoRule], limited: set[int], now: float
+        self, processes: list[ProcessInfo], rules: list[AutoRule], limited: set[int], now: float,
+        current: time | None = None,
     ) -> list[tuple[ProcessInfo, AutoRule]]:
         found = []
         for proc in processes:
@@ -54,7 +61,7 @@ class RuleTracker:
                 continue
             key = (proc.pid, proc.start_ticks)
             self._last_seen[key] = now
-            rule = first_match(rules, proc.comm)
+            rule = first_match(rules, proc.comm, current)
             if rule is None:
                 continue
             if proc.pid in limited:

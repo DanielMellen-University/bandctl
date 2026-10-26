@@ -6,7 +6,7 @@ bandctl is a Textual app in front of one `Shaper` object. The app never shells o
 
 `rules.py` validates automatic-rule values and matches a case-insensitive substring of the process name. When several rules match, the first rule takes precedence. Its tracker identifies instances by PID and start time, skips processes without a known start time, preserves manual removals for a seen instance, and delays retries after a failure.
 
-`schedule.py` defines daily local-clock windows with inclusive starts and exclusive ends. A window can cross midnight; equal endpoints are rejected.
+`schedule.py` defines daily local-clock windows with inclusive starts and exclusive ends. A window can cross midnight; equal endpoints are rejected. Rule matching skips scheduled rules outside their window and picks the first active match.
 
 An automatic caller can pass the process start time from the scan to `Shaper.apply`. The shaper checks it again before changing anything and rejects a missing or changed process. This check reduces the chance of acting on a reused PID; the process may still exit after the check.
 
