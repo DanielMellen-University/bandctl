@@ -336,6 +336,85 @@ class ApplyTests(unittest.TestCase):
         self.assertEqual(len(shaper._flows), 1)
 
 
+class CleanupTests(unittest.TestCase):
+    """Fixes for teardown, remove, and failed apply."""
+
+    def test_failed_apply_removes_the_leaf_it_made(self):
+        shaper, host = _shaper()
+        host.fail_substr = "nft -f"
+        with self.assertRaises(ShaperError):
+            shaper.apply(42, None, 10, None, 100_000_000)
+        self.assertNotIn("/sys/fs/cgroup/bandctl/bandctl-42", host.dirs)
+
+    def test_failed_change_keeps_the_existing_leaf(self):
+        shaper, host = _shaper()
+        shaper.apply(42, None, 10, None, 100_000_000)
+        host.fail_substr = "nft -f"
+        with self.assertRaises(ShaperError):
+            shaper.apply(42, None, 20, None, 100_000_000)
+        self.assertIn("/sys/fs/cgroup/bandctl/bandctl-42", host.dirs)
+        self.assertEqual(shaper.shares[42].up_pct, 10)
+
+    def test_teardown_leaves_an_untouched_qdisc_alone(self):
+        shaper, host = _shaper()
+        host.qdisc = "qdisc cake 8001: root refcnt 2 bandwidth unlimited\n"
+        host.fail_substr = "nft delete table"
+
+        def no_permission(args, input_text=None):
+            host.commands.append((list(args), input_text))
+            if args[0] == "nft":
+                raise ShaperError("Error: Could not process rule: Operation not permitted", args)
+            return FakeHost.run(host, args, input_text)
+
+        host.run = no_permission  # type: ignore[method-assign]
+        notes = shaper.teardown()
+        self.assertTrue(any("Operation not permitted" in note for note in notes))
+        commands = _joined(host)
+        self.assertFalse(any("qdisc del dev eth0 root" in cmd for cmd in commands))
+        self.assertFalse(any("qdisc add dev eth0 root" in cmd for cmd in commands))
+
+    def test_teardown_still_restores_a_qdisc_it_replaced(self):
+        shaper, host = _shaper()
+        shaper.apply(42, None, 10, None, 100_000_000)
+        host.fail_substr = "nft delete table"
+        shaper.teardown()
+        self.assertTrue(any("qdisc add dev eth0 root fq_codel" in cmd for cmd in _joined(host)))
+
+    def test_remove_keeps_the_share_when_restore_fails(self):
+        shaper, host = _shaper()
+        shaper.apply(42, None, 10, None, 100_000_000)
+        original_write = host.write
+
+        def busy(path: str, data: str) -> None:
+            if path.endswith("session-1.scope/cgroup.procs"):
+                raise ShaperError(f"{path}: Device or resource busy")
+            original_write(path, data)
+
+        host.write = busy  # type: ignore[method-assign]
+        with self.assertRaises(ShaperError) as caught:
+            shaper.remove(42)
+        self.assertIn("could not restore pid 42", str(caught.exception))
+        self.assertIn(42, shaper.shares)
+        self.assertTrue(shaper.upload_active)
+        # Once the write works again, remove finishes normally.
+        host.write = original_write  # type: ignore[method-assign]
+        self.assertIn("removed", shaper.remove(42))
+        self.assertEqual(shaper.shares, {})
+
+    def test_remove_drops_a_share_whose_process_exited(self):
+        shaper, host = _shaper()
+        shaper.apply(42, None, 10, None, 100_000_000)
+        del host.files["/proc/42/cgroup"]
+
+        def gone(path: str, data: str) -> None:
+            raise ShaperError(f"{path}: No such process")
+
+        host.write = gone  # type: ignore[method-assign]
+        self.assertIn("removed", shaper.remove(42))
+        self.assertEqual(shaper.shares, {})
+        self.assertFalse(shaper.upload_active)
+
+
 def _open_socket(host: FakeHost, pid: int = 42) -> None:
     host.files["/proc/net/tcp"] = (
         "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"

@@ -66,6 +66,38 @@ def default_iface(run=None, proc_route: Path | None = None) -> str:
     return name
 
 
+def list_ifaces(net_root: Path | None = None) -> list[str]:
+    """Device names under ``/sys/class/net``, sorted. Empty when it cannot be read."""
+    root = net_root or Path("/sys/class/net")
+    try:
+        return sorted(entry.name for entry in root.iterdir())
+    except OSError:
+        return []
+
+
+def check_iface(name: str, net_root: Path | None = None) -> str:
+    """Return *name* if it is a real network device, or raise IfaceError.
+
+    Linux names are at most 15 bytes with no slash or whitespace. The name
+    must also exist under ``/sys/class/net``.
+    """
+    root = net_root or Path("/sys/class/net")
+    valid = (
+        bool(name)
+        and len(name.encode("utf-8", errors="replace")) <= 15
+        and name not in (".", "..")
+        and "/" not in name
+        and not any(char.isspace() for char in name)
+    )
+    if not valid:
+        raise IfaceError(f"{name!r} is not a valid interface name")
+    if not (root / name).exists():
+        known = list_ifaces(root)
+        hint = f" Interfaces here: {', '.join(known)}." if known else ""
+        raise IfaceError(f"no network interface named {name!r}.{hint}")
+    return name
+
+
 def link_speed_bps(iface: str, speed_path: Path | None = None) -> int | None:
     """Link speed in bit/s, or None when sysfs has no positive speed."""
     path = speed_path or Path(f"/sys/class/net/{iface}/speed")

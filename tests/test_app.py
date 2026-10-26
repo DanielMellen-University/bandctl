@@ -5,10 +5,10 @@ from __future__ import annotations
 import unittest
 
 from rich.text import Text
-from textual.widgets import DataTable, Input
+from textual.widgets import Button, DataTable, Footer, Input, RichLog, Static
 from textual.widgets._footer import FooterKey
 
-from bandctl.app import BandctlApp, fit_columns, _COL_PAD
+from bandctl.app import BandctlApp, fit_columns, _COL_PAD, _MIN_HEIGHT, _MIN_WIDTH
 from bandctl.procscan import ProcessInfo
 from bandctl.rates import Unit
 from bandctl.shaper import Share, ShaperError
@@ -229,8 +229,14 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
         async with app.run_test(size=(40, 12)) as pilot:
             self.assertIn("-too-small", app.screen.classes)
             message = str(app.query_one("#too-small").render())
-            self.assertIn("64", message)
-            self.assertIn("24", message)
+            self.assertIn("60 columns", message)
+            self.assertIn("18 rows", message)
+            await pilot.resize_terminal(55, 30)
+            await pilot.pause()
+            self.assertIn("-too-small", app.screen.classes)
+            await pilot.resize_terminal(80, 17)
+            await pilot.pause()
+            self.assertIn("-too-small", app.screen.classes)
             await pilot.resize_terminal(80, 30)
             await pilot.pause()
             self.assertNotIn("-too-small", app.screen.classes)
@@ -242,6 +248,150 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("-stacked", app.screen.classes)
             self.assertIn("user", app._cols)
             self.assertLessEqual(table.virtual_size.width, table.size.width)
+
+
+# Many rows, long command lines, and two shares, so every part of the
+# screen has something to show.
+MANY = [
+    ProcessInfo(
+        1000 + index,
+        f"proc{index}",
+        f"/usr/bin/proc{index} --a-long-option value --another-long-option value",
+        "daniel",
+        index % 5,
+    )
+    for index in range(40)
+]
+LAYOUT_SIZES = (
+    (_MIN_WIDTH, _MIN_HEIGHT),
+    (60, 20),
+    (64, 24),
+    (80, 24),
+    (100, 30),
+    (107, 31),
+    (108, 32),
+    (120, 40),
+    (160, 50),
+    (77, 38),
+    (87, 44),
+    (200, 60),
+)
+# Top to bottom, the order the main screen stacks its parts in.
+_STACK = ("#titlebar", "#capacity", "#filter", "#procs", "#detail", "#log", "#status", "Footer")
+
+
+class LayoutTests(unittest.IsolatedAsyncioTestCase):
+    """Every supported size keeps each part of the screen visible and usable."""
+
+    async def _check(self, width: int, height: int) -> None:
+        fake = FakeShaper()
+        fake._shares[1001] = Share(1001, 30, None, 10, "/", "proc1")
+        fake._shares[1002] = Share(1002, None, 10, 11, "/", "proc2")
+        app = BandctlApp(
+            iface="eth0",
+            shaper=fake,
+            processes=lambda: list(MANY),
+            link_bps=10_000_000_000,
+            is_root=True,
+            rates=lambda: {proc.pid: (5_000_000_000.0, 900_000_000.0) for proc in MANY},
+        )
+        async with app.run_test(size=(width, height)) as pilot:
+            await pilot.pause()
+            await pilot.pause()
+            where = f"{width}x{height}"
+            screen = app.screen
+            self.assertNotIn("-too-small", screen.classes, where)
+
+            previous_bottom = 0
+            for query in _STACK:
+                widget = app.query_one(query)
+                region = widget.region
+                self.assertTrue(widget.display, f"{where} {query} hidden")
+                self.assertGreaterEqual(region.height, 1, f"{where} {query} has no height")
+                self.assertLessEqual(region.right, width, f"{where} {query} too wide")
+                self.assertLessEqual(region.bottom, height, f"{where} {query} below the screen")
+                self.assertGreaterEqual(region.y, previous_bottom, f"{where} {query} overlaps")
+                previous_bottom = region.bottom
+            self.assertEqual(app.query_one(Footer).region.bottom, height, where)
+
+            table = app.query_one("#procs", DataTable)
+            # Header plus at least five process rows.
+            self.assertGreaterEqual(table.size.height, 6, where)
+            self.assertLessEqual(table.virtual_size.width, table.size.width, where)
+            self.assertFalse(table.show_horizontal_scrollbar, where)
+            command = dict((key, size) for key, _label, size in fit_columns(width))["command"]
+            self.assertGreaterEqual(command, 12, where)
+
+            detail = app.query_one("#detail").region
+            for query in ("#detail-title", "#pct-row", "#down-pct", "#up-pct", "#apply", "#remove",
+                          "#down-caption", "#down-bar", "#up-caption", "#up-bar"):
+                region = app.query_one(query).region
+                self.assertGreaterEqual(region.height, 1, f"{where} {query}")
+                self.assertGreaterEqual(region.width, 3, f"{where} {query}")
+                self.assertTrue(detail.contains_region(region), f"{where} {query} outside the detail panel")
+            row = app.query_one("#pct-row").region
+            for query in ("#apply", "#remove"):
+                button = app.query_one(query, Button)
+                # The label fits on one line, so the button is no taller than its row.
+                self.assertLessEqual(button.region.height, row.height, f"{where} {query} wraps")
+                self.assertGreaterEqual(button.content_size.width, len(str(button.label)), f"{where} {query}")
+
+            log = app.query_one("#log", RichLog)
+            self.assertGreaterEqual(log.content_size.height, 2, f"{where} log shows under two lines")
+            self.assertFalse(log.show_horizontal_scrollbar, where)
+
+            speed = app.query_one("#speed", Static)
+            for line in str(speed.render()).splitlines():
+                self.assertLessEqual(len(line), speed.content_size.width, f"{where} speed label clipped: {line}")
+            self.assertLessEqual(len(str(speed.render()).splitlines()), speed.content_size.height, where)
+
+            # The detail panel and table still work at this size.
+            await pilot.press("down")
+            await pilot.pause()
+            self.assertEqual(app._selected, app._shown[1], where)
+
+    async def test_supported_sizes(self):
+        for width, height in LAYOUT_SIZES:
+            with self.subTest(size=f"{width}x{height}"):
+                await self._check(width, height)
+
+    async def test_breakpoints(self):
+        app = _app(FakeShaper())
+        expected = {
+            (60, 20): {"-narrow", "-stacked", "-compact", "-short"},
+            (80, 24): {"-stacked", "-compact"},
+            (100, 30): {"-stacked", "-compact"},
+            (77, 38): {"-narrow", "-stacked"},
+            (120, 40): set(),
+            (160, 50): {"-tall"},
+        }
+        names = {"-narrow", "-stacked", "-compact", "-short", "-tall"}
+        async with app.run_test(size=(120, 40)) as pilot:
+            for (width, height), classes in expected.items():
+                await pilot.resize_terminal(width, height)
+                await pilot.pause()
+                self.assertEqual(set(app.screen.classes) & names, classes, f"{width}x{height}")
+
+    async def test_not_root_dialog_fits_a_small_terminal(self):
+        for width, height in ((60, 20), (100, 30)):
+            app = _app(FakeShaper(), root=False)
+            async with app.run_test(size=(width, height)) as pilot:
+                await pilot.pause()
+                self.assertIsInstance(app.screen, RootRequired)
+                dialog = app.screen.query_one("#dialog").region
+                self.assertLessEqual(dialog.right, width)
+                self.assertLessEqual(dialog.bottom, height)
+                button = app.screen.query_one("#root-ok", Button)
+                self.assertGreaterEqual(button.content_size.width, len("View processes"))
+                self.assertTrue(dialog.contains_region(button.region))
+
+    def test_narrow_columns_keep_a_readable_command(self):
+        plan = {key: (label, size) for key, label, size in fit_columns(60)}
+        self.assertEqual(plan["down_pct"], ("Dn%", 3))
+        self.assertEqual(plan["up_pct"], ("Up%", 3))
+        self.assertGreaterEqual(plan["command"][1], 12)
+        wide = {key: (label, size) for key, label, size in fit_columns(120)}
+        self.assertEqual(wide["down_pct"], ("Down %", 6))
 
 
 if __name__ == "__main__":

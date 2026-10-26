@@ -9,6 +9,7 @@ import sys
 
 from bandctl import __version__
 from bandctl.app import BandctlApp
+from bandctl.iface import IfaceError, check_iface
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -26,6 +27,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Interface to shape. Default: the device on the IPv4 default route.",
     )
     args = parser.parse_args(argv)
+    if args.iface is not None:
+        try:
+            check_iface(args.iface)
+        except IfaceError as exc:
+            parser.error(str(exc))
     app = BandctlApp(iface=args.iface)
 
     def _stop(signum, _frame) -> None:

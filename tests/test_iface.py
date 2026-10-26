@@ -8,6 +8,7 @@ from pathlib import Path
 
 from bandctl.iface import (
     IfaceError,
+    check_iface,
     default_iface,
     link_speed_bps,
     parse_ip_route,
@@ -62,6 +63,47 @@ class LookupTests(unittest.TestCase):
             self.assertEqual(link_speed_bps("eth0", speed_path=path), 2_500_000_000)
             path.write_text("-1\n", encoding="utf-8")
             self.assertIsNone(link_speed_bps("eth0", speed_path=path))
+
+
+class CheckTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.net = Path(self.tmp.name)
+        for name in ("eth0", "lo", "wlan0"):
+            (self.net / name).mkdir()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_real_device_passes(self):
+        self.assertEqual(check_iface("wlan0", self.net), "wlan0")
+
+    def test_missing_device_lists_the_real_ones(self):
+        with self.assertRaises(IfaceError) as caught:
+            check_iface("eth9", self.net)
+        message = str(caught.exception)
+        self.assertIn("no network interface named 'eth9'", message)
+        self.assertIn("eth0, lo, wlan0", message)
+
+    def test_bad_names_are_rejected_before_the_lookup(self):
+        for name in ("", ".", "..", "../eth0", "eth 0", "x" * 16):
+            with self.assertRaises(IfaceError, msg=name) as caught:
+                check_iface(name, self.net)
+            self.assertIn("not a valid interface name", str(caught.exception))
+
+
+class CommandLineTests(unittest.TestCase):
+    def test_unknown_iface_exits_with_a_usage_error(self):
+        import contextlib
+        import io
+
+        from bandctl.__main__ import main
+
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as caught:
+            main(["--iface", "no-such-dev0"])
+        self.assertEqual(caught.exception.code, 2)
+        self.assertIn("no network interface named 'no-such-dev0'", err.getvalue())
 
 
 if __name__ == "__main__":

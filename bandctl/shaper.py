@@ -185,6 +185,9 @@ class Shaper:
                         self._restore_pid(pid, share.original_cgroup)
                     except ShaperError:
                         pass
+                    else:
+                        # The leaf was made for this apply. Do not leave it behind.
+                        self._rmdir_leaf(pid)
                 try:
                     self._sync()
                 except ShaperError:
@@ -199,8 +202,14 @@ class Shaper:
                 raise ShaperError(f"pid {pid} has no limit")
             if self._torn:
                 raise ShaperError("shaper is shut down")
+            try:
+                self._restore_pid(pid, share.original_cgroup)
+            except ShaperError:
+                # A pid that has exited has nothing left to move back. A live
+                # one stays tracked so the share is not lost.
+                if self._pid_alive(pid):
+                    raise
             self._shares.pop(pid)
-            self._restore_pid(pid, share.original_cgroup)
             try:
                 self._sync()
             except ShaperError:
@@ -295,11 +304,14 @@ class Shaper:
                 except ShaperError as exc:
                     notes.append(str(exc))
             self._shares.clear()
+            # Only put a root qdisc back if this run replaced it. Otherwise a
+            # failed cleanup would swap out a qdisc bandctl never touched.
+            replaced_root = self._egress
             try:
                 self._sync()
             except ShaperError as exc:
                 notes.append(str(exc))
-                notes.extend(self._scrub(self.iface, restore_qdisc=True))
+                notes.extend(self._scrub(self.iface, restore_qdisc=replaced_root))
             self._remove_tree()
             self._unlink_state()
         return notes
@@ -348,6 +360,13 @@ class Shaper:
             self.host.write(dest, f"{pid}\n")
         except (OSError, ShaperError) as exc:
             raise ShaperError(f"could not restore pid {pid}: {exc}") from exc
+
+    def _pid_alive(self, pid: int) -> bool:
+        try:
+            self.host.read(f"/proc/{pid}/cgroup")
+        except OSError:
+            return False
+        return True
 
     def _rmdir_leaf(self, pid: int) -> None:
         leaf = f"{CGROUP_PARENT}/bandctl-{pid}"

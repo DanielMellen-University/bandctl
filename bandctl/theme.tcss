@@ -3,6 +3,17 @@ Screen {
     color: #e8e8e8;
 }
 
+/* Scrollbars in the same greys as the panels, green while dragged. */
+#procs, #log {
+    scrollbar-background: #2a2a2a;
+    scrollbar-background-hover: #2a2a2a;
+    scrollbar-background-active: #2a2a2a;
+    scrollbar-color: #555555;
+    scrollbar-color-hover: #8fd19a;
+    scrollbar-color-active: #8fd19a;
+    scrollbar-corner-color: #2a2a2a;
+}
+
 #banner {
     display: none;
     height: 1;
@@ -33,6 +44,8 @@ Screen {
     content-align: left middle;
     color: #e8e8e8;
     padding: 0 1;
+    text-wrap: nowrap;
+    text-overflow: ellipsis;
 }
 
 #down-budget, #up-budget {
@@ -46,8 +59,11 @@ Screen {
 
 #procs {
     height: 1fr;
+    min-height: 3;
     background: #2a2a2a;
     color: #e8e8e8;
+    overflow-x: hidden;
+    scrollbar-size-vertical: 1;
 }
 
 #procs > .datatable--header {
@@ -90,6 +106,12 @@ Screen {
 #detail-title, #down-caption, #up-caption {
     height: 1;
     color: #e8e8e8;
+    text-wrap: nowrap;
+    text-overflow: ellipsis;
+}
+
+.meter {
+    height: 2;
 }
 
 #pct-row {
@@ -108,8 +130,8 @@ Screen {
 }
 
 #apply, #remove {
-    width: 9;
-    min-width: 9;
+    width: 10;
+    min-width: 10;
 }
 
 Input {
@@ -167,6 +189,9 @@ ProgressBar.hot Bar > .bar--bar {
     background: #242424;
     color: #e8e8e8;
     border: round #3a3a3a;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-size-vertical: 1;
 }
 
 #status {
@@ -252,8 +277,111 @@ RootRequired {
     height: auto;
 }
 
-.-cramped #log {
+/* Fewer than 32 rows: one-row inputs and buttons with a colored edge
+   instead of a full border, meters on one line each. */
+
+.-compact #capacity {
+    height: 1;
+}
+
+.-compact.-stacked #capacity {
+    height: 2;
+}
+
+.-compact #speed {
+    height: 100%;
+    content-align: left top;
+}
+
+.-compact Input {
+    height: 1;
+    border: none;
+    border-left: outer #8fd19a;
+    padding: 0 1;
+    background: #333333;
+}
+
+.-compact Input:focus {
+    border-left: outer #f0a35e;
+    background: #3d3a35;
+}
+
+.-compact #capacity Input {
+    width: 14;
+    margin-left: 1;
+}
+
+.-compact #filter {
+    height: 1;
+}
+
+.-compact #pct-row {
+    height: 1;
+}
+
+.-compact #pct-row Label {
+    height: 1;
+}
+
+.-compact #down-pct, .-compact #up-pct {
+    width: 7;
+}
+
+.-compact #pct-row Button {
+    height: 1;
+    min-width: 9;
+    width: 9;
+    margin-left: 1;
+    border: none;
+    background: #3a3a3a;
+    text-style: bold;
+}
+
+.-compact #remove {
+    border: none;
+}
+
+.-compact .meter {
+    layout: horizontal;
+    height: 1;
+}
+
+.-compact #down-caption, .-compact #up-caption {
+    width: auto;
+    max-width: 70%;
+    padding: 0 1 0 0;
+}
+
+.-compact #detail {
+    height: 2;
+}
+
+.-compact.-stacked #detail {
+    height: 4;
+}
+
+.-compact #log {
     height: 3;
+    border: none;
+    padding: 0 1;
+}
+
+.-short #log {
+    height: 2;
+}
+
+/* Fewer than 80 columns: tighter footer so every key still fits. */
+
+.-narrow FooterKey {
+    margin-right: 0;
+}
+
+.-narrow FooterKey .footer-key--key {
+    padding: 0;
+}
+
+.-narrow FooterKey .footer-key--description {
+    padding: 0 1;
 }
 
 .-tall #log {

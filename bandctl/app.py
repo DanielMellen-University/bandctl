@@ -12,6 +12,7 @@ from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
+from textual.css.query import NoMatches
 from textual.widgets import Button, DataTable, Footer, Input, Label, ProgressBar, RichLog, Static
 from textual.widgets.data_table import RowDoesNotExist
 
@@ -44,10 +45,21 @@ _COLUMNS = (
     ("down_rate", "Down", 12, False),
     ("up_rate", "Up", 12, False),
 )
+# Narrower headers and rate cells, used when the command column would
+# otherwise be squeezed below _COMMAND_MIN cells.
+_TIGHT = {"down_pct": ("Dn%", 3), "up_pct": ("Up%", 3), "down_rate": ("Down", 11), "up_rate": ("Up", 11)}
+_COMMAND_MIN = 16
 _COL_PAD = 2
-_MIN_WIDTH = 64
-_MIN_HEIGHT = 24
+# Layout breakpoints. Below _STACK_BELOW columns the meters sit under the
+# controls. Below _COMPACT_BELOW rows the inputs and buttons drop their
+# borders and take one row each, so the table keeps its space. Below
+# _SHORT_BELOW rows the log shrinks to two lines.
+_MIN_WIDTH = 60
+_MIN_HEIGHT = 18
 _STACK_BELOW = 108
+_COMPACT_BELOW = 32
+_SHORT_BELOW = 22
+_TALL_FROM = 42
 _SORTS = ("name", "pid", "down", "up")
 _SORT_LABEL = {"name": "name", "pid": "pid", "down": "download", "up": "upload"}
 
@@ -57,15 +69,17 @@ class BandctlApp(App):
 
     CSS_PATH = Path(__file__).with_name("theme.tcss")
     TITLE = "bandctl"
+    # Footer order is most used first, so a narrow terminal clips the least
+    # needed key (the table already refreshes every second).
     BINDINGS = [
         Binding("q", "quit", "Quit"),
-        Binding("slash", "focus_filter", "Search", key_display="/"),
-        Binding("u", "remove_limit", "Remove"),
-        Binding("r", "refresh_now", "Refresh"),
-        Binding("n", "toggle_all", "All"),
-        Binding("s", "cycle_sort", "Sort"),
-        Binding("b", "toggle_unit", "Unit"),
         Binding("a", "apply_limit", "Apply"),
+        Binding("u", "remove_limit", "Remove"),
+        Binding("slash", "focus_filter", "Search", key_display="/"),
+        Binding("s", "cycle_sort", "Sort"),
+        Binding("n", "toggle_all", "All"),
+        Binding("b", "toggle_unit", "Unit"),
+        Binding("r", "refresh_now", "Refresh"),
         Binding("escape", "focus_table", "Table", show=False),
     ]
 
@@ -139,10 +153,18 @@ class BandctlApp(App):
                 id="detail-controls",
             ),
             Vertical(
-                Static("download  no cap", id="down-caption"),
-                ProgressBar(total=100, show_eta=False, show_percentage=False, id="down-bar"),
-                Static("upload  no cap", id="up-caption"),
-                ProgressBar(total=100, show_eta=False, show_percentage=False, id="up-bar"),
+                Vertical(
+                    Static("download  no cap", id="down-caption"),
+                    ProgressBar(total=100, show_eta=False, show_percentage=False, id="down-bar"),
+                    id="down-meter",
+                    classes="meter",
+                ),
+                Vertical(
+                    Static("upload  no cap", id="up-caption"),
+                    ProgressBar(total=100, show_eta=False, show_percentage=False, id="up-bar"),
+                    id="up-meter",
+                    classes="meter",
+                ),
                 id="meters",
             ),
             id="detail",
@@ -444,9 +466,11 @@ class BandctlApp(App):
         width, height = self._dims()
         too_small = width < _MIN_WIDTH or height < _MIN_HEIGHT
         self.screen.set_class(too_small, "-too-small")
+        self.screen.set_class(width < 80, "-narrow")
         self.screen.set_class(width < _STACK_BELOW, "-stacked")
-        self.screen.set_class(height < 32, "-cramped")
-        self.screen.set_class(height >= 42, "-tall")
+        self.screen.set_class(height < _COMPACT_BELOW, "-compact")
+        self.screen.set_class(height < _SHORT_BELOW, "-short")
+        self.screen.set_class(height >= _TALL_FROM, "-tall")
         self.query_one(Footer).compact = width < 100
         if too_small:
             self.query_one("#too-small", Static).update(
@@ -656,13 +680,21 @@ class BandctlApp(App):
 
     def _paint_status(self) -> None:
         color = "#f0a35e" if self._status_bad else "#ffffff"
-        self.query_one("#status", Static).update(Text(self._status_text, style=color))
+        try:
+            status = self.query_one("#status", Static)
+        except NoMatches:  # the screen is closing
+            return
+        status.update(Text(self._status_text, style=color))
 
     def _log(self, text: str) -> None:
         if not self.is_mounted:
             return
         stamp = time.strftime("%H:%M:%S")
-        self.query_one("#log", RichLog).write(f"{stamp}  {text}")
+        try:
+            log = self.query_one("#log", RichLog)
+        except NoMatches:  # the screen is closing
+            return
+        log.write(f"{stamp}  {text}")
 
 
 def fit_columns(table_width: int) -> list[tuple[str, str, int]]:
@@ -682,6 +714,11 @@ def fit_columns(table_width: int) -> list[tuple[str, str, int]]:
         if not optional:
             break
         chosen.pop(optional[0])
+    if budget - overhead(chosen, 0) < _COMMAND_MIN:
+        chosen = [
+            (key, *_TIGHT[key], optional) if key in _TIGHT else (key, label, width, optional)
+            for key, label, width, optional in chosen
+        ]
     command_width = budget - overhead(chosen, 0)
     if command_width < 4:
         command_width = 4
