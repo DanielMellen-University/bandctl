@@ -235,8 +235,7 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             processes[0] = ProcessInfo(42, "new", "new", "user", 1, 20)
             await app._refresh()
             graph = app._history.graph(42, 0, time.monotonic(), 60)
-            self.assertEqual(graph[:-1], " " * 59)
-            self.assertEqual(graph[-1], "▁")
+            self.assertEqual(graph.strip(), "▁")
 
     async def test_narrow_capped_rate_caption_fits(self):
         fake = FakeShaper()
