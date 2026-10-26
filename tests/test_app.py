@@ -99,6 +99,23 @@ def _app(fake, *, root=True, link_bps=100_000_000, rates=None):
 
 
 class AppTests(unittest.IsolatedAsyncioTestCase):
+    async def test_session_total_is_visible_and_stays_in_bytes_when_units_change(self):
+        app = _app(FakeShaper())
+        async with app.run_test(size=(120, 40)) as pilot:
+            app._sampler._totals[42] = (1_000_000, 500_000)
+            await app._refresh()
+            self.assertIn("1.50 MB", str(app.query_one("#detail-title", Static).render()))
+            self.assertIn("total", app._cols)
+            self.assertEqual(str(app.query_one("#procs", DataTable).get_cell("42", "total")), "1.50 MB")
+            await pilot.press("b")
+            self.assertIn("1.50 MB", str(app.query_one("#detail-title", Static).render()))
+            await pilot.resize_terminal(60, 20)
+            await pilot.pause()
+            self.assertNotIn("total", app._cols)
+            title = app.query_one("#detail-title", Static)
+            self.assertIn("1.50 MB", str(title.render()))
+            self.assertLessEqual(len(str(title.render())), title.content_size.width)
+
     async def test_filter_matches_name_and_pid_and_restores_rows(self):
         app = _app(FakeShaper())
         async with app.run_test(size=(80, 24)) as pilot:

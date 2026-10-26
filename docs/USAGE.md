@@ -63,6 +63,8 @@ The two budget fields are in the unit shown in the header. `b` flips between Mbi
 
 The graphs beside the bars show the selected process's download and upload rates over the last 60 seconds, with the newest sample on the right. Each graph scales to its own peak. When the graph is narrower than 60 characters, each character shows the highest rate in its group of seconds. Blank spaces indicate spans with no samples. History is kept while the process remains in the list and is discarded when it exits or its PID is reused, when the process start time is available.
 
+`TCP total` shows estimated downloaded plus uploaded bytes observed since bandctl started. The selected process always shows it in the detail line; the table includes it when there is room. `--` means no owned TCP socket has been observed. Byte counts do not change when rate units change. The first sample sets a baseline for existing sockets. A socket first seen later contributes its counters from zero, which can include earlier traffic. Sockets that open and close between samples, UDP, loopback, and sockets whose owner is not reported are not counted. A socket shared by several processes is counted for each owner. These totals are estimates, not billing records.
+
 ## Auto-apply rules
 
 Press `t` to open the rule editor. Enter part of a process name and one or both percentages, then choose Add. Rules match process names without regard to case; they do not match command arguments. The first active matching rule wins. Select a rule and choose Delete to remove it, or Close to return to the process list. Rules last until bandctl exits.

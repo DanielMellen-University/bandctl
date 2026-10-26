@@ -24,6 +24,7 @@ from bandctl.rates import (
     RateError,
     Unit,
     format_budget_input,
+    format_bytes,
     format_rate,
     over_commit_message,
     parse_budget,
@@ -47,6 +48,7 @@ _COLUMNS = (
     ("up_pct", "Up %", 5, False),
     ("down_rate", "Down", 12, False),
     ("up_rate", "Up", 12, False),
+    ("total", "TCP total", 9, True),
 )
 # Narrower headers and rate cells, used when the command column would
 # otherwise be squeezed below _COMMAND_MIN cells.
@@ -116,6 +118,7 @@ class BandctlApp(App):
         self._ss_warned = False
         self._procs: list[ProcessInfo] = []
         self._usage: dict[int, tuple[float, float]] = {}
+        self._session_totals: dict[int, tuple[int, int]] = {}
         self._history = RateHistory()
         self._rules: list[AutoRule] = []
         self._rule_tracker = RuleTracker()
@@ -428,6 +431,7 @@ class BandctlApp(App):
                     self._process_seen.pop(pid, None)
                     self._process_starts.pop(pid, None)
             self._sampler.retain_processes({proc.pid for proc in procs}, now)
+            self._session_totals = self._sampler.totals
             valid = self._rates_source is not None or (not self._ss_failed and self._sampler.primed)
             self._history.record(time.monotonic(), {proc.pid for proc in procs}, usage if valid else None)
             await self._apply_rules(procs)
@@ -701,6 +705,9 @@ class BandctlApp(App):
             text = "-" if not share or share.up_pct is None else str(share.up_pct)
         elif key == "down_rate":
             text = format_rate(down_bps, self.unit) if down_bps > 0 or (share and share.down_pct) else "-"
+        elif key == "total":
+            total = self._session_totals.get(proc.pid)
+            text = format_bytes(sum(total)) if total is not None else "-"
         else:
             text = format_rate(up_bps, self.unit) if up_bps > 0 or (share and share.up_pct) else "-"
         # The selected row is painted by the green cursor. Orange text on
@@ -729,7 +736,9 @@ class BandctlApp(App):
         elif proc is None:
             title = f"pid {self._selected} is gone"
         else:
-            title = f"{proc.comm}  pid {proc.pid}"
+            total = self._session_totals.get(proc.pid)
+            data = format_bytes(sum(total)) if total is not None else "--"
+            title = f"{proc.comm}  pid {proc.pid}  TCP total {data}"
         self.query_one("#detail-title", Static).update(title)
         share = self.shaper.shares.get(self._selected) if self.shaper and self._selected else None
         usage = self._usage.get(self._selected, (0.0, 0.0)) if self._selected else (0.0, 0.0)
@@ -811,7 +820,7 @@ def fit_columns(table_width: int) -> list[tuple[str, str, int]]:
     """Column keys, headers, and content widths that fit in ``table_width``.
 
     One column is reserved for the scrollbar. The command column takes whatever
-    is left. User and socket columns are the first to go.
+    is left. The total, user, and socket columns are dropped as needed.
     """
     budget = max(table_width - 1, 1)
     chosen = list(_COLUMNS)
@@ -823,7 +832,8 @@ def fit_columns(table_width: int) -> list[tuple[str, str, int]]:
         optional = [index for index, item in enumerate(chosen) if item[3]]
         if not optional:
             break
-        chosen.pop(optional[0])
+        total = next((index for index in optional if chosen[index][0] == "total"), None)
+        chosen.pop(total if total is not None else optional[0])
     if budget - overhead(chosen, 0) < _COMMAND_MIN:
         chosen = [
             (key, *_TIGHT[key], optional) if key in _TIGHT else (key, label, width, optional)

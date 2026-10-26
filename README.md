@@ -82,18 +82,20 @@ The window needs at least 60 columns and 18 rows. Below that, bandctl asks you t
 | --- | --- |
 | 108 columns or more | Meters sit beside the percent fields. |
 | Under 108 columns | Meters sit under the percent fields. |
-| Under 80 columns | Shorter header, `Dn%` and `Up%` columns, and a tighter footer. The user and socket columns go first when space runs out. |
+| Under 80 columns | Shorter header and a tighter footer. The TCP total, user, and socket columns go first when space runs out. |
 | Under 32 rows | Inputs and buttons take one row each, with a colored edge instead of a box, so the table keeps more rows. |
 | Under 22 rows | The log shows two lines. |
 | 42 rows or more | The log shows more lines. |
 
-The process table always fits the width instead of scrolling sideways. The table, the percent fields, the meters, the log, and the status line stay on screen at every supported size.
+The process table always fits the width instead of scrolling sideways. When space is tight, the percent headers become `Dn%` and `Up%`. The table, the percent fields, the meters, the log, and the status line stay on screen at every supported size.
 
 The table lists processes using more than 1% of the link. When the link speed is unknown, that 1% is of the TCP traffic measured right now, ignoring loopback. `n` lists every process. A process that already has a share stays on screen so you can remove it. Type `/` to filter by name, pid, or user. Select a row with the arrow keys or a click.
 
 Type a download percent, an upload percent, or both (1 to 100). Leave a field blank to leave that direction uncapped. Enter in a percent field, the Apply button, or `a` installs the share. `u` removes it. Limited rows are orange, except the selected row, which stays green so the text stays readable. The bar is green while usage is under the ceiling and orange when it is at the cap.
 
 Beside each bar, a small graph shows the selected process's last 60 seconds of download or upload rates. The newest sample is on the right. Each graph scales to its own highest rate in that window. At narrow widths, each character covers several seconds and shows the highest rate in that span. Blank spaces indicate spans with no samples.
+
+`TCP total` is the selected process's estimated download plus upload bytes since bandctl started. A table column shows the total when there is room. The count uses bytes even when rates use bits per second. It covers observed TCP sockets, not UDP or loopback. Short-lived or unreported sockets can be missed, and bytes already transferred on a socket first seen after startup can be included. Shared sockets count for each listed owner. Treat the total as an estimate.
 
 The header shows the interface, whether this process is root, and the active unit (`Mbit/s` or `MB/s`). `b` toggles the unit. Percents stay percents. Budgets and the usage numbers follow the toggle.
 
