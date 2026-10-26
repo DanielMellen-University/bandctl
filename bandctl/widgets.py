@@ -9,6 +9,7 @@ from textual.widgets import Button, DataTable, Input, Static
 
 from bandctl.rates import RateError, parse_percent
 from bandctl.rules import AutoRule
+from bandctl.schedule import DailyWindow, parse_time
 
 
 class RootRequired(ModalScreen[None]):
@@ -47,14 +48,19 @@ class RulesScreen(ModalScreen[list[AutoRule]]):
 
     def compose(self) -> ComposeResult:
         yield Vertical(
-            Static("Auto-apply rules", id="rules-title"),
-            Static("Name match. First wins. Rules end on quit.", id="rules-help"),
+            Static("Auto-apply rules (session)", id="rules-title"),
+            Static("Times optional. First match wins.", id="rules-help"),
             DataTable(id="rule-table", cursor_type="row"),
             Horizontal(
                 Input(placeholder="name contains", id="rule-name"),
                 Input(placeholder="down %", id="rule-down"),
                 Input(placeholder="up %", id="rule-up"),
                 id="rule-fields",
+            ),
+            Horizontal(
+                Input(placeholder="start HH:MM", id="rule-start"),
+                Input(placeholder="end HH:MM", id="rule-end"),
+                id="rule-times",
             ),
             Static("", id="rule-status"),
             Horizontal(
@@ -68,9 +74,10 @@ class RulesScreen(ModalScreen[list[AutoRule]]):
 
     def on_mount(self) -> None:
         table = self.query_one("#rule-table", DataTable)
-        table.add_column("Name contains", width=22)
-        table.add_column("Down %", width=7)
-        table.add_column("Up %", width=7)
+        table.add_column("Name contains", width=16)
+        table.add_column("Down", width=5)
+        table.add_column("Up", width=5)
+        table.add_column("Daily", width=11)
         self._render_rules()
         self.query_one("#rule-name", Input).focus()
 
@@ -78,20 +85,26 @@ class RulesScreen(ModalScreen[list[AutoRule]]):
         table = self.query_one("#rule-table", DataTable)
         table.clear()
         for rule in self.rules:
-            table.add_row(rule.name, str(rule.down_pct or "-"), str(rule.up_pct or "-"))
+            window = "-" if rule.window is None else f"{rule.window.start:%H:%M}-{rule.window.end:%H:%M}"
+            table.add_row(rule.name, str(rule.down_pct or "-"), str(rule.up_pct or "-"), window)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "rule-add":
             try:
                 down = parse_percent(self.query_one("#rule-down", Input).value, allow_empty=True)
                 up = parse_percent(self.query_one("#rule-up", Input).value, allow_empty=True)
-                rule = AutoRule(self.query_one("#rule-name", Input).value, down, up)
+                start = self.query_one("#rule-start", Input).value.strip()
+                end = self.query_one("#rule-end", Input).value.strip()
+                if bool(start) != bool(end):
+                    raise ValueError("enter both times or leave both blank")
+                window = DailyWindow(parse_time(start), parse_time(end)) if start else None
+                rule = AutoRule(self.query_one("#rule-name", Input).value, down, up, window)
             except (RateError, ValueError) as exc:
                 self.query_one("#rule-status", Static).update(str(exc))
                 return
             self.rules.append(rule)
             self._render_rules()
-            for query in ("#rule-name", "#rule-down", "#rule-up"):
+            for query in ("#rule-name", "#rule-down", "#rule-up", "#rule-start", "#rule-end"):
                 self.query_one(query, Input).value = ""
             self.query_one("#rule-status", Static).update("Rule added")
             self.query_one("#rule-name", Input).focus()

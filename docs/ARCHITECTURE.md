@@ -8,7 +8,7 @@ bandctl is a Textual app in front of one `Shaper` object. The app never shells o
 
 `schedule.py` defines daily local-clock windows with inclusive starts and exclusive ends. A window can cross midnight; equal endpoints are rejected. Rule matching skips scheduled rules outside their window and picks the first active match.
 
-`ScheduledOwnership` tracks which limits were installed by scheduled rules. It identifies limits to remove when their rule stops winning, and drops ownership if the process instance or share revision changes. Failed removals are retried after a delay.
+`ScheduledOwnership` tracks limits installed by automatic rules. It identifies limits to remove when their rule stops winning, and drops ownership if the process instance or share revision changes. Deleting an always-active rule releases ownership without removing its limit. Failed removals are retried after a delay.
 
 Each successful apply gives its share a new in-memory revision. A caller can require that revision when removing a share, so a concurrent change does not get removed using an old decision.
 

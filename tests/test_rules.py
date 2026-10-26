@@ -91,6 +91,14 @@ class RuleTests(unittest.TestCase):
         self.assertEqual(owner.expired([replacement], [], {42: (30, None, 7)}, time(10), 2), [])
         self.assertEqual(owner.expired([proc], [], {42: (30, None, 7)}, time(10), 3), [])
 
+    def test_deleting_an_always_active_rule_leaves_its_limit_in_place(self):
+        owner = ScheduledOwnership()
+        rule = AutoRule("steam", 30, None)
+        proc = ProcessInfo(42, "steam", "steam", "user", 1, 100)
+        owner.applied(proc, rule, 7)
+        self.assertEqual(owner.expired([proc], [], {42: (30, None, 7)}, time(10), 1), [])
+        self.assertEqual(owner.expired([proc], [rule], {42: (30, None, 7)}, time(10), 2), [])
+
 
 if __name__ == "__main__":
     unittest.main()

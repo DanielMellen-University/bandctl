@@ -259,7 +259,8 @@ RulesScreen {
 #rules-dialog {
     width: 92%;
     max-width: 76;
-    height: 90%;
+    height: 95%;
+    min-height: 17;
     max-height: 24;
     background: #333333;
     border: round #8fd19a;
@@ -299,8 +300,12 @@ RulesScreen {
     color: #1a1a1a;
 }
 
-#rule-fields, #rule-buttons {
+#rule-fields, #rule-times, #rule-buttons {
     height: 3;
+}
+
+#rule-times Input {
+    width: 1fr;
 }
 
 #rule-name {

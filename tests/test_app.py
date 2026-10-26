@@ -154,6 +154,28 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             await app._apply_rules([proc])
             self.assertEqual(fake.shares[42].up_pct, 70)
 
+    async def test_scheduled_rule_takes_precedence_over_an_automatic_fallback(self):
+        from datetime import time
+        from bandctl.rules import AutoRule
+        from bandctl.schedule import DailyWindow
+
+        fake = FakeShaper()
+        proc = ProcessInfo(42, "steam", "steam", "user", 1, 100)
+        current = [time(8)]
+        app = BandctlApp(iface="eth0", shaper=fake, processes=lambda: [proc],
+                         link_bps=100_000_000, is_root=True, rates=lambda: {}, clock=lambda: current[0])
+        async with app.run_test(size=(100, 30)) as pilot:
+            app._rules = [AutoRule("steam", 30, None, DailyWindow(time(9), time(17))),
+                          AutoRule("steam", None, 10)]
+            await app._apply_rules([proc])
+            self.assertEqual((fake.shares[42].down_pct, fake.shares[42].up_pct), (None, 10))
+            current[0] = time(9)
+            await app._apply_rules([proc])
+            self.assertEqual((fake.shares[42].down_pct, fake.shares[42].up_pct), (30, None))
+            current[0] = time(17)
+            await app._apply_rules([proc])
+            self.assertEqual((fake.shares[42].down_pct, fake.shares[42].up_pct), (None, 10))
+
     def test_late_table_event_after_screen_closes_is_ignored(self):
         app = _app(FakeShaper())
         event = SimpleNamespace(data_table=SimpleNamespace(id="procs"))
@@ -227,6 +249,7 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             await pilot.press("t")
             await pilot.pause()
             self.assertIsInstance(app.screen, RulesScreen)
+            app.screen.query_one("#rule-add", Button).active_effect_duration = 0
             app.screen.query_one("#rule-name", Input).value = "steam"
             app.screen.query_one("#rule-down", Input).value = "30"
             await pilot.click("#rule-add")
@@ -239,13 +262,21 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(app.screen.query_one("#rule-table", DataTable).row_count, 0)
             app.screen.query_one("#rule-name", Input).value = "steam"
             app.screen.query_one("#rule-up", Input).value = "10"
+            app.screen.query_one("#rule-start", Input).value = "22:00"
             await pilot.click("#rule-add")
+            self.assertIn("both times", str(app.screen.query_one("#rule-status", Static).render()))
+            app.screen.query_one("#rule-end", Input).value = "06:00"
+            await pilot.click("#rule-add")
+            self.assertEqual(app.screen.query_one("#rule-table", DataTable).row_count, 1,
+                             str(app.screen.query_one("#rule-status", Static).render()))
             await pilot.click("#rule-close")
             await pilot.pause()
             self.assertEqual([(rule.name, rule.down_pct, rule.up_pct) for rule in app._rules], [("steam", None, 10)])
+            self.assertEqual(str(app._rules[0].window.start), "22:00:00")
+            self.assertEqual(str(app._rules[0].window.end), "06:00:00")
 
     async def test_rule_editor_fits_supported_sizes(self):
-        for width, height in ((60, 20), (80, 24), (100, 30), (120, 40), (160, 50), (77, 38)):
+        for width, height in ((60, 18), (60, 20), (80, 24), (100, 30), (120, 40), (160, 50), (77, 38)):
             with self.subTest(size=(width, height)):
                 app = _app(FakeShaper())
                 async with app.run_test(size=(width, height)) as pilot:
@@ -255,7 +286,8 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
                     self.assertLessEqual(dialog.right, width)
                     self.assertLessEqual(dialog.bottom, height)
                     for query in ("#rules-title", "#rules-help", "#rule-table", "#rule-name", "#rule-down",
-                                  "#rule-up", "#rule-status", "#rule-add", "#rule-delete", "#rule-close"):
+                                  "#rule-up", "#rule-start", "#rule-end", "#rule-status", "#rule-add",
+                                  "#rule-delete", "#rule-close"):
                         region = app.screen.query_one(query).region
                         self.assertGreaterEqual(region.width, 3, query)
                         self.assertGreaterEqual(region.height, 1, query)

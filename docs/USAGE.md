@@ -65,7 +65,9 @@ The graphs beside the bars show the selected process's download and upload rates
 
 ## Auto-apply rules
 
-Press `t` to open the rule editor. Enter part of a process name and one or both percentages, then choose Add. Rules match process names without regard to case; they do not match command arguments. The first matching rule wins. Select a rule and choose Delete to remove it, or Close to return to the process list. Deleting a rule does not remove limits it already applied. Rules last until bandctl exits.
+Press `t` to open the rule editor. Enter part of a process name and one or both percentages, then choose Add. Rules match process names without regard to case; they do not match command arguments. The first active matching rule wins. Select a rule and choose Delete to remove it, or Close to return to the process list. Rules last until bandctl exits.
+
+For a daily schedule, enter both start and end in 24-hour `HH:MM` local time. The start is included and the end is excluded. An end earlier than the start crosses midnight. Leave both fields blank for an always-active rule. A scheduled limit is removed when its window ends or its rule is deleted, and can apply again in the next window. A limit from an always-active rule stays in place if that rule is deleted. A manual apply or remove takes precedence for that process instance.
 
 Rules apply to matching processes already running and to new matches found in later scans. A process that already has a limit is left alone. Removing its limit manually prevents automatic reapplication to that instance. A rule needs a known process start time so bandctl can check that the PID still refers to the scanned process. A failed application appears in the log and is retried after 15 seconds. Rules use the detected link speed or the last submitted budgets. Process scans pause while the editor is open.
 

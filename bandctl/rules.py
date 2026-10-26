@@ -93,14 +93,14 @@ class RuleTracker:
 
 
 class ScheduledOwnership:
-    """Track limits installed by a scheduled rule until they should end."""
+    """Track automatic limits so active rules can change with the clock."""
 
     def __init__(self) -> None:
         self._owned: dict[tuple[int, int], tuple[AutoRule, int]] = {}
         self._retry_at: dict[tuple[int, int], float] = {}
 
     def applied(self, proc: ProcessInfo, rule: AutoRule, revision: int) -> None:
-        if proc.start_ticks is not None and rule.window is not None:
+        if proc.start_ticks is not None:
             self._owned[(proc.pid, proc.start_ticks)] = (rule, revision)
 
     def forget(self, proc: ProcessInfo) -> None:
@@ -129,6 +129,9 @@ class ScheduledOwnership:
                 self._retry_at.pop(key, None)
                 continue
             if proc is None:
+                continue
+            if rule.window is None and rule not in rules:
+                self.forget(proc)
                 continue
             if first_match(rules, proc.comm, current) != rule and now >= self._retry_at.get(key, 0):
                 found.append((proc, revision))
