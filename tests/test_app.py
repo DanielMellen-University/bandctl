@@ -99,6 +99,24 @@ def _app(fake, *, root=True, link_bps=100_000_000, rates=None):
 
 
 class AppTests(unittest.IsolatedAsyncioTestCase):
+    async def test_filter_matches_name_and_pid_and_restores_rows(self):
+        app = _app(FakeShaper())
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.press("n", "slash")
+            field = app.query_one("#filter", Input)
+            field.value = "CURL"
+            await pilot.pause()
+            self.assertEqual(app._shown, [42])
+            field.value = "7"
+            await pilot.pause()
+            self.assertEqual(app._shown, [7])
+            field.value = "no-such-process"
+            await pilot.pause()
+            self.assertEqual(app._shown, [])
+            field.value = ""
+            await pilot.pause()
+            self.assertEqual(set(app._shown), {1, 7, 42})
+
     async def test_scheduled_rule_applies_expires_and_respects_manual_override(self):
         from datetime import time
         from bandctl.rules import AutoRule
