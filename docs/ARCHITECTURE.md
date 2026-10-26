@@ -124,3 +124,5 @@ The screen gets size classes that `theme.tcss` keys off:
 Sizes come from the resize event, because `App.size` can still be the old size while that handler runs.
 
 The on-screen rate is the socket delta times 8, divided by the sample interval. The first `ss` sample is a baseline and shows zero. Class byte counters are still read so the flower filters stay in sync.
+
+`traffic.parse_ss_sockets` can identify individual TCP sockets by the `ss` socket cookie, then inode, then endpoint pair. This keeps counters for separate sockets distinct. Shared sockets are attributed to each listed process.

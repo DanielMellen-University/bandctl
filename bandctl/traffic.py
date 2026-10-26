@@ -13,6 +13,8 @@ import re
 import subprocess
 
 _PID_RE = re.compile(r"pid=(\d+)")
+_SOCKET_COOKIE_RE = re.compile(r"\bsk:([0-9a-fA-F]+)\b")
+_SOCKET_INODE_RE = re.compile(r"\bino:(\d+)\b")
 _FIELD_RE = {
     "bytes_received": re.compile(r"bytes_received:(\d+)"),
     "bytes_acked": re.compile(r"bytes_acked:(\d+)"),
@@ -62,6 +64,40 @@ def parse_ss(text: str) -> dict[int, tuple[int, int]]:
             continue
         pids = _socket_pids(raw)
     return {pid: (received, acked) for pid, (received, acked) in totals.items()}
+
+
+def parse_ss_sockets(text: str) -> dict[tuple[int, str], tuple[int, int]]:
+    """Map each owned TCP socket to its received and acknowledged byte counters."""
+    found: dict[tuple[int, str], tuple[int, int]] = {}
+    keys: list[tuple[int, str]] = []
+    for raw in text.splitlines():
+        if not raw.strip():
+            continue
+        if not raw[0].isspace():
+            pids = _socket_pids(raw)
+            cookie = _SOCKET_COOKIE_RE.search(raw)
+            inode = _SOCKET_INODE_RE.search(raw)
+            local, peer = _endpoints(raw)
+            if cookie:
+                identity = "sk:" + cookie.group(1).lower()
+            elif inode:
+                identity = "ino:" + inode.group(1)
+            else:
+                identity = f"{local} {peer}" if local and peer else ""
+            keys = [(pid, identity) for pid in pids] if identity else []
+            for key in keys:
+                found[key] = (0, 0)
+            continue
+        received = _field(raw, "bytes_received")
+        acked = _field(raw, "bytes_acked")
+        if acked is None:
+            acked = _field(raw, "bytes_sent")
+        if received is None and acked is None:
+            continue
+        for key in keys:
+            previous = found[key]
+            found[key] = (previous[0] if received is None else received, previous[1] if acked is None else acked)
+    return found
 
 
 class TrafficSampler:

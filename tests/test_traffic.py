@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from bandctl.traffic import TrafficSampler, above_share, parse_ss
+from bandctl.traffic import TrafficSampler, above_share, parse_ss, parse_ss_sockets
 
 _SS = """\
 ESTAB 0 0 192.168.1.97:57532 35.173.84.232:443 users:(("curl",pid=42,fd=7))
@@ -25,6 +25,24 @@ ESTAB 0 0 192.168.1.97:10 9.9.9.9:443 users:(("old",pid=4,fd=1))
 
 
 class ParseTests(unittest.TestCase):
+    def test_socket_counters_use_cookie_or_inode_and_keep_zero_baselines(self):
+        text = (
+            'ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 users:(("a",pid=5,fd=1),("b",pid=6,fd=2)) ino:42 sk:ab12\n'
+            '\t bytes_received:100 bytes_acked:20\n'
+            '\t unrelated detail\n'
+            'ESTAB 0 0 10.0.0.2:2 1.1.1.1:443 users:(("a",pid=5,fd=3)) ino:43\n'
+            '\t cubic\n'
+            'ESTAB 0 0 127.0.0.1:3 127.0.0.1:4 users:(("x",pid=7,fd=4)) ino:44 sk:ab13\n'
+            '\t bytes_received:100\n'
+        )
+        self.assertEqual(parse_ss_sockets(text), {
+            (5, "sk:ab12"): (100, 20), (6, "sk:ab12"): (100, 20), (5, "ino:43"): (0, 0),
+        })
+
+    def test_socket_counters_fall_back_to_endpoints_and_bytes_sent(self):
+        text = 'ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 users:(("a",pid=5,fd=1))\n\t bytes_sent:30\n'
+        self.assertEqual(parse_ss_sockets(text), {(5, "10.0.0.2:1 1.1.1.1:443"): (0, 30)})
+
     def test_sums_sockets_and_skips_loopback_and_unowned(self):
         found = parse_ss(_SS)
         self.assertEqual(found[42], (7500, 2500))
