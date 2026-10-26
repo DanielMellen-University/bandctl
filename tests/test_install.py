@@ -21,6 +21,16 @@ def _run(args: list[str], **kwargs) -> subprocess.CompletedProcess:
     return subprocess.run(args, check=False, text=True, capture_output=True, **kwargs)
 
 
+def _quiet_ps(directory: Path) -> dict[str, str]:
+    """PATH where `ps` reports nobody, so a real bandctl on this machine is ignored."""
+    ps = directory / "ps"
+    ps.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    ps.chmod(0o755)
+    env = os.environ.copy()
+    env["PATH"] = f"{directory}:/usr/bin:/bin"
+    return env
+
+
 class ScriptTests(unittest.TestCase):
     def test_syntax(self):
         for script in (INSTALL, UNINSTALL):
@@ -88,7 +98,12 @@ class ScriptTests(unittest.TestCase):
             )
             foreign = bindir / "other"
             foreign.write_text("keep\n", encoding="utf-8")
-            result = _run(["bash", str(UNINSTALL), "--prefix", str(prefix), "--bindir", str(bindir)])
+            tools = root / "tools"
+            tools.mkdir()
+            result = _run(
+                ["bash", str(UNINSTALL), "--prefix", str(prefix), "--bindir", str(bindir)],
+                env=_quiet_ps(tools),
+            )
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
             self.assertIn("recover", log.read_text(encoding="utf-8"))
             self.assertFalse(prefix.exists())
@@ -150,6 +165,7 @@ class ScriptTests(unittest.TestCase):
             sudo.write_text("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$BANDCTL_SUDO_LOG\"\nexit 0\n", encoding="utf-8")
             sudo.chmod(0o755)
             log = root / "sudo.log"
+            env = _quiet_ps(fake_bin)
             (prefix / "install-stamp").write_text(
                 f"PREFIX={prefix}\nBINDIR={bindir}\n",
                 encoding="utf-8",
@@ -158,8 +174,6 @@ class ScriptTests(unittest.TestCase):
             installed.write_text(UNINSTALL.read_text(encoding="utf-8"), encoding="utf-8")
             installed.chmod(0o755)
             (bindir / "bandctl").symlink_to(prefix / "missing")
-            env = os.environ.copy()
-            env["PATH"] = f"{fake_bin}:/usr/bin:/bin"
             env["BANDCTL_SUDO_LOG"] = str(log)
             result = _run(["bash", str(installed)], env=env)
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)

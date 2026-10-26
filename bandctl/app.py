@@ -28,6 +28,7 @@ from bandctl.rates import (
     percent_to_bps,
 )
 from bandctl.shaper import Shaper, ShaperError
+from bandctl.traffic import TrafficSampler, above_share, read_ss
 from bandctl.widgets import RootRequired
 
 _MISSING = object()
@@ -64,7 +65,7 @@ class BandctlApp(App):
         Binding("slash", "focus_filter", "Search", key_display="/"),
         Binding("u", "remove_limit", "Remove"),
         Binding("r", "refresh_now", "Refresh"),
-        Binding("n", "toggle_net", "Net only"),
+        Binding("n", "toggle_all", "All"),
         Binding("s", "cycle_sort", "Sort"),
         Binding("b", "toggle_unit", "Unit"),
         Binding("a", "apply_limit", "Apply"),
@@ -79,18 +80,23 @@ class BandctlApp(App):
         processes=None,
         link_bps: int | None | object = _MISSING,
         is_root: bool | None = None,
+        rates=None,
     ) -> None:
         super().__init__()
         self._iface_arg = iface
         self._shaper_arg = shaper
         self._process_source = processes
+        self._rates_source = rates
         self._link_bps_arg = link_bps
         self.is_root = os.geteuid() == 0 if is_root is None else is_root
         self.iface = iface or ""
         self.shaper = shaper
         self.unit = Unit.MBIT
         self._sort = "name"
-        self._net_only = False
+        self._show_all = False
+        self._sampler = TrafficSampler()
+        self._ss_failed = False
+        self._ss_warned = False
         self._procs: list[ProcessInfo] = []
         self._usage: dict[int, tuple[float, float]] = {}
         self._selected: int | None = None
@@ -143,7 +149,7 @@ class BandctlApp(App):
         )
         yield RichLog(id="log", max_lines=200, wrap=True, markup=False, highlight=False)
         yield Static("", id="status")
-        yield Footer(compact=True, show_command_palette=False)
+        yield Footer(compact=False, show_command_palette=False)
 
     async def on_mount(self) -> None:
         self._resolve_iface()
@@ -154,7 +160,7 @@ class BandctlApp(App):
             for note in self.shaper.recover():
                 self._log(note)
         await self._refresh()
-        if self.is_root:
+        if self.is_root and not self._ss_warned:
             self._note("ready")
         else:
             self.query_one("#apply", Button).disabled = True
@@ -246,9 +252,12 @@ class BandctlApp(App):
     def action_focus_table(self) -> None:
         self.query_one("#procs", DataTable).focus()
 
-    def action_toggle_net(self) -> None:
-        self._net_only = not self._net_only
-        self._note("showing processes with sockets" if self._net_only else "showing every process")
+    def action_toggle_all(self) -> None:
+        self._show_all = not self._show_all
+        if self._show_all:
+            self._note("showing every process")
+        else:
+            self._note("showing processes above 1%")
         self._render()
 
     def action_cycle_sort(self) -> None:
@@ -325,9 +334,13 @@ class BandctlApp(App):
         self._busy = True
         try:
             procs = await asyncio.to_thread(self._load_procs)
-            usage: dict[int, tuple[float, float]] = {}
+            usage = await asyncio.to_thread(self._load_usage)
+            if self._ss_failed and not self._ss_warned:
+                self._ss_warned = True
+                self._note("could not read traffic with ss. Press n to list every process.", bad=True)
+            # sample() also refreshes flower filters. The table uses _load_usage.
             if self.shaper is not None:
-                usage = await asyncio.to_thread(self.shaper.sample)
+                await asyncio.to_thread(self.shaper.sample)
             if self._link_bps_arg is _MISSING and self.iface:
                 detected = await asyncio.to_thread(link_speed_bps, self.iface)
                 self._detected_bps = detected
@@ -361,6 +374,16 @@ class BandctlApp(App):
         if self._process_source is not None:
             return list(self._process_source())
         return scan_processes()
+
+    def _load_usage(self) -> dict[int, tuple[float, float]]:
+        if self._rates_source is not None:
+            return {int(pid): (float(down), float(up)) for pid, (down, up) in self._rates_source().items()}
+        snapshot = read_ss()
+        if snapshot is None:
+            self._ss_failed = True
+            return {}
+        self._ss_failed = False
+        return self._sampler.rates(snapshot, time.monotonic())
 
     def _resolve_iface(self) -> None:
         if self._iface_arg:
@@ -438,8 +461,8 @@ class BandctlApp(App):
             f"bandctl  {iface}  {root}  {self.unit.value}  "
             f"link {link}  sort {_SORT_LABEL[self._sort]}"
         )
-        if self._net_only:
-            text += "  net only"
+        if not self._show_all:
+            text += "  above 1%"
         self.query_one("#titlebar", Static).update(text)
         down_cap, up_cap = self._effective_caps()
         self.query_one("#speed", Static).update(
@@ -458,7 +481,7 @@ class BandctlApp(App):
         query = self.query_one("#filter", Input).value.strip().lower()
         rows = []
         for proc in self._procs:
-            if self._net_only and proc.sockets <= 0:
+            if not self._show_all and not self._keep_row(proc):
                 continue
             if query and not _matches(proc, query):
                 continue
@@ -475,6 +498,26 @@ class BandctlApp(App):
         if self._sort == "up":
             return (-up, proc.pid)
         return (0 if proc.sockets else 1, proc.comm.lower(), proc.pid)
+
+    def _denoms(self) -> tuple[float, float]:
+        """Link capacity, or the measured total when the link speed is unknown."""
+        down_cap, up_cap = self._effective_caps()
+        if down_cap and up_cap:
+            return float(down_cap), float(up_cap)
+        total_down = sum(pair[0] for pair in self._usage.values())
+        total_up = sum(pair[1] for pair in self._usage.values())
+        return (
+            float(down_cap) if down_cap else total_down,
+            float(up_cap) if up_cap else total_up,
+        )
+
+    def _keep_row(self, proc: ProcessInfo) -> bool:
+        share = self.shaper.shares.get(proc.pid) if self.shaper else None
+        if share and (share.down_pct or share.up_pct):
+            return True
+        down, up = self._usage.get(proc.pid, (0.0, 0.0))
+        down_den, up_den = self._denoms()
+        return above_share(down, up, down_den, up_den)
 
     def _render_table(self) -> None:
         table = self.query_one("#procs", DataTable)
@@ -516,9 +559,9 @@ class BandctlApp(App):
         elif key == "up_pct":
             text = "-" if not share or share.up_pct is None else str(share.up_pct)
         elif key == "down_rate":
-            text = format_rate(down_bps, self.unit) if share and share.down_pct else "-"
+            text = format_rate(down_bps, self.unit) if down_bps > 0 or (share and share.down_pct) else "-"
         else:
-            text = format_rate(up_bps, self.unit) if share and share.up_pct else "-"
+            text = format_rate(up_bps, self.unit) if up_bps > 0 or (share and share.up_pct) else "-"
         # The selected row is painted by the green cursor. Orange text on
         # that green is hard to read, so only the other limited rows use it.
         if limited and proc.pid != self._selected:
@@ -536,7 +579,12 @@ class BandctlApp(App):
     def _paint_detail(self) -> None:
         proc = self._proc(self._selected) if self._selected is not None else None
         if proc is None and self._selected is None:
-            title = "Select a process"
+            if not self._show_all and self._rates_source is None and not self._sampler.primed:
+                title = "Measuring traffic..."
+            elif not self._show_all:
+                title = "Nothing above 1%. Press n to list every process."
+            else:
+                title = "Select a process"
         elif proc is None:
             title = f"pid {self._selected} is gone"
         else:
@@ -593,7 +641,7 @@ class BandctlApp(App):
             self._status_text = text
 
     def _paint_status(self) -> None:
-        color = "#f0a35e" if self._status_bad else "#8fd19a"
+        color = "#f0a35e" if self._status_bad else "#ffffff"
         self.query_one("#status", Static).update(Text(self._status_text, style=color))
 
     def _log(self, text: str) -> None:

@@ -90,6 +90,6 @@ Class rates are replaced in place when a percent or the capacity changes. Filter
 
 ## UI
 
-`app.py` refreshes once a second on a worker thread (`asyncio.to_thread`) so the `/proc` walk and `tc -s class show` do not block the keyboard. The shaper lock is an `RLock` shared with Apply. Selection is a pid, not a row index, so a rescan does not lose the highlight. Below 88 columns the user and socket columns are dropped. Below 28 rows the log and the detail strip get shorter. Both use the screen size from the resize event, because `App.size` can still be the old size while that handler runs.
+`app.py` refreshes once a second on a worker thread (`asyncio.to_thread`) so the `/proc` walk, `ss -tinp`, and `tc -s class show` do not block the keyboard. The Down and Up columns are the change in `bytes_received` and `bytes_acked` on non-loopback TCP sockets. The table hides a process at or below 1% of link capacity, or of that measured total when the link speed is unknown. `tc -s class show` still drives the flower refresh. The shaper lock is an `RLock` shared with Apply. Selection is a pid, not a row index, so a rescan does not lose the highlight. Below 88 columns the user and socket columns are dropped. Below 28 rows the log and the detail strip get shorter. Both use the screen size from the resize event, because `App.size` can still be the old size while that handler runs.
 
-Measured usage is the difference of `Sent N bytes` on the class, times 8, divided by the sample interval. The first sample is a baseline and shows zero.
+The on-screen rate is the socket delta times 8, divided by the sample interval. The first `ss` sample is a baseline and shows zero. Class byte counters are still read so the flower filters stay in sync.

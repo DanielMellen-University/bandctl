@@ -158,24 +158,40 @@ ProgressBar.hot Bar > .bar--bar {
 
 #status {
     height: 1;
-    background: #2a2a2a;
-    color: #8fd19a;
+    background: #3a3a3a;
+    color: #ffffff;
+    text-style: bold;
     padding: 0 1;
 }
 
 Footer {
-    background: #333333;
-    color: #e8e8e8;
+    background: #3a3a3a;
+    color: #ffffff;
 }
 
 FooterKey {
+    margin-right: 1;
+    background: #3a3a3a;
+    color: #ffffff;
+}
+
+FooterKey .footer-key--key {
     background: #8fd19a;
     color: #1a1a1a;
+    text-style: bold;
+    padding: 0 1;
+}
+
+FooterKey .footer-key--description {
+    background: #3a3a3a;
+    color: #ffffff;
+    padding: 0 1 0 0;
 }
 
 FooterLabel {
-    color: #e8e8e8;
-    background: #333333;
+    color: #ffffff;
+    background: #3a3a3a;
+    text-style: bold;
 }
 
 RootRequired {

@@ -6,6 +6,7 @@ import unittest
 
 from rich.text import Text
 from textual.widgets import DataTable, Input
+from textual.widgets._footer import FooterKey
 
 from bandctl.app import BandctlApp
 from bandctl.procscan import ProcessInfo
@@ -62,13 +63,23 @@ class FakeShaper:
         return dict(self._shares)
 
 
-def _app(fake, *, root=True, link_bps=100_000_000):
+def _rates():
+    # 100 Mbit/s link. curl is 40% down. systemd is 0.1%. bash is idle.
+    return {
+        42: (40_000_000.0, 5_000_000.0),
+        1: (100_000.0, 0.0),
+        7: (0.0, 0.0),
+    }
+
+
+def _app(fake, *, root=True, link_bps=100_000_000, rates=None):
     return BandctlApp(
         iface="eth0",
         shaper=fake,
         processes=lambda: list(PROCS),
         link_bps=link_bps,
         is_root=root,
+        rates=_rates if rates is None else rates,
     )
 
 
@@ -78,13 +89,24 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
         app = _app(fake)
         async with app.run_test(size=(120, 36)) as pilot:
             table = app.query_one("#procs", DataTable)
-            self.assertEqual(table.row_count, 3)
+            self.assertEqual(table.row_count, 1)
+            self.assertEqual(app._shown, [42])
+            self.assertEqual(str(table.get_cell("42", "down_rate")), "40.0 Mbit/s")
+            self.assertIn("above 1%", str(app.query_one("#titlebar").render()))
             self.assertIn("user", app._cols)
             self.assertIn("eth0", str(app.query_one("#titlebar").render()))
             self.assertIn("Mbit/s", str(app.query_one("#titlebar").render()))
+            key_style = app.query(FooterKey).first().get_component_styles("footer-key--key")
+            self.assertEqual(key_style.background.hex.lower(), "#8fd19a")
+            self.assertEqual(key_style.color.hex.lower(), "#1a1a1a")
+            desc_style = app.query(FooterKey).first().get_component_styles("footer-key--description")
+            self.assertEqual(desc_style.color.hex.lower(), "#ffffff")
 
             await pilot.press("n")
-            self.assertEqual(table.row_count, 2)
+            self.assertEqual(table.row_count, 3)
+            self.assertIn("every process", app._status_text)
+            await pilot.press("n")
+            self.assertEqual(table.row_count, 1)
             await pilot.press("n")
             self.assertEqual(table.row_count, 3)
 
@@ -173,6 +195,19 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             await pilot.click("#apply")
             self.assertEqual(fake.applied[-1][:5], (42, 30, None, 100_000_000, None))
             self.assertEqual(app.query_one("#down-budget", Input).value, "100")
+
+    async def test_a_share_stays_visible_after_its_traffic_drops(self):
+        fake = FakeShaper()
+        rates = {42: (40_000_000.0, 0.0), 1: (100_000.0, 0.0), 7: (0.0, 0.0)}
+        app = _app(fake, rates=lambda: dict(rates))
+        async with app.run_test(size=(120, 36)) as pilot:
+            self.assertEqual(app._shown, [42])
+            fake._shares[42] = Share(42, 30, None, 10, "/", "curl")
+            rates[42] = (0.0, 0.0)
+            await pilot.press("r")
+            await pilot.pause()
+            self.assertEqual(app._shown, [42])
+            self.assertEqual(str(app.query_one("#procs", DataTable).get_cell("42", "down_rate")), "0.00 Mbit/s")
 
 
 if __name__ == "__main__":

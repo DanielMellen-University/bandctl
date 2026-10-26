@@ -15,6 +15,7 @@ bandctl/
   widgets.py     the not-root dialog
   theme.tcss     dark grey, pastel green, orange
   procscan.py    /proc process list and socket counts
+  traffic.py     per-process TCP rates from ss
   rates.py       percents, units, HTB split
   iface.py       default route and link speed
   shaper.py      cgroup, nft, tc
@@ -75,7 +76,7 @@ Name the venv interpreter. `sudo python` is often a different install and will n
 
 ## Usage
 
-The table lists processes. Ones with sockets are listed first. Type `/` to filter by name, pid, or user. Select a row with the arrow keys or a click.
+The table lists processes using more than 1% of the link. When the link speed is unknown, that 1% is of the TCP traffic measured right now, ignoring loopback. `n` lists every process. A process that already has a share stays on screen so you can remove it. Type `/` to filter by name, pid, or user. Select a row with the arrow keys or a click.
 
 Type a download percent, an upload percent, or both (1 to 100). Leave a field blank to leave that direction uncapped. Enter in a percent field, the Apply button, or `a` installs the share. `u` removes it. Limited rows are orange, except the selected row, which stays green so the text stays readable. The bar is green while usage is under the ceiling and orange when it is at the cap.
 
@@ -92,7 +93,7 @@ Keys:
 | Enter, `a`, Apply | Apply both percent fields |
 | `u`, Remove | Remove the share |
 | `r` | Rescan processes |
-| `n` | Only processes that own a socket |
+| `n` | Show every process, or go back to processes above 1% |
 | `s` | Cycle sort: name, pid, download, upload |
 | `b` | Toggle Mbit/s and MB/s |
 | `q` | Quit and remove every rule this process installed |
