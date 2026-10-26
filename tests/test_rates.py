@@ -46,6 +46,14 @@ class BudgetTests(unittest.TestCase):
         with self.assertRaises(RateError):
             parse_budget("fast", Unit.MB)
 
+    def test_rejects_non_finite_and_sub_bit_budgets(self):
+        for unit in Unit:
+            for text in ("nan", "inf", "-inf", "1e308", "1e-100"):
+                with self.subTest(unit=unit, text=text):
+                    with self.assertRaises(RateError):
+                        parse_budget(text, unit)
+        self.assertEqual(parse_budget("0.000001", Unit.MBIT), 1)
+
 
 class ConversionTests(unittest.TestCase):
     def test_thirty_percent_of_100_mbit(self):

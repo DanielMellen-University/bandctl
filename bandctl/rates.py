@@ -8,6 +8,7 @@ link speed or a budget the user typed. 1 Mbit/s is 1_000_000 bit/s, and
 from __future__ import annotations
 
 from enum import Enum
+import math
 
 
 class Unit(Enum):
@@ -45,11 +46,10 @@ def parse_budget(text: str, unit: Unit) -> int | None:
         value = float(raw)
     except ValueError as exc:
         raise RateError("budget must be a number, in the unit shown in the header") from exc
-    if value <= 0:
-        raise RateError("budget must be greater than zero")
-    if unit is Unit.MBIT:
-        return int(value * 1_000_000)
-    return int(value * 8_000_000)
+    bps = value * (1_000_000 if unit is Unit.MBIT else 8_000_000)
+    if not math.isfinite(bps) or bps < 1:
+        raise RateError("budget must be finite and at least 1 bit/s")
+    return int(bps)
 
 
 def percent_to_bps(percent: int, capacity_bps: int) -> int:
