@@ -6,6 +6,7 @@ against ``/proc/<pid>/fd``. A pid that disappears mid-scan is skipped.
 
 from __future__ import annotations
 
+import ipaddress
 import os
 import pwd
 import re
@@ -22,6 +23,23 @@ class ProcessInfo:
     sockets: int
 
 
+@dataclass(frozen=True)
+class SockFlow:
+    """One socket a flower filter can match.
+
+    ``family`` is ``ip`` or ``ipv6`` after IPv4-mapped addresses are unwrapped,
+    so the filter matches the packets on the wire. ``remote_port`` 0 means the
+    socket is not connected (typical UDP). Listeners are not represented.
+    """
+
+    proto: str
+    family: str
+    local_ip: str
+    local_port: int
+    remote_ip: str
+    remote_port: int
+
+
 _UID_RE = re.compile(r"^Uid:\s+(\d+)", re.MULTILINE)
 
 
@@ -33,6 +51,61 @@ def parse_socket_inodes(text: str) -> set[str]:
         if len(parts) >= 10 and parts[9].isdigit():
             inodes.add(parts[9])
     return inodes
+
+
+def parse_proc_net(text: str, proto: str, family: str) -> dict[str, SockFlow]:
+    """Inode to flow for one ``/proc/net`` table.
+
+    ``proto`` is ``tcp`` or ``udp``. ``family`` is ``ip`` or ``ipv6``, matching
+    the file the text came from. TCP listeners (remote port 0) are skipped.
+    A row whose two ends are different families is skipped too.
+    """
+    found: dict[str, SockFlow] = {}
+    if proto not in ("tcp", "udp") or family not in ("ip", "ipv6"):
+        raise ValueError(f"unsupported table {proto}/{family}")
+    for line in text.splitlines()[1:]:
+        parts = line.split()
+        if len(parts) < 10 or not parts[9].isdigit():
+            continue
+        try:
+            local_ip, local_port, local_family = _decode_endpoint(parts[1], family)
+            remote_ip, remote_port, remote_family = _decode_endpoint(parts[2], family)
+        except ValueError:
+            continue
+        if local_port <= 0:
+            continue
+        if proto == "tcp" and remote_port <= 0:
+            continue
+        if remote_port and local_family != remote_family:
+            continue
+        found[parts[9]] = SockFlow(
+            proto=proto,
+            family=local_family,
+            local_ip=local_ip,
+            local_port=local_port,
+            remote_ip=remote_ip if remote_port else "",
+            remote_port=remote_port,
+        )
+    return found
+
+
+def _decode_endpoint(field: str, family: str) -> tuple[str, int, str]:
+    """Return ``(address, port, family)``. Mapped IPv6 comes back as ``ip``."""
+    ip_hex, port_hex = field.split(":")
+    port = int(port_hex, 16)
+    if family == "ip":
+        raw = bytes.fromhex(ip_hex)
+        if len(raw) != 4:
+            raise ValueError(ip_hex)
+        return ".".join(str(byte) for byte in raw[::-1]), port, "ip"
+    if len(ip_hex) != 32:
+        raise ValueError(ip_hex)
+    words = [bytes.fromhex(ip_hex[index : index + 8])[::-1] for index in range(0, 32, 8)]
+    addr = ipaddress.IPv6Address(b"".join(words))
+    mapped = addr.ipv4_mapped
+    if mapped is not None:
+        return str(mapped), port, "ip"
+    return str(addr), port, "ipv6"
 
 
 def format_cmdline(raw: bytes, comm: str, limit: int = 80) -> str:

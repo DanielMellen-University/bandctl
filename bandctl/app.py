@@ -105,6 +105,7 @@ class BandctlApp(App):
         self._status_bad = False
         self._width = 0
         self._height = 0
+        self._flow_warning: str | None = None
 
     def compose(self) -> ComposeResult:
         yield Static("", id="banner")
@@ -333,12 +334,25 @@ class BandctlApp(App):
             self._render()
             if self._status_text.startswith("refresh failed:"):
                 self._note("ready")
+            self._report_flow_warning()
         except Exception as exc:  # one bad scan must not stop the clock
             message = f"refresh failed: {exc}"
             if message != self._status_text:
                 self._note(message, bad=True)
         finally:
             self._busy = False
+
+    def _report_flow_warning(self) -> None:
+        warning = getattr(self.shaper, "flow_warning", None) if self.shaper else None
+        if warning:
+            if warning != self._flow_warning:
+                self._flow_warning = warning
+                self._note(warning, bad=True)
+            return
+        previous = self._flow_warning
+        self._flow_warning = None
+        if previous and self._status_text == previous:
+            self._note("ready")
 
     def _load_procs(self) -> list[ProcessInfo]:
         if self._process_source is not None:

@@ -6,11 +6,13 @@ import time
 import unittest
 
 from bandctl.rates import htb_plan, percent_to_bps
+from bandctl.procscan import SockFlow
 from bandctl.shaper import (
     IFB,
     Share,
     Shaper,
     ShaperError,
+    flower_command,
     nft_script,
     parse_class_bytes,
     parse_root_qdisc,
@@ -22,6 +24,7 @@ class FakeHost:
         self.commands: list[tuple[list[str], str | None]] = []
         self.files: dict[str, str] = {}
         self.dirs: set[str] = {"/sys/fs/cgroup"}
+        self.links: dict[str, str] = {}
         self.qdisc = "qdisc fq_codel 0: root refcnt 2 limit 10240p flows 1024\n"
         self.class_show: dict[str, str] = {}
         self.ifb_exists = False
@@ -70,10 +73,15 @@ class FakeHost:
     def listdir(self, path: str) -> list[str]:
         prefix = path.rstrip("/") + "/"
         names: set[str] = set()
-        for entry in list(self.dirs) + list(self.files):
+        for entry in list(self.dirs) + list(self.files) + list(self.links):
             if entry.startswith(prefix):
                 names.add(entry[len(prefix) :].split("/")[0])
         return sorted(names)
+
+    def readlink(self, path: str) -> str:
+        if path not in self.links:
+            raise FileNotFoundError(path)
+        return self.links[path]
 
     def unlink(self, path: str) -> None:
         self.files.pop(path, None)
@@ -104,6 +112,18 @@ class ParseTests(unittest.TestCase):
             "class htb 1:10 parent 1:1 leaf 1\n Sent 125000 bytes 80 pkt\n"
         )
         self.assertEqual(parse_class_bytes(text), {10: 125000})
+
+    def test_unconnected_udp_flower_omits_the_remote(self):
+        flow = SockFlow("udp", "ip", "10.0.0.8", 5353, "", 0)
+        command = " ".join(
+            flower_command(
+                dev="eth0", parent="1:", prio=2, handle=1,
+                flow=flow, minor=10, direction="up",
+            )
+        )
+        self.assertIn("src_port 5353", command)
+        self.assertNotIn("dst_ip", command)
+        self.assertNotIn("dst_port", command)
 
     def test_nft_matches_leaf_name(self):
         script = nft_script([Share(42, 30, None, 10, "/user.slice", "curl")])
@@ -247,6 +267,83 @@ class ApplyTests(unittest.TestCase):
         with self.assertRaises(ShaperError) as caught:
             shaper._restore_pid(42, "/user.slice/session-1.scope")
         self.assertIn("could not restore pid 42", str(caught.exception))
+
+    def test_apply_shapes_sockets_already_open(self):
+        shaper, host = _shaper()
+        _open_socket(host)
+        shaper.apply(42, 30, 10, 100_000_000, 100_000_000)
+        commands = _joined(host)
+        upload = [cmd for cmd in commands if "flower" in cmd and "classid 1:10" in cmd]
+        download = [cmd for cmd in commands if "flower" in cmd and "skbedit mark 10" in cmd]
+        self.assertEqual(upload, [
+            "tc filter add dev eth0 parent 1: protocol ip prio 2 handle 1 "
+            "flower ip_proto tcp src_ip 10.0.0.8 src_port 40000 "
+            "dst_ip 1.2.3.4 dst_port 443 classid 1:10"
+        ])
+        self.assertEqual(download, [
+            "tc filter add dev eth0 parent ffff: protocol ip prio 1 handle 2 "
+            "flower ip_proto tcp dst_ip 10.0.0.8 dst_port 40000 "
+            "src_ip 1.2.3.4 src_port 443 "
+            "action skbedit mark 10 pipe action mirred egress redirect dev ifb-bandctl"
+        ])
+        self.assertFalse(any("127.0.0.1" in cmd for cmd in commands))
+        added = sum(1 for cmd in commands if "filter add" in cmd and "flower" in cmd)
+        shaper.sample()
+        self.assertEqual(
+            sum(1 for cmd in _joined(host) if "filter add" in cmd and "flower" in cmd),
+            added,
+        )
+
+    def test_upload_flower_does_not_touch_ingress(self):
+        shaper, host = _shaper()
+        _open_socket(host)
+        shaper.apply(42, None, 20, None, 100_000_000)
+        commands = _joined(host)
+        self.assertTrue(any("flower" in cmd and "classid 1:10" in cmd for cmd in commands))
+        self.assertFalse(any("parent ffff:" in cmd for cmd in commands))
+        self.assertFalse(any(cmd.startswith("modprobe ifb") for cmd in commands))
+        self.assertTrue(any("modprobe cls_flower" in cmd for cmd in commands))
+
+    def test_sample_adds_and_drops_flower_filters(self):
+        shaper, host = _shaper()
+        shaper.apply(42, None, 10, None, 100_000_000)
+        _open_socket(host)
+        shaper.sample()
+        self.assertTrue(any("src_ip 10.0.0.8" in cmd and "flower" in cmd for cmd in _joined(host)))
+        host.links.clear()
+        shaper.sample()
+        deleted = [cmd for cmd in _joined(host) if "filter del" in cmd and "flower" in cmd]
+        self.assertEqual(len(deleted), 1)
+        self.assertEqual(shaper._flows, {})
+
+    def test_removing_one_pid_drops_only_its_flower(self):
+        shaper, host = _shaper()
+        host.files["/proc/net/tcp"] = (
+            "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"
+            "   0: 0800000A:9C40 04030201:01BB 01 00000000:00000000 00:00000000 00000000     0        0 99 1 0000000000000000 100 0 0 10 0\n"
+            "   1: 0900000A:9C41 04030201:01BB 01 00000000:00000000 00:00000000 00000000     0        0 100 1 0000000000000000 100 0 0 10 0\n"
+        )
+        host.links["/proc/42/fd/3"] = "socket:[99]"
+        host.links["/proc/43/fd/3"] = "socket:[100]"
+        shaper.apply(42, None, 10, None, 100_000_000)
+        shaper.apply(43, None, 10, None, 100_000_000)
+        self.assertEqual(len(shaper._flows), 2)
+        shaper.remove(42)
+        deleted = [cmd for cmd in _joined(host) if "filter del" in cmd and "flower" in cmd]
+        self.assertEqual(deleted, [
+            "tc filter del dev eth0 parent 1: protocol ip prio 2 handle 1 flower"
+        ])
+        self.assertEqual(len(shaper._flows), 1)
+
+
+def _open_socket(host: FakeHost, pid: int = 42) -> None:
+    host.files["/proc/net/tcp"] = (
+        "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"
+        "   0: 0800000A:9C40 04030201:01BB 01 00000000:00000000 00:00000000 00000000     0        0 99 1 0000000000000000 100 0 0 10 0\n"
+        "   1: 0100007F:01BB 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 55 1 0000000000000000 100 0 0 10 0\n"
+    )
+    host.links[f"/proc/{pid}/fd/3"] = "socket:[99]"
+    host.links[f"/proc/{pid}/fd/4"] = "socket:[55]"
 
 
 if __name__ == "__main__":

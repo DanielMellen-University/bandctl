@@ -9,6 +9,7 @@ from pathlib import Path
 
 from bandctl.procscan import (
     format_cmdline,
+    parse_proc_net,
     parse_socket_inodes,
     scan_processes,
     user_from_status,
@@ -25,6 +26,51 @@ TCP = """\
 class ParseTests(unittest.TestCase):
     def test_inodes(self):
         self.assertEqual(parse_socket_inodes(TCP), {"555", "777"})
+
+    def test_tcp_flows_skip_listeners(self):
+        text = (
+            "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"
+            "   0: 0800000A:9C40 04030201:01BB 01 00000000:00000000 00:00000000 00000000     0        0 99 1 0000000000000000 100 0 0 10 0\n"
+            "   1: 0100007F:01BB 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 55 1 0000000000000000 100 0 0 10 0\n"
+        )
+        flows = parse_proc_net(text, "tcp", "ip")
+        self.assertEqual(set(flows), {"99"})
+        flow = flows["99"]
+        self.assertEqual(flow.proto, "tcp")
+        self.assertEqual(flow.family, "ip")
+        self.assertEqual((flow.local_ip, flow.local_port), ("10.0.0.8", 40000))
+        self.assertEqual((flow.remote_ip, flow.remote_port), ("1.2.3.4", 443))
+
+    def test_unconnected_udp_has_no_remote(self):
+        text = (
+            "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"
+            "   0: 0800000A:0035 00000000:0000 07 00000000:00000000 00:00000000 00000000     0        0 12 1 0000000000000000 100 0 0 10 0\n"
+        )
+        flow = parse_proc_net(text, "udp", "ip")["12"]
+        self.assertEqual(flow.proto, "udp")
+        self.assertEqual((flow.local_ip, flow.local_port), ("10.0.0.8", 53))
+        self.assertEqual(flow.remote_port, 0)
+        self.assertEqual(flow.remote_ip, "")
+
+    def test_ipv6_and_v4_mapped(self):
+        # ::1 port 80 to ::1 port 443. Each 32-bit word is little-endian in the file.
+        text = (
+            "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"
+            "   0: 00000000000000000000000001000000:0050 00000000000000000000000001000000:01BB 01 00000000:00000000 00:00000000 00000000 0 0 77 1 0000000000000000 100 0 0 10 0\n"
+            "   1: 0000000000000000FFFF00000800000A:9C40 0000000000000000FFFF00000100007F:01BB 01 00000000:00000000 00:00000000 00000000 0 0 88 1 0000000000000000 100 0 0 10 0\n"
+        )
+        flows = parse_proc_net(text, "tcp", "ipv6")
+        self.assertEqual(flows["77"].family, "ipv6")
+        self.assertEqual(flows["77"].local_ip, "::1")
+        self.assertEqual(flows["77"].local_port, 80)
+        self.assertEqual(flows["77"].remote_port, 443)
+        # ::ffff:10.0.0.8 and ::ffff:127.0.0.1 are IPv4 packets on the wire.
+        mapped = flows["88"]
+        self.assertEqual(mapped.family, "ip")
+        self.assertEqual(mapped.local_ip, "10.0.0.8")
+        self.assertEqual(mapped.local_port, 40000)
+        self.assertEqual(mapped.remote_ip, "127.0.0.1")
+        self.assertEqual(mapped.remote_port, 443)
 
     def test_cmdline(self):
         self.assertEqual(format_cmdline(b"curl\0https://example\0", "curl"), "curl https://example")

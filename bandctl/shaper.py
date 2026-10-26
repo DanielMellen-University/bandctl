@@ -10,7 +10,9 @@ through ``ifb-bandctl``, where a second HTB class caps it.
 
 nft's ``socket cgroupv2 level 2`` matches only the second path component.
 Leaf cgroups are ``/sys/fs/cgroup/bandctl/bandctl-<pid>``, so the leaf name
-is unique.
+is unique. That match sees the cgroup the socket was created in. Moving
+the process does not move sockets that already exist, so each open socket
+also gets a flower filter from ``/proc/net`` and ``/proc/<pid>/fd``.
 
 Nothing is installed until the first successful apply. ``teardown`` and
 ``recover`` remove only objects this tool creates. A state file under
@@ -21,6 +23,7 @@ later start can finish a cleanup that a crash skipped.
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import threading
@@ -29,6 +32,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
+from bandctl.procscan import SockFlow, parse_proc_net
 from bandctl.rates import htb_plan, percent_to_bps
 
 IFB = "ifb-bandctl"
@@ -49,6 +53,8 @@ class Host(Protocol):
     def rmdir(self, path: str) -> None: ...
 
     def listdir(self, path: str) -> list[str]: ...
+
+    def readlink(self, path: str) -> str: ...
 
     def unlink(self, path: str) -> None: ...
 
@@ -77,6 +83,27 @@ class Share:
 
 
 @dataclass
+class InstalledFlow:
+    """One flower filter currently installed. The qdisc delete drops it."""
+
+    handle: int
+    minor: int
+    dev: str
+    parent: str
+    protocol: str
+    prio: int
+
+
+# filename, proto, family. tcp is parsed before tcp6 so an inode is claimed once.
+_NET_TABLES = (
+    ("tcp", "tcp", "ip"),
+    ("tcp6", "tcp", "ipv6"),
+    ("udp", "udp", "ip"),
+    ("udp6", "udp", "ipv6"),
+)
+
+
+@dataclass
 class Shaper:
     """One interface. Methods take a lock so the UI thread and the sampler can share it."""
 
@@ -96,6 +123,9 @@ class Shaper:
     _bytes: dict[tuple[str, int], int] = field(default_factory=dict)
     _sample_at: float = 0.0
     _torn: bool = False
+    _flows: dict[tuple, InstalledFlow] = field(default_factory=dict)
+    _next_flow_handle: int = 1
+    flow_warning: str | None = None
 
     def __post_init__(self) -> None:
         if self.host is None:
@@ -205,6 +235,14 @@ class Shaper:
         with self._lock:
             if self._torn:
                 return {}
+            try:
+                self._sync_flows()
+            except ShaperError as exc:
+                warning = str(exc)
+                if warning != self.flow_warning:
+                    self.flow_warning = warning
+            else:
+                self.flow_warning = None
             now = time.monotonic()
             dt = now - self._sample_at if self._sample_at else 0.0
             down = self._class_bytes(IFB) if self._ifb else {}
@@ -366,6 +404,7 @@ class Shaper:
             self._sync_direction(self.iface, up_shares, self._up_cap)
         if self._ifb and self._down_cap:
             self._sync_direction(IFB, down_shares, self._down_cap)
+        self._sync_flows()
         self._write_state()
 
     def _ensure_egress(self) -> None:
@@ -503,6 +542,8 @@ class Shaper:
             pass
         self._egress = False
         self._drop_dev(self.iface)
+        # The root qdisc took the upload flower filters with it.
+        self._forget_flows(self.iface, "1:")
 
     def _destroy_ifb(self) -> None:
         try:
@@ -519,6 +560,8 @@ class Shaper:
             pass
         self._ifb = False
         self._drop_dev(IFB)
+        # Ingress lived on the real device. Deleting it drops download flowers.
+        self._forget_flows(self.iface, "ffff:")
 
     def _drop_dev(self, dev: str) -> None:
         self._classes = {item for item in self._classes if item[0] != dev}
@@ -617,6 +660,114 @@ class Shaper:
         except OSError:
             return
 
+    def _sync_flows(self) -> None:
+        """Install or remove flower filters so open sockets follow the shares.
+
+        nft only matches sockets created after the cgroup move. This covers
+        the ones that already existed, and drops filters when they close.
+        """
+        desired: dict[tuple, tuple[SockFlow, int, str]] = {}
+        net = self._load_net() if self._shares else {}
+        for pid, share in self._shares.items():
+            for flow in self._pid_flows(pid, net):
+                ident = _flow_id(flow)
+                if share.up_pct and self._egress:
+                    desired[("up", ident)] = (flow, share.minor, "up")
+                if share.down_pct and self._ifb:
+                    desired[("down", ident)] = (flow, share.minor, "down")
+        for key in list(self._flows):
+            wanted = desired.get(key)
+            if wanted is None or wanted[1] != self._flows[key].minor:
+                self._delete_flow(key)
+        pending = [key for key in desired if key not in self._flows]
+        if not pending:
+            return
+        self._run(["modprobe", "cls_flower"])
+        if any(desired[key][2] == "down" for key in pending):
+            self._run(["modprobe", "act_skbedit"])
+        for key in pending:
+            flow, minor, direction = desired[key]
+            self._add_flow(key, flow, minor, direction)
+
+    def _load_net(self) -> dict[str, SockFlow]:
+        table: dict[str, SockFlow] = {}
+        assert self.host is not None
+        for filename, proto, family in _NET_TABLES:
+            try:
+                text = self.host.read(f"/proc/net/{filename}")
+            except OSError:
+                continue
+            for inode, flow in parse_proc_net(text, proto, family).items():
+                table.setdefault(inode, flow)
+        return table
+
+    def _pid_flows(self, pid: int, net: dict[str, SockFlow]) -> list[SockFlow]:
+        assert self.host is not None
+        fd_dir = f"/proc/{pid}/fd"
+        try:
+            names = self.host.listdir(fd_dir)
+        except OSError:
+            return []
+        found: list[SockFlow] = []
+        seen: set[str] = set()
+        for name in names:
+            try:
+                target = self.host.readlink(f"{fd_dir}/{name}")
+            except OSError:
+                continue
+            if not (target.startswith("socket:[") and target.endswith("]")):
+                continue
+            inode = target[len("socket:[") : -1]
+            flow = net.get(inode)
+            if flow is None or inode in seen:
+                continue
+            seen.add(inode)
+            found.append(flow)
+        return found
+
+    def _add_flow(self, key: tuple, flow: SockFlow, minor: int, direction: str) -> None:
+        if direction == "up":
+            dev, parent, prio = self.iface, "1:", 2
+        else:
+            dev, parent, prio = self.iface, "ffff:", 1
+        handle = self._next_flow_handle
+        self._run(
+            flower_command(
+                dev=dev,
+                parent=parent,
+                prio=prio,
+                handle=handle,
+                flow=flow,
+                minor=minor,
+                direction=direction,
+            )
+        )
+        self._next_flow_handle = handle + 1
+        self._flows[key] = InstalledFlow(handle, minor, dev, parent, flow.family, prio)
+
+    def _delete_flow(self, key: tuple) -> None:
+        rec = self._flows.get(key)
+        if rec is None:
+            return
+        try:
+            self._run(
+                [
+                    "tc", "filter", "del", "dev", rec.dev, "parent", rec.parent,
+                    "protocol", rec.protocol, "prio", str(rec.prio),
+                    "handle", str(rec.handle), "flower",
+                ]
+            )
+        except ShaperError:
+            pass
+        self._flows.pop(key, None)
+
+    def _forget_flows(self, dev: str, parent: str) -> None:
+        self._flows = {
+            key: rec
+            for key, rec in self._flows.items()
+            if not (rec.dev == dev and rec.parent == parent)
+        }
+
 
 def _copy_share(share: Share) -> Share:
     return Share(share.pid, share.down_pct, share.up_pct, share.minor, share.original_cgroup, share.command)
@@ -626,6 +777,55 @@ def _applied_text(share: Share) -> str:
     down = "unlimited" if share.down_pct is None else f"{share.down_pct}%"
     up = "unlimited" if share.up_pct is None else f"{share.up_pct}%"
     return f"pid {share.pid} download {down}, upload {up}"
+
+
+def _flow_id(flow: SockFlow) -> tuple:
+    return (
+        flow.proto,
+        flow.family,
+        flow.local_ip,
+        flow.local_port,
+        flow.remote_ip,
+        flow.remote_port,
+    )
+
+
+def flower_command(
+    *,
+    dev: str,
+    parent: str,
+    prio: int,
+    handle: int,
+    flow: SockFlow,
+    minor: int,
+    direction: str,
+) -> list[str]:
+    """One ``tc filter add`` for a socket.
+
+    Upload matches the local end as the source and lands in the HTB class.
+    Download matches the local end as the destination, stamps the mark, and
+    redirects onto the IFB device. A remote port of 0 (unconnected UDP) is
+    left out so every packet from that local port is included.
+    """
+    command = [
+        "tc", "filter", "add", "dev", dev, "parent", parent,
+        "protocol", flow.family, "prio", str(prio), "handle", str(handle),
+        "flower", "ip_proto", flow.proto,
+    ]
+    if direction == "up":
+        command += ["src_ip", flow.local_ip, "src_port", str(flow.local_port)]
+        if flow.remote_port:
+            command += ["dst_ip", flow.remote_ip, "dst_port", str(flow.remote_port)]
+        command += ["classid", f"1:{minor}"]
+        return command
+    command += ["dst_ip", flow.local_ip, "dst_port", str(flow.local_port)]
+    if flow.remote_port:
+        command += ["src_ip", flow.remote_ip, "src_port", str(flow.remote_port)]
+    command += [
+        "action", "skbedit", "mark", str(minor), "pipe",
+        "action", "mirred", "egress", "redirect", "dev", IFB,
+    ]
+    return command
 
 
 def leaf_name(pid: int) -> str:
@@ -698,6 +898,9 @@ class LinuxHost:
 
     def read(self, path: str) -> str:
         return Path(path).read_text(encoding="utf-8", errors="replace")
+
+    def readlink(self, path: str) -> str:
+        return os.readlink(path)
 
     def write(self, path: str, data: str) -> None:
         try:

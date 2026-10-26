@@ -30,6 +30,21 @@ add rule inet bandctl prerouting socket cgroupv2 level 2 "bandctl-<pid>" \
 
 The minor (10, 11, ...) is both the fwmark and the HTB class id `1:<minor>`.
 
+The kernel stores a socket's cgroup when the socket is created and does not update it when the process is moved. An already-open connection would miss the nft rule. bandctl therefore also reads `/proc/<pid>/fd` and `/proc/net/{tcp,tcp6,udp,udp6}` and installs a flower filter per socket:
+
+```
+tc filter add dev IFACE parent 1: protocol ip prio 2 handle <n> flower \
+    ip_proto tcp src_ip <local> src_port <lport> \
+    dst_ip <remote> dst_port <rport> classid 1:<minor>
+tc filter add dev IFACE parent ffff: protocol ip prio 1 handle <n> flower \
+    ip_proto tcp dst_ip <local> dst_port <lport> \
+    src_ip <remote> src_port <rport> \
+    action skbedit mark <minor> pipe \
+    action mirred egress redirect dev ifb-bandctl
+```
+
+Upload filters send the packet straight to the class. Download filters run before the matchall rule, stamp the mark, and redirect. The matchall rule is still what shapes a socket created after the move, once nft has stored the connmark. Listeners are skipped. Unconnected UDP is matched on the local port only. The set is rebuilt on apply and on each rate sample, about once a second. A socket that closes loses its filter.
+
 Upload: the output hook runs before the device qdisc, so `meta mark` is visible to `tc filter ... fw` on the real interface.
 
 Download: the ingress qdisc runs before netfilter, so a mark set in prerouting is too late for that packet. The output rule also sets the conntrack mark. On ingress, a `ctinfo cpmark` action copies that connmark onto the skb, then `mirred` redirects the packet to `ifb-bandctl`, where a second HTB class caps it. Return traffic of a flow the process has already sent on is therefore shaped. The first inbound packet of a brand new inbound connection is not, until something the process sends (an ACK is enough) has stored the connmark.

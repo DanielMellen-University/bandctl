@@ -30,6 +30,8 @@ The window still opens. A dialog shows the `sudo` command. After you dismiss it,
 
 The status line and the log confirm the share, for example `pid 4242 download 30%, upload 10%`. Limited rows are orange. The selected row stays green. The bars show measured class throughput against the ceiling and turn orange at the cap. `u` or Remove clears the share and puts the process back in its old cgroup.
 
+A transfer that is already running is included. The kernel does not move an existing socket into the new cgroup, so bandctl also matches the process's open connections by address and port. A connection opened later is marked by the cgroup rule as soon as it exists, and the address list catches up within about a second.
+
 `r` rescans `/proc` immediately. The table also refreshes every second. The selection stays on the same pid.
 
 ## Capacity

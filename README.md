@@ -82,6 +82,8 @@ Rules exist only while bandctl is running. Exit restores each process to the cgr
 
 While a share is active, bandctl replaces the root qdisc on the chosen interface with HTB. Unmarked traffic can still use the full link. Do not point bandctl at an interface that already has an `htb` qdisc. It will refuse.
 
+Connections that are already open are shaped too. Moving a process does not move sockets it created earlier, so those are matched by address and port. The list is refreshed about once a second.
+
 ## Docs
 
 - [Usage](docs/USAGE.md)
