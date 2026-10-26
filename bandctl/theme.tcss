@@ -1,0 +1,225 @@
+Screen {
+    background: #2a2a2a;
+    color: #e8e8e8;
+}
+
+#banner {
+    display: none;
+    height: 1;
+    background: #f0a35e;
+    color: #1a1a1a;
+    padding: 0 1;
+}
+
+#banner.-show {
+    display: block;
+}
+
+#titlebar {
+    height: 1;
+    background: #333333;
+    color: #8fd19a;
+    padding: 0 1;
+}
+
+#capacity {
+    height: 3;
+}
+
+#speed {
+    width: 1fr;
+    height: 3;
+    content-align: left middle;
+    color: #e8e8e8;
+    padding: 0 1;
+}
+
+#filter {
+    height: 3;
+}
+
+#procs {
+    height: 1fr;
+    background: #2a2a2a;
+    color: #e8e8e8;
+}
+
+#procs > .datatable--header {
+    background: #333333;
+    color: #8fd19a;
+    text-style: bold;
+}
+
+#procs > .datatable--cursor {
+    background: #8fd19a;
+    color: #1a1a1a;
+}
+
+#procs:focus > .datatable--cursor {
+    background: #8fd19a;
+    color: #1a1a1a;
+    text-style: bold;
+}
+
+#procs > .datatable--even-row {
+    background: #303030;
+}
+
+#detail {
+    height: 6;
+    background: #333333;
+    padding: 0 1;
+}
+
+#detail-controls {
+    width: 1fr;
+    height: 1fr;
+}
+
+#meters {
+    width: 1fr;
+    height: 1fr;
+}
+
+#detail-title, #down-caption, #up-caption {
+    height: 1;
+    color: #e8e8e8;
+}
+
+#pct-row {
+    height: 3;
+}
+
+#down-pct, #up-pct, #down-budget, #up-budget {
+    width: 1fr;
+}
+
+#apply, #remove {
+    width: auto;
+    min-width: 12;
+}
+
+Input {
+    background: #2a2a2a;
+    color: #e8e8e8;
+    border: tall #8fd19a;
+}
+
+Input:focus {
+    border: tall #f0a35e;
+}
+
+Button {
+    background: #2a2a2a;
+    color: #8fd19a;
+    border: tall #8fd19a;
+}
+
+Button:hover {
+    background: #8fd19a;
+    color: #1a1a1a;
+}
+
+#remove {
+    color: #f0a35e;
+    border: tall #f0a35e;
+}
+
+#remove:hover {
+    background: #f0a35e;
+    color: #1a1a1a;
+}
+
+ProgressBar {
+    width: 1fr;
+    height: 1;
+    padding: 0;
+}
+
+Bar {
+    width: 1fr;
+}
+
+Bar > .bar--bar {
+    color: #8fd19a;
+    background: #242424;
+}
+
+ProgressBar.hot Bar > .bar--bar {
+    color: #f0a35e;
+}
+
+#log {
+    height: 4;
+    background: #242424;
+    color: #e8e8e8;
+    border: round #3a3a3a;
+}
+
+#status {
+    height: 1;
+    background: #2a2a2a;
+    color: #8fd19a;
+    padding: 0 1;
+}
+
+Footer {
+    background: #333333;
+    color: #e8e8e8;
+}
+
+FooterKey {
+    background: #8fd19a;
+    color: #1a1a1a;
+}
+
+FooterLabel {
+    color: #e8e8e8;
+    background: #333333;
+}
+
+RootRequired {
+    align: center middle;
+    background: #2a2a2a 70%;
+}
+
+#dialog {
+    width: 70%;
+    max-width: 72;
+    height: auto;
+    background: #333333;
+    border: round #f0a35e;
+    padding: 1 2;
+}
+
+#root-title {
+    text-style: bold;
+    color: #f0a35e;
+    height: 1;
+}
+
+#root-body, #root-command {
+    height: auto;
+    color: #e8e8e8;
+}
+
+#root-command {
+    color: #8fd19a;
+    text-style: bold;
+}
+
+.-narrow #detail {
+    height: auto;
+}
+
+.-narrow #pct-row {
+    height: auto;
+}
+
+.-cramped #log {
+    height: 3;
+}
+
+.-cramped #detail {
+    height: 5;
+}
