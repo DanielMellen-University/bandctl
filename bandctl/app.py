@@ -33,6 +33,7 @@ from bandctl.rates import (
 )
 from bandctl.shaper import Shaper, ShaperError
 from bandctl.settings_screen import SettingsScreen
+from bandctl.settings_session import import_session
 from bandctl.rules import AutoRule, RuleTracker, ScheduledOwnership
 from bandctl.traffic import TrafficSampler, above_share, read_ss
 from bandctl.widgets import RootRequired, RulesScreen
@@ -102,9 +103,11 @@ class BandctlApp(App):
         is_root: bool | None = None,
         rates=None,
         clock=None,
+        startup_settings: str | None = None,
     ) -> None:
         super().__init__()
         self._iface_arg = iface
+        self._startup_settings = startup_settings
         self._shaper_arg = shaper
         self._process_source = processes
         self._rates_source = rates
@@ -209,6 +212,17 @@ class BandctlApp(App):
             banner.update("Not root. Limits stay off.  " + self.sudo_command())
             banner.add_class("-show")
             self._note("read-only, limits are off", bad=True)
+        if self._startup_settings:
+            if not self.is_root or self.shaper is None:
+                self._note("cannot import settings without root and an interface", bad=True)
+            else:
+                try:
+                    settings = import_session(self._startup_settings, self.shaper, self.iface,
+                                              self._detected_bps, self._procs)
+                except ValueError as exc:
+                    self._note(f"settings import: {exc}", bad=True)
+                else:
+                    self._settings_closed(settings)
         self.set_interval(1.0, self._refresh)
         self.watch(self.screen, "size", self._on_screen_size, init=False)
         self.query_one("#procs", DataTable).focus()

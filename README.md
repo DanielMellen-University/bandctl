@@ -132,7 +132,7 @@ Press `t` to add or delete auto-apply rules. Enter part of a process name and a 
 
 Press `g` to create a named shared limit. Enter a name, comma-separated PIDs, and one or both percentages, then choose Create. The processes must be running and have no existing limit. Their combined traffic shares one ceiling in each direction. Select a group row to fill its name and percentages, then choose Update to change its limits. To add a process, enter its PID and choose Add. Use Remove on the main screen to remove one member; the group ends when its last member is removed. Group members show the group name in the detail line. The bars show the selected process's rate against the shared ceiling, not the combined group rate. Groups last for the session only.
 
-Press `x` to import or export settings as JSON. Export includes the interface, submitted budgets, auto-apply rules and schedules, and groups. It replaces the chosen file and makes it readable only by its owner. Import checks the entire file before applying it. It replaces the current rules, budgets, and groups, while leaving individual limits in place. An imported group cannot use a PID that already has an individual limit. Group members must still be the same running processes on the same boot. The file's interface must match the interface bandctl is using; restart with `--iface` to use a different one. Rules and groups are loaded only when you choose Import.
+Press `x` to import or export settings as JSON. Export includes the interface, submitted budgets, auto-apply rules and schedules, and groups. It replaces the chosen file and makes it readable only by its owner. Import checks the entire file before applying it. It replaces the current rules, budgets, and groups, while leaving individual limits in place. An imported group cannot use a PID that already has an individual limit. Group members must still be the same running processes on the same boot. The file's interface must match the interface bandctl is using. To select the saved interface at startup, run `sudo bandctl --config settings.json`. Rules and groups are loaded only when you choose Import.
 
 Full steps and the manual check with a real download are in [docs/USAGE.md](docs/USAGE.md) and [docs/TESTING.md](docs/TESTING.md).
 
@@ -202,3 +202,7 @@ The shared-limit editor at 80 by 24.
 The settings file controls at 80 by 24.
 
 ![Settings file at 80x24](docs/screenshots/settings-80x24.png)
+
+Started with `--config`, with the saved download budget applied.
+
+![Startup with settings at 80x24](docs/screenshots/startup-config-80x24.png)

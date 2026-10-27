@@ -15,7 +15,7 @@ python3 -m venv .venv
 | `tests/test_rates.py` | Percent parsing (rejects 0, 101, and junk). 30% of 100 Mbit/s is 30 Mbit/s and 3.75 MB/s. Over-commit keeps the ceils and shrinks the rates. |
 | `tests/test_history.py` | One-minute rate history, missing samples, process removal, and peak grouping for narrow graphs. |
 | `tests/test_traffic.py` socket accounting | Individual socket deltas, new sockets, resets, sample gaps, PID totals, and retention of idle processes. |
-| `tests/test_settings_screen.py` | Export and import through the TUI, plus rejection of an invalid file without changing the session. |
+| `tests/test_settings_screen.py` | Export and import through the TUI, explicit startup import, and rejection of an invalid file without changing the session. |
 | `tests/test_settings_session.py` | Session export and import against a fake host, including invalid files, missing processes, and shaper failures. |
 | `tests/test_settings.py` | Settings round trips, atomic private file writes, bounded reads, and rejection of invalid fields, schedules, budgets, process identities, boot IDs, overlapping groups, session snapshots, import target checks, and group membership change plans. |
 | `tests/test_groups.py` | Group name, share, and membership validation, including duplicate names and processes, and the active group view. |

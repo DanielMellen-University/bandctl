@@ -48,3 +48,27 @@ class SettingsScreenTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIsInstance(app.screen, SettingsScreen)
                 self.assertIn("invalid", str(app.screen.query_one("#settings-status", Static).render()))
                 self.assertEqual(app._rules, [AutoRule("work", 20, None)])
+
+
+class StartupSettingsTests(unittest.IsolatedAsyncioTestCase):
+    async def test_explicit_startup_import_sets_rules_and_budgets(self):
+        from bandctl.settings import Settings, write_settings
+        app, shaper, host = group_app()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            write_settings(path, Settings("eth0", 80_000_000, None, (AutoRule("work", 20, None),), ()))
+            app._startup_settings = str(path)
+            async with app.run_test(size=(80, 24)):
+                self.assertEqual(app._down_budget, 80_000_000)
+                self.assertEqual(app._rules, [AutoRule("work", 20, None)])
+
+    async def test_invalid_startup_import_does_not_change_state(self):
+        app, shaper, host = group_app()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            path.write_text("bad")
+            app._startup_settings = str(path)
+            async with app.run_test(size=(80, 24)):
+                self.assertEqual(app._rules, [])
+                self.assertIsNone(app._down_budget)
+                self.assertIn("settings import", str(app.query_one("#status", Static).render()))

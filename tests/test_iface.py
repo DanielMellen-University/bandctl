@@ -100,6 +100,34 @@ class CheckTests(unittest.TestCase):
 
 
 class CommandLineTests(unittest.TestCase):
+    def test_startup_config_selects_saved_interface(self):
+        from unittest.mock import patch
+        from bandctl.__main__ import main
+        from bandctl.settings import Settings, write_settings
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            write_settings(path, Settings("eth0", None, None, (), ()))
+            with patch("bandctl.__main__.check_iface") as check, \
+                 patch("bandctl.__main__.BandctlApp") as app, \
+                 patch("bandctl.__main__.signal.signal"), patch("bandctl.__main__.atexit.register"):
+                self.assertEqual(main(["--config", str(path)]), 0)
+            check.assert_called_once_with("eth0")
+            app.assert_called_once_with(iface="eth0", startup_settings=str(path))
+
+    def test_startup_config_rejects_conflicting_iface(self):
+        from bandctl.__main__ import main
+        from bandctl.settings import Settings, write_settings
+        import contextlib
+        import io
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            write_settings(path, Settings("eth0", None, None, (), ()))
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as caught:
+                main(["--config", str(path), "--iface", "wlan0"])
+            self.assertEqual(caught.exception.code, 2)
+
     def test_unknown_iface_exits_with_a_usage_error(self):
         import contextlib
         import io
