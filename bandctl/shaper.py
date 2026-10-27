@@ -138,7 +138,8 @@ class Shaper:
 
     @property
     def shares(self) -> dict[int, Share]:
-        return dict(self._shares)
+        with self._lock:
+            return {pid: _copy_share(share) for pid, share in self._shares.items()}
 
     @property
     def download_active(self) -> bool:

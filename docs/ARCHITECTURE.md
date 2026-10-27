@@ -4,7 +4,7 @@ bandctl is a Textual app in front of one `Shaper` object. The app never shells o
 
 ## Settings interchange
 
-`settings.py` parses and validates a versioned JSON settings format before returning it. It includes the interface, budgets in bits per second, automatic rules with optional daily windows, and group members with PID start times and the boot ID, so an importer can reject identities from another boot. It rejects duplicate or unknown fields and overlapping groups. File reads are bounded and validated before returning. Exports replace the destination atomically with a private file. A session snapshot omits process arguments. A separate preflight checks the interface, boot ID, and every group member identity without changing the shaper. Import controls are still under development. Process arguments are not included.
+`settings.py` parses and validates a versioned JSON settings format before returning it. It includes the interface, budgets in bits per second, automatic rules with optional daily windows, and group members with PID start times and the boot ID, so an importer can reject identities from another boot. It rejects duplicate or unknown fields and overlapping groups. File reads are bounded and validated before returning. Exports replace the destination atomically with a private file. A session snapshot omits process arguments. The shaper returns locked copies of shares so a snapshot does not change during an update. A separate preflight checks the interface, boot ID, and every group member identity without changing the shaper. Import controls are still under development. Process arguments are not included.
 
 ## Shares
 

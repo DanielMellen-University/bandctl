@@ -299,6 +299,15 @@ class SharedClassTests(unittest.TestCase):
 
 
 class ApplyTests(unittest.TestCase):
+    def test_shares_snapshot_does_not_change_when_live_share_changes(self):
+        shaper, host = _shaper()
+        shaper.apply(42, None, 10, None, 100_000_000)
+        snapshot = shaper.shares
+        shaper.apply(42, None, 20, None, 100_000_000)
+        self.assertEqual(snapshot[42].up_pct, 10)
+        snapshot[42].up_pct = 99
+        self.assertEqual(shaper.shares[42].up_pct, 20)
+
     def test_conditional_apply_preserves_an_existing_limit(self):
         shaper, host = _shaper()
         message, revision = shaper.apply_tracked(42, None, 10, None, 100_000_000)
