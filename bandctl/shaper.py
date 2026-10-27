@@ -257,13 +257,11 @@ class Shaper:
                     self._revision += 1
                     share = Share(pid, group.down_pct, group.up_pct, minor, originals[pid],
                                   start_ticks=starts[pid], revision=self._revision, group=group.name)
-                    try:
-                        self._move_to_leaf(share)
-                    except Exception:
-                        self._rmdir_leaf(pid)
-                        raise
+                    # A move can fail after writing the PID. Keep the share
+                    # tracked until rollback has confirmed restoration.
                     self._shares[pid] = share
                     created.append(share)
+                    self._move_to_leaf(share)
                 self._sync()
             except Exception:
                 for share in reversed(created):

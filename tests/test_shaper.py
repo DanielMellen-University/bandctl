@@ -215,6 +215,38 @@ class SharedClassTests(unittest.TestCase):
             shaper.apply_group(group, {42: 100, 43: 100}, None, 100_000_000)
         self.assertEqual(set(shaper.shares), {42})
 
+    def test_group_move_failure_restores_member_that_may_have_moved(self):
+        shaper, host = self.group_shaper()
+        original_move = shaper._move_to_leaf
+
+        def fail_after_move(share):
+            original_move(share)
+            if share.pid == 43:
+                raise ShaperError("move failed")
+
+        with patch.object(shaper, "_move_to_leaf", side_effect=fail_after_move):
+            with self.assertRaisesRegex(ShaperError, "move failed"):
+                shaper.apply_group(Group("work", None, 20, (42, 43)), {42: 100, 43: 100}, None, 100_000_000)
+        self.assertFalse(shaper.shares)
+        destination = "/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs"
+        self.assertEqual(host.files[destination], "42\n")
+        self.assertNotIn("/sys/fs/cgroup/bandctl/bandctl-43", host.dirs)
+
+    def test_group_move_failure_keeps_member_if_restore_fails(self):
+        shaper, host = self.group_shaper()
+        original_move = shaper._move_to_leaf
+
+        def fail_after_move(share):
+            original_move(share)
+            raise ShaperError("move failed")
+
+        with patch.object(shaper, "_move_to_leaf", side_effect=fail_after_move), \
+             patch.object(shaper, "_restore_share", side_effect=ShaperError("restore failed")):
+            with self.assertRaisesRegex(ShaperError, "move failed"):
+                shaper.apply_group(Group("work", None, 20, (42,)), {42: 100}, None, 100_000_000)
+        self.assertEqual(set(shaper.shares), {42})
+        self.assertEqual(shaper.shares[42].group, "work")
+
     def test_group_sync_failure_restores_all_members(self):
         shaper, host = self.group_shaper()
         with patch.object(shaper, "_sync", side_effect=[ShaperError("forced"), None]):
