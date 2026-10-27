@@ -155,6 +155,38 @@ class SharedClassTests(unittest.TestCase):
         shaper.remove(43)
         self.assertFalse(shaper.shares)
 
+    def test_add_member_uses_group_class_and_verifies_identity(self):
+        shaper, host = self.group_shaper()
+        shaper.apply_group(Group("work", 30, 20, (42,)), {42: 100}, 100_000_000, 100_000_000)
+        with self.assertRaisesRegex(ShaperError, "changed"):
+            shaper.add_group_member("WORK", 43, expected_start_ticks=101)
+        self.assertNotIn(43, shaper.shares)
+        shaper.add_group_member("WORK", 43, expected_start_ticks=100)
+        first, second = shaper.shares[42], shaper.shares[43]
+        self.assertEqual((second.minor, second.down_pct, second.up_pct, second.group),
+                         (first.minor, 30, 20, "work"))
+        with self.assertRaisesRegex(ShaperError, "already has"):
+            shaper.add_group_member("work", 43, expected_start_ticks=100)
+
+    def test_failed_add_restores_member_and_preserves_group(self):
+        shaper, host = self.group_shaper()
+        shaper.apply_group(Group("work", None, 20, (42,)), {42: 100}, None, 100_000_000)
+        with patch.object(shaper, "_sync", side_effect=[ShaperError("forced"), None]):
+            with self.assertRaisesRegex(ShaperError, "forced"):
+                shaper.add_group_member("work", 43, expected_start_ticks=100)
+        self.assertEqual(set(shaper.shares), {42})
+        self.assertNotIn("/sys/fs/cgroup/bandctl/bandctl-43", host.dirs)
+
+    def test_failed_add_keeps_member_tracked_when_restore_fails(self):
+        shaper, host = self.group_shaper()
+        shaper.apply_group(Group("work", None, 20, (42,)), {42: 100}, None, 100_000_000)
+        with patch.object(shaper, "_restore_share", side_effect=ShaperError("restore failed")):
+            with patch.object(shaper, "_sync", side_effect=[ShaperError("forced"), None]):
+                with self.assertRaisesRegex(ShaperError, "forced"):
+                    shaper.add_group_member("work", 43, expected_start_ticks=100)
+        self.assertEqual(set(shaper.shares), {42, 43})
+        self.assertEqual(shaper.shares[43].group, "work")
+
     def test_group_update_changes_all_members_and_rolls_back_on_error(self):
         shaper, host = self.group_shaper()
         shaper.apply_group(Group("work", None, 20, (42, 43)), {42: 100, 43: 100}, None, 100_000_000)

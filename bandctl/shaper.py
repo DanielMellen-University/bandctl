@@ -282,6 +282,50 @@ class Shaper:
                     pass
                 raise
 
+    def add_group_member(self, name: str, pid: int, *, expected_start_ticks: int) -> None:
+        """Add an unlimited process instance to an existing shared class."""
+        with self._lock:
+            if self._torn:
+                raise ShaperError("shaper is shut down")
+            members = [share for share in self._shares.values()
+                       if share.group is not None and share.group.casefold() == name.strip().casefold()]
+            if not members:
+                raise ShaperError(f"group {name} has no members")
+            if pid in self._shares:
+                raise ShaperError(f"pid {pid} already has a limit")
+            if type(expected_start_ticks) is not int or expected_start_ticks < 0:
+                raise ShaperError(f"cannot verify pid {pid}")
+            try:
+                stat = self.host.read(f"/proc/{pid}/stat")
+            except OSError as exc:
+                raise ShaperError(f"cannot verify pid {pid}") from exc
+            if parse_start_ticks(stat) != expected_start_ticks:
+                raise ShaperError(f"pid {pid} changed since the process scan")
+            self._check_leaf_empty(pid)
+            original = self._read_cgroup(pid)
+            leader = members[0]
+            self._revision += 1
+            share = Share(pid, leader.down_pct, leader.up_pct, leader.minor, original,
+                          start_ticks=expected_start_ticks, revision=self._revision, group=leader.group)
+            # Track before moving so a failed write or sync can still be restored.
+            self._shares[pid] = share
+            try:
+                self._move_to_leaf(share)
+                self._sync()
+            except Exception:
+                try:
+                    self._restore_share(share)
+                except ShaperError:
+                    pass
+                else:
+                    self._shares.pop(pid, None)
+                    self._rmdir_leaf(pid)
+                try:
+                    self._sync()
+                except ShaperError:
+                    pass
+                raise
+
     def update_group(self, name: str, down_pct: int | None, up_pct: int | None,
                      down_cap: int | None, up_cap: int | None) -> None:
         """Change the shared ceiling for every current member at once."""
