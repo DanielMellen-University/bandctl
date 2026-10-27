@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Named groups can share one download and upload ceiling. Press `g` to create and edit groups or add a process. Remove a member from the main table.
+
 - Each process has a one-minute graph of its download and upload rates beside the bars.
 - `TCP total` shows an estimate of the TCP bytes each process has moved since bandctl started, in the table when there is room and always on the detail line.
 - Auto-apply rules (`t`): part of a process name plus a download percent, an upload percent, or both. Matching processes get the limit when they appear. A rule can have a daily `HH:MM` window, and the limit comes off when the window ends. Rules last for the session only.

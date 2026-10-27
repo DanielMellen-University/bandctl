@@ -253,6 +253,7 @@ class Shaper:
             self._down_cap, self._up_cap = down_cap, up_cap
             created = []
             try:
+                self._require_caps()
                 for pid in group.members:
                     self._revision += 1
                     share = Share(pid, group.down_pct, group.up_pct, minor, originals[pid],
@@ -350,6 +351,7 @@ class Shaper:
                 share.down_pct, share.up_pct = group.down_pct, group.up_pct
                 share.revision = self._revision
             try:
+                self._require_caps()
                 self._sync()
             except Exception:
                 self._shares.update(old_shares)

@@ -16,6 +16,7 @@ from textual.containers import Horizontal, Vertical
 from textual.css.query import NoMatches
 from textual.widgets import Button, DataTable, Footer, Input, Label, ProgressBar, RichLog, Static
 
+from bandctl.group_screen import GroupsScreen
 from bandctl.iface import IfaceError, default_iface, link_speed_bps
 from bandctl.history import RateHistory
 from bandctl.procscan import ProcessInfo, scan_processes
@@ -79,6 +80,7 @@ class BandctlApp(App):
         Binding("q", "quit", "Quit"),
         Binding("a", "apply_limit", "Apply"),
         Binding("u", "remove_limit", "Remove"),
+        Binding("g", "edit_groups", "Groups"),
         Binding("slash", "focus_filter", "Search", key_display="/"),
         Binding("s", "cycle_sort", "Sort"),
         Binding("n", "toggle_all", "All"),
@@ -226,9 +228,9 @@ class BandctlApp(App):
         return f"sudo {sys.executable} -m bandctl{extra}"
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
-        if self.is_mounted and self.screen_stack and isinstance(self.screen, (RootRequired, RulesScreen)):
+        if self.is_mounted and self.screen_stack and isinstance(self.screen, (RootRequired, RulesScreen, GroupsScreen)):
             if action in {"quit", "apply_limit", "remove_limit", "focus_filter", "cycle_sort", "toggle_all",
-                          "toggle_unit", "edit_rules", "refresh_now", "focus_table"}:
+                          "toggle_unit", "edit_rules", "edit_groups", "refresh_now", "focus_table"}:
                 return False
         return super().check_action(action, parameters)
 
@@ -239,13 +241,13 @@ class BandctlApp(App):
         if size is not None:
             self._width = size.width
             self._height = size.height
-        if self.is_mounted and self.screen_stack and not isinstance(self.screen, (RootRequired, RulesScreen)):
+        if self.is_mounted and self.screen_stack and not isinstance(self.screen, (RootRequired, RulesScreen, GroupsScreen)):
             self._render()
 
     def _on_screen_size(self, _old, new) -> None:
         self._width = new.width
         self._height = new.height
-        if self.is_mounted and self.screen_stack and not isinstance(self.screen, (RootRequired, RulesScreen)):
+        if self.is_mounted and self.screen_stack and not isinstance(self.screen, (RootRequired, RulesScreen, GroupsScreen)):
             self._render()
 
     def _dims(self) -> tuple[int, int]:
@@ -272,7 +274,7 @@ class BandctlApp(App):
             self.action_remove_limit()
 
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
-        if (not self.screen_stack or isinstance(self.screen, (RootRequired, RulesScreen))
+        if (not self.screen_stack or isinstance(self.screen, (RootRequired, RulesScreen, GroupsScreen))
                 or event.data_table.id != "procs"):
             return
         try:
@@ -289,7 +291,7 @@ class BandctlApp(App):
     def on_key(self, event) -> None:
         # Enter in the table applies. Enter inside a percent field is handled
         # by Input.Submitted, and a click only moves the highlight.
-        if (event.key == "enter" and not isinstance(self.screen, (RootRequired, RulesScreen))
+        if (event.key == "enter" and not isinstance(self.screen, (RootRequired, RulesScreen, GroupsScreen))
                 and self.focused is self.query_one("#procs", DataTable)):
             self.action_apply_limit()
 
@@ -337,6 +339,26 @@ class BandctlApp(App):
         if rules is not None:
             self._rules = rules
             self._note(f"{len(rules)} auto-apply rules")
+            self.action_refresh_now()
+
+    def action_edit_groups(self) -> None:
+        if not self.is_root:
+            self._note("not running as root. " + self.sudo_command(), bad=True)
+            return
+        if self._busy:
+            self._note("refresh in progress; try again")
+            return
+        if self.shaper is None:
+            self._note("no interface to shape", bad=True)
+            return
+        if not self._commit_budgets(announce=False):
+            return
+        self.push_screen(GroupsScreen(self.shaper, self._procs, *self._effective_caps()), self._groups_closed)
+
+    def _groups_closed(self, changed: bool | None) -> None:
+        if changed:
+            self._pushed_caps = self._effective_caps()
+            self._note("groups updated")
             self.action_refresh_now()
 
     def action_apply_limit(self) -> None:
@@ -398,7 +420,7 @@ class BandctlApp(App):
         self._render()
 
     async def _refresh(self) -> None:
-        if self._busy or isinstance(self.screen, (RootRequired, RulesScreen)):
+        if self._busy or isinstance(self.screen, (RootRequired, RulesScreen, GroupsScreen)):
             return
         self._busy = True
         try:
@@ -742,7 +764,9 @@ class BandctlApp(App):
         else:
             total = self._session_totals.get(proc.pid)
             data = format_bytes(sum(total)) if total is not None else "--"
-            title = f"{proc.comm}  pid {proc.pid}  TCP total {data}"
+            share = self.shaper.shares.get(proc.pid) if self.shaper else None
+            group = f"  group {share.group}" if share and share.group else ""
+            title = f"{proc.comm}  pid {proc.pid}{group}  TCP total {data}"
         self.query_one("#detail-title", Static).update(title)
         share = self.shaper.shares.get(self._selected) if self.shaper and self._selected else None
         usage = self._usage.get(self._selected, (0.0, 0.0)) if self._selected else (0.0, 0.0)
@@ -776,7 +800,7 @@ class BandctlApp(App):
     def _over_commit(self) -> str | None:
         if self.shaper is None:
             return None
-        shares = list(self.shaper.shares.values())
+        shares = list({share.minor: share for share in self.shaper.shares.values()}.values())
         messages = [
             over_commit_message("download", [share.down_pct for share in shares if share.down_pct]),
             over_commit_message("upload", [share.up_pct for share in shares if share.up_pct]),

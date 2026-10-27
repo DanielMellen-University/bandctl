@@ -65,6 +65,12 @@ The graphs beside the bars show the selected process's download and upload rates
 
 `TCP total` shows estimated downloaded plus uploaded bytes observed since bandctl started. The selected process always shows it in the detail line; the table includes it when there is room. `--` means no owned TCP socket has been observed. Byte counts do not change when rate units change. The first sample sets a baseline for existing sockets. A socket first seen later contributes its counters from zero, which can include earlier traffic. Sockets that open and close between samples, UDP, loopback, and sockets whose owner is not reported are not counted. A socket shared by several processes is counted for each owner. These totals are estimates, not billing records.
 
+## Shared limits
+
+Press `g` to open shared limits. Enter a name, a comma-separated list of running PIDs, and a download percent, upload percent, or both. Choose Create. The combined traffic of those processes shares one ceiling per direction. Each PID must be verified and have no existing limit. Select a group row to fill its name and percentages. Change the percentages and choose Update to change the shared ceiling. To add a running process with no limit, enter its PID and choose Add. The list of processes is scanned when the editor opens. Close it and rescan if a PID is missing.
+
+To remove one member, close the editor, select that process in the main table, and press `u` or Remove. The other members keep their shared ceiling. The group disappears when its last member is removed. A process must leave its group before it can receive an individual limit. The selected process's detail line names its group. Its bars compare that process's measured rate with the group's ceiling; they do not show the group's combined rate. Groups last until bandctl exits.
+
 ## Auto-apply rules
 
 Press `t` to open the rule editor. Enter part of a process name and one or both percentages, then press Enter or choose Add. Rules match process names without regard to case. They do not match command arguments. The editor needs root, like Apply. The first active matching rule wins. Select a rule and choose Delete to remove it, or Close to return to the process list. Rules last until bandctl exits.

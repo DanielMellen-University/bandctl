@@ -203,6 +203,18 @@ class SharedClassTests(unittest.TestCase):
                          [(30, 40), (30, 40)])
         self.assertEqual((shaper._down_cap, shaper._up_cap), (100_000_000, 100_000_000))
 
+    def test_group_changes_keep_capacities_needed_by_other_shares(self):
+        shaper, host = self.group_shaper()
+        shaper.apply(42, 10, None, 100_000_000, None)
+        with self.assertRaisesRegex(ShaperError, "download capacity"):
+            shaper.apply_group(Group("work", None, 20, (43,)), {43: 100}, None, 100_000_000)
+        self.assertEqual(set(shaper.shares), {42})
+        shaper.apply_group(Group("work", None, 20, (43,)), {43: 100}, 100_000_000, 100_000_000)
+        with self.assertRaisesRegex(ShaperError, "download capacity"):
+            shaper.update_group("work", None, 30, None, 100_000_000)
+        self.assertEqual(shaper.shares[43].up_pct, 20)
+        self.assertEqual(shaper._down_cap, 100_000_000)
+
     def test_group_preflight_rejects_reused_or_limited_pid(self):
         shaper, host = self.group_shaper()
         group = Group("work", None, 20, (42, 43))

@@ -19,6 +19,7 @@ python3 -m venv .venv
 | `tests/test_rules.py` | Automatic rule validation, matching, process identity, manual overrides, and retry timing. |
 | `tests/test_schedule.py` | Daily local-time windows, including boundaries and overnight schedules. |
 | `tests/test_app.py` filtering | Case-insensitive name and PID searches, no matches, and restoring the list. A search also finds idle processes under the 1% cutoff without pressing `n`, and says when nothing matches. |
+| `tests/test_group_screen.py` | Group creation, adding a PID, updating shares, rejecting an unverified PID, and counting a group once for over-commit. |
 | `tests/test_app.py` rule editor | Adding and deleting rules, time validation, Enter in a field adds the rule, and only errors use the orange status color. |
 | `tests/test_iface.py` | Default-route parsing from `ip route` and `/proc/net/route`. Speed `-1` is unknown. `--iface` names are checked against a fake `/sys/class/net`, bad names are refused, and an unknown name exits with code 2. |
 | `tests/test_procscan.py` | Socket inodes and flower endpoints against a fake `/proc`, plus one read of the real `/proc` that must not include this process. Listeners are dropped. IPv4-mapped IPv6 rows come back as IPv4. |
