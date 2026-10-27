@@ -6,7 +6,7 @@ import json
 from uuid import UUID
 from dataclasses import dataclass
 
-from bandctl.groups import Group, validate_groups
+from bandctl.groups import Group, active_groups, validate_groups
 from bandctl.rules import AutoRule
 from bandctl.schedule import DailyWindow, parse_time
 
@@ -164,3 +164,25 @@ def write_settings(path, settings: Settings) -> None:
                 os.unlink(temporary)
             except OSError:
                 pass
+
+
+def snapshot_settings(iface, down_budget, up_budget, rules, shares, boot_id) -> Settings:
+    """Capture settings and verified group identities without process arguments."""
+    groups = []
+    for group in active_groups(shares):
+        starts = tuple(shares[pid].start_ticks for pid in group.members)
+        groups.append(GroupSettings(group, starts))
+    return Settings(iface, down_budget, up_budget, tuple(rules), tuple(groups), boot_id if groups else None)
+
+
+def validate_targets(settings: Settings, iface: str, boot_id: str, processes) -> None:
+    """Check the interface and all group identities before changing anything."""
+    if settings.iface != iface:
+        raise ValueError(f"settings use interface {settings.iface}; current interface is {iface}")
+    if settings.groups and settings.boot_id != boot_id:
+        raise ValueError("group members were recorded on a different boot")
+    starts = {proc.pid: proc.start_ticks for proc in processes}
+    for item in settings.groups:
+        for pid, start in zip(item.group.members, item.starts):
+            if starts.get(pid) != start:
+                raise ValueError(f"cannot verify group member pid {pid}")

@@ -114,3 +114,37 @@ class SettingsFileTests(unittest.TestCase):
             path.write_bytes(b"\xff")
             with self.assertRaisesRegex(ValueError, "UTF-8"):
                 read_settings(path)
+
+
+class SettingsSessionTests(unittest.TestCase):
+    def test_snapshot_keeps_only_group_members_and_start_times(self):
+        from bandctl.settings import snapshot_settings
+        from bandctl.shaper import Share
+
+        boot_id = "12345678-1234-4234-8234-123456789abc"
+        shares = {42: Share(42, 30, None, 10, "/", "secret arguments", 100, group="work"),
+                  43: Share(43, 30, None, 10, "/", "other", 101, group="work"),
+                  1: Share(1, None, 10, 11, "/", "other")}
+        settings = snapshot_settings("eth0", 100, None, [], shares, boot_id)
+        self.assertEqual(settings.groups, (GroupSettings(Group("work", 30, None, (42, 43)), (100, 101)),))
+        self.assertNotIn("secret arguments", dumps(settings))
+        shares[43].start_ticks = None
+        with self.assertRaisesRegex(ValueError, "start times"):
+            snapshot_settings("eth0", 100, None, [], shares, boot_id)
+
+    def test_target_checks_are_all_read_only(self):
+        from types import SimpleNamespace
+        from bandctl.settings import validate_targets
+
+        settings = SettingsTests().settings()
+        boot = settings.boot_id
+        valid = [SimpleNamespace(pid=42, start_ticks=100), SimpleNamespace(pid=43, start_ticks=101)]
+        validate_targets(settings, "eth0", boot, valid)
+        with self.assertRaisesRegex(ValueError, "interface"):
+            validate_targets(settings, "wlan0", boot, valid)
+        with self.assertRaisesRegex(ValueError, "different boot"):
+            validate_targets(settings, "eth0", "other", valid)
+        with self.assertRaisesRegex(ValueError, "pid 43"):
+            validate_targets(settings, "eth0", boot, valid[:1])
+        with self.assertRaisesRegex(ValueError, "pid 43"):
+            validate_targets(settings, "eth0", boot, [valid[0], SimpleNamespace(pid=43, start_ticks=102)])
