@@ -9,6 +9,7 @@ import sys
 
 from bandctl import __version__
 from bandctl.app import BandctlApp
+from bandctl.cli import list_processes
 from bandctl.iface import IfaceError, check_iface
 from bandctl.settings import read_settings
 
@@ -28,7 +29,15 @@ def main(argv: list[str] | None = None) -> int:
         help="Interface to shape. Default: the device on the IPv4 default route.",
     )
     parser.add_argument("--config", help="Import this settings file at startup.")
+    commands = parser.add_subparsers(dest="command")
+    list_parser = commands.add_parser("list", help="List running processes.")
+    list_parser.add_argument("--json", action="store_true", help="Write JSON output.")
     args = parser.parse_args(argv)
+    if args.command == "list":
+        if args.config is not None:
+            parser.error("--config is only available when opening the TUI")
+        sys.stdout.write(list_processes(json_output=args.json))
+        return 0
     if args.config is not None:
         try:
             settings = read_settings(args.config)

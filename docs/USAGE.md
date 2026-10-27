@@ -35,6 +35,10 @@ sudo .venv/bin/python -m bandctl
 
 `--iface` is the device whose root qdisc will be replaced while an upload share exists, and whose ingress is redirected while a download share exists. The default is the device on the IPv4 default route. The name has to match a device in `/sys/class/net`. If it does not, bandctl exits before the UI opens and lists the devices it found, for example `no network interface named 'eth9'. Interfaces here: eth0, lo, wlan0.`
 
+## List processes without the UI
+
+`bandctl list` prints running PIDs, users, and process names. `bandctl list --json` returns PID, user, name, and socket count as JSON. Command-line arguments are omitted. Other non-interactive commands are still under development.
+
 ## Not root
 
 The window still opens. A dialog shows the `sudo` command. After you dismiss it, the process list works. Apply and Remove are disabled. No cgroup, nft table, or qdisc is created.

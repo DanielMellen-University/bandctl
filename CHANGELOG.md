@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `bandctl list` and `bandctl list --json` show running processes without opening the TUI.
+
 - Import and export rules, schedules, budgets, and groups as a JSON settings file with `x`. Group process identities are checked before import. `--config` selects the saved interface and imports explicitly at startup.
 
 - Named groups can share one download and upload ceiling. Press `g` to create and edit groups or add a process. Remove a member from the main table.

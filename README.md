@@ -11,6 +11,7 @@ Version 0.1.0. Download and upload are capped separately. Each process has a one
 ```
 bandctl/
   __main__.py    python -m bandctl
+  cli.py         non-interactive process listing
   app.py         Textual screens, keys, and the 1 second refresh
   widgets.py     the not-root dialog and the rule editor
   group_screen.py  the shared-limit editor
@@ -135,6 +136,10 @@ Press `g` to create a named shared limit. Enter a name, comma-separated PIDs, an
 Press `x` to import or export settings as JSON. Export includes the interface, submitted budgets, auto-apply rules and schedules, and groups. It replaces the chosen file and makes it readable only by its owner. Import checks the entire file before applying it. It replaces the current rules, budgets, and groups, while leaving individual limits in place. An imported group cannot use a PID that already has an individual limit. Group members must still be the same running processes on the same boot. The file's interface must match the interface bandctl is using. To select the saved interface at startup, run `sudo bandctl --config settings.json`. Rules and groups are loaded only when you choose Import.
 
 Full steps and the manual check with a real download are in [docs/USAGE.md](docs/USAGE.md) and [docs/TESTING.md](docs/TESTING.md).
+
+## Process list from a script
+
+`bandctl list` lists running processes without opening the TUI. Add `--json` for machine-readable output. The list does not include command-line arguments. Other non-interactive commands are still under development.
 
 ## What a share means
 
