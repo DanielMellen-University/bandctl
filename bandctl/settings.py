@@ -107,3 +107,49 @@ def dumps(settings: Settings) -> str:
                        "members": [{"pid": pid, "start_ticks": start} for pid, start in zip(group.members, item.starts)]})
     return json.dumps({"version": 1, "interface": settings.iface, "down_budget_bps": settings.down_budget,
                        "up_budget_bps": settings.up_budget, "rules": rules, "groups": groups}, indent=2) + "\n"
+
+
+def read_settings(path) -> Settings:
+    """Read a bounded UTF-8 settings file and validate it completely."""
+    from pathlib import Path
+
+    try:
+        with Path(path).open("rb") as stream:
+            raw = stream.read(1_048_577)
+    except OSError as exc:
+        raise ValueError(f"cannot read settings: {exc.strerror or exc}") from exc
+    if len(raw) > 1_048_576:
+        raise ValueError("settings file is too large")
+    try:
+        return loads(raw.decode("utf-8"))
+    except UnicodeDecodeError as exc:
+        raise ValueError("settings file must be UTF-8") from exc
+
+
+def write_settings(path, settings: Settings) -> None:
+    """Atomically replace a settings file with a private, validated document."""
+    import os
+    import tempfile
+    from pathlib import Path
+
+    content = dumps(settings)
+    loads(content)
+    destination = Path(path)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=destination.parent,
+                                         prefix=".bandctl-", delete=False) as stream:
+            temporary = stream.name
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, destination)
+        temporary = None
+    except OSError as exc:
+        raise ValueError(f"cannot write settings: {exc.strerror or exc}") from exc
+    finally:
+        if temporary is not None:
+            try:
+                os.unlink(temporary)
+            except OSError:
+                pass

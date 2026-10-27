@@ -54,3 +54,52 @@ class SettingsTests(unittest.TestCase):
         data["groups"].append(extra)
         with self.assertRaisesRegex(ValueError, "multiple groups"):
             loads(json.dumps(data))
+
+
+class SettingsFileTests(unittest.TestCase):
+    def test_file_round_trip_is_private(self):
+        import os
+        import stat
+        import tempfile
+        from pathlib import Path
+        from bandctl.settings import read_settings, write_settings
+
+        settings = SettingsTests().settings()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            path.write_text("old content")
+            write_settings(path, settings)
+            self.assertEqual(read_settings(path), settings)
+            self.assertEqual(stat.S_IMODE(os.stat(path).st_mode), 0o600)
+            self.assertEqual([entry.name for entry in Path(directory).iterdir()], ["settings.json"])
+
+    def test_failed_replace_keeps_original_and_cleans_temp_file(self):
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+        from bandctl.settings import write_settings
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            path.write_text("old content")
+            with patch("os.replace", side_effect=OSError("cannot replace")):
+                with self.assertRaisesRegex(ValueError, "cannot write settings"):
+                    write_settings(path, SettingsTests().settings())
+            self.assertEqual(path.read_text(), "old content")
+            self.assertEqual([entry.name for entry in Path(directory).iterdir()], ["settings.json"])
+
+    def test_rejects_oversized_invalid_utf8_and_missing_files(self):
+        import tempfile
+        from pathlib import Path
+        from bandctl.settings import read_settings
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            with self.assertRaisesRegex(ValueError, "cannot read"):
+                read_settings(path)
+            path.write_bytes(b"x" * 1_048_577)
+            with self.assertRaisesRegex(ValueError, "too large"):
+                read_settings(path)
+            path.write_bytes(b"\xff")
+            with self.assertRaisesRegex(ValueError, "UTF-8"):
+                read_settings(path)
