@@ -14,14 +14,16 @@ from bandctl.shaper import ShaperError
 class CliSession:
     """Apply CLI requests through the same shaper and validation as the TUI."""
 
-    def __init__(self, shaper, iface: str, detected_bps: int | None, processes):
+    def __init__(self, shaper, iface: str, detected_bps: int | None, processes, *, speed_source=None):
         self.shaper = shaper
         self.iface = iface
         self.detected_bps = detected_bps
         self.processes = processes
+        self.speed_source = speed_source
         self.down_budget: int | None = None
         self.up_budget: int | None = None
         self.rules = []
+        self.warnings: list[str] = []
         self._tracker = RuleTracker()
         self._scheduled = ScheduledOwnership()
 
@@ -62,11 +64,23 @@ class CliSession:
         """Refresh socket filters and reconcile automatic rules for the session."""
         now = time.monotonic() if now is None else now
         current = datetime.now().astimezone().time() if current is None else current
+        messages = []
+        if self.speed_source is not None:
+            detected = self.speed_source()
+            if detected != self.detected_bps:
+                previous = self.detected_bps
+                self.detected_bps = detected
+                try:
+                    self.shaper.set_capacities(*self.capacities())
+                except (ShaperError, OSError) as exc:
+                    self.detected_bps = previous
+                    messages.append(f"capacity update: {exc}")
         self.shaper.sample()
+        if self.shaper.flow_warning:
+            messages.append(f"flow refresh: {self.shaper.flow_warning}")
         processes = self.processes()
         shares = self.shaper.shares
         limits = {pid: (share.down_pct, share.up_pct, share.revision) for pid, share in shares.items()}
-        messages = []
         for proc, revision in self._scheduled.expired(processes, self.rules, limits, current, now):
             try:
                 self.shaper.remove(proc.pid, expected_revision=revision)
@@ -91,4 +105,7 @@ class CliSession:
                 self._tracker.applied(proc)
                 self._scheduled.applied(proc, rule, revision)
                 messages.append(f"auto rule: {message}")
+        self.warnings = [message for message in messages if message.startswith(
+            ("capacity update:", "flow refresh:", "scheduled limit for pid", "auto rule for pid")
+        )]
         return messages

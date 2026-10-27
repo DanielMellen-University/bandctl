@@ -75,6 +75,9 @@ def serve(session, path: str, *, interval: float = 1.0, on_stop=None) -> None:
                         try:
                             payload = json.loads(_read_line(connection).decode("utf-8"))
                             response, stopping = dispatch(session, payload)
+                            warnings = getattr(session, "warnings", None)
+                            if isinstance(warnings, list) and warnings:
+                                response["warnings"] = list(warnings)
                             if stopping and on_stop is not None:
                                 try:
                                     notes = on_stop()
@@ -91,8 +94,8 @@ def serve(session, path: str, *, interval: float = 1.0, on_stop=None) -> None:
                 if not stopping and time.monotonic() >= next_refresh:
                     try:
                         session.refresh()
-                    except (OSError, RuntimeError):
-                        pass
+                    except (OSError, RuntimeError, ValueError) as exc:
+                        session.warnings = [f"refresh failed: {exc}"]
                     next_refresh = time.monotonic() + interval
         finally:
             try:

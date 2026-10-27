@@ -74,3 +74,21 @@ class LimitInputTests(unittest.TestCase):
         for down, up in ((None, None), ("0", None), ("101", None), ("1.5", None), ("", None)):
             with self.subTest(down=down, up=up), self.assertRaises(ValueError):
                 limit_percentages(down, up)
+
+
+class WarningTests(unittest.TestCase):
+    def test_background_warnings_are_reported_in_text_and_json(self):
+        from bandctl.__main__ import main
+        response = {"ok": True, "result": {"pid": 42, "down": 30, "up": None}, "warnings": ["filter failed"]}
+        for json_output in (False, True):
+            stdout, stderr = io.StringIO(), io.StringIO()
+            args = ["limit", "42", "--down", "30"] + (["--json"] if json_output else [])
+            with self.subTest(json_output=json_output), patch("os.geteuid", return_value=0), \
+                 patch("bandctl.cli_client.ensure_session"), \
+                 patch("bandctl.cli_transport.request", return_value=response), \
+                 contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                self.assertEqual(main(args), 0)
+            if json_output:
+                self.assertEqual(json.loads(stdout.getvalue())["warnings"], ["filter failed"])
+            else:
+                self.assertIn("filter failed", stderr.getvalue())

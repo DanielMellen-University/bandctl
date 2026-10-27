@@ -43,6 +43,27 @@ class CliSessionTests(unittest.TestCase):
             self.session.remove("42")
         self.assertIn(42, self.shaper.shares)
 
+    def test_refresh_updates_detected_capacity_and_preserves_it_on_failure(self):
+        from datetime import time
+        self.session.limit("42", "30", None)
+        self.session.speed_source = lambda: 50_000_000
+        self.session.refresh(now=1, current=time(10))
+        self.assertEqual(self.session.detected_bps, 50_000_000)
+        self.assertEqual(self.shaper._down_cap, 50_000_000)
+        self.session.speed_source = lambda: None
+        messages = self.session.refresh(now=2, current=time(10))
+        self.assertTrue(any("capacity update" in message for message in messages))
+        self.assertTrue(any("capacity update" in message for message in self.session.warnings))
+        self.assertEqual(self.session.detected_bps, 50_000_000)
+        self.assertEqual(self.shaper._down_cap, 50_000_000)
+
+    def test_refresh_reports_socket_filter_failures(self):
+        from datetime import time
+        from unittest.mock import patch
+        with patch.object(self.shaper, "_sync_flows", side_effect=ShaperError("filter failed")):
+            self.session.refresh(now=1, current=time(10))
+        self.assertTrue(any("filter failed" in warning for warning in self.session.warnings))
+
     def test_refresh_applies_and_expires_scheduled_rules(self):
         from datetime import time
         from bandctl.schedule import DailyWindow

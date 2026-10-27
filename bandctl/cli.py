@@ -82,13 +82,16 @@ def run_command(args) -> int:
                 raise ValueError("--iface differs from the settings file interface")
             iface = saved.iface
         ensure_session(iface, start=args.command in ("limit", "import"))
-        response = request(SOCKET_PATH, payload)
+        response = request(SOCKET_PATH, payload, timeout=30.0)
         if args.command == "stop":
             wait_for_stop()
         if not response["ok"]:
             raise ValueError(response.get("error", "request failed"))
         result = response.get("result", {})
+        warnings = response.get("warnings", [])
         if args.json:
+            if warnings:
+                result = {**result, "warnings": warnings}
             print(json.dumps(result))
         elif args.command == "limit":
             down = "unlimited" if result["down"] is None else f"{result['down']}%"
@@ -101,6 +104,9 @@ def run_command(args) -> int:
         else:
             verb = "imported" if args.command == "import" else "exported"
             print(f"settings {verb}: {result['path']}")
+        if warnings and not args.json:
+            for warning in warnings:
+                print(f"bandctl: {warning}", file=sys.stderr)
         return 0
     except (ValueError, OSError, IfaceError) as exc:
         if args.json:

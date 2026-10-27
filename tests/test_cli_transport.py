@@ -61,6 +61,23 @@ class TransportTests(unittest.TestCase):
                 thread.join(timeout=3)
             self.assertFalse(thread.is_alive())
 
+    def test_session_warnings_are_returned_to_the_client(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "session.sock")
+            session = Mock()
+            session.iface = "eth0"
+            session.warnings = ["capacity update: failed"]
+            thread = threading.Thread(target=serve, args=(session, path))
+            thread.start()
+            wait_ready(path)
+            try:
+                response = request(path, {"command": "ping"})
+                self.assertEqual(response["warnings"], ["capacity update: failed"])
+                request(path, {"command": "stop"})
+            finally:
+                thread.join(timeout=3)
+            self.assertFalse(thread.is_alive())
+
     def test_stop_reports_cleanup_failure_before_reply(self):
         with tempfile.TemporaryDirectory() as directory:
             path = str(Path(directory) / "session.sock")

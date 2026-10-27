@@ -51,7 +51,8 @@ def run_worker(iface: str, *, lock_path: str = "/run/bandctl.lock", socket_path:
         try:
             shaper.recover()
             capacity = link_speed_bps(iface) if detected_bps is None else detected_bps
-            session = CliSession(shaper, iface, capacity, processes)
+            speed_source = (lambda: link_speed_bps(iface)) if detected_bps is None else None
+            session = CliSession(shaper, iface, capacity, processes, speed_source=speed_source)
             serve(session, socket_path, on_stop=shaper.teardown)
         finally:
             shaper.teardown()

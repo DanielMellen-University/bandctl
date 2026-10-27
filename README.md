@@ -151,7 +151,7 @@ sudo bandctl import settings.json
 sudo bandctl stop
 ```
 
-A name must match exactly and identify one process; use a PID when names are ambiguous. Put `--iface` before the command to choose an interface. Limit and import start a background session if one is not already running. The session keeps limits and scheduled rules active after the command exits. `stop` removes its limits and waits for cleanup. The TUI and CLI cannot control shaping at the same time. Commands that change or export the session require root. Add `--json` to a command for machine-readable output. If link speed is unknown, import a settings file with submitted capacity budgets before setting a limit.
+A name must match exactly and identify one process; use a PID when names are ambiguous. Put `--iface` before the command to choose an interface. Limit and import start a background session if one is not already running. The session keeps limits and scheduled rules active after the command exits. `stop` removes its limits and waits for cleanup. The TUI and CLI cannot control shaping at the same time. Commands that change or export the session require root. Add `--json` to a command for machine-readable output. A later session command reports recent background errors. If link speed is unknown, import a settings file with submitted capacity budgets before setting a limit.
 
 ## What a share means
 

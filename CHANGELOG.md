@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- CLI sessions update detected link capacity while they run.
+
 - CLI limit, remove, import, export, and stop commands use a locked background shaping session.
 
 - A first individual limit now requires a known capacity before moving the process.

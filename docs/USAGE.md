@@ -47,7 +47,7 @@ sudo bandctl import settings.json
 sudo bandctl stop
 ```
 
-A target is a PID or an exact process name, ignoring case. If several processes have the same name, use a PID. Shares are whole percentages from 1 to 100. Leave a direction out to leave it uncapped. The first limit or import starts a background session, which keeps limits and scheduled rules active after the command exits. `stop` removes limits and waits for cleanup. Remove, export, and stop need an existing CLI session. A root TUI and CLI session cannot run at the same time. An explicit `--iface` must match the active session. Add `--json` after a command for machine-readable results and errors.
+A target is a PID or an exact process name, ignoring case. If several processes have the same name, use a PID. Shares are whole percentages from 1 to 100. Leave a direction out to leave it uncapped. The first limit or import starts a background session, which keeps limits and scheduled rules active after the command exits. `stop` removes limits and waits for cleanup. Remove, export, and stop need an existing CLI session. A root TUI and CLI session cannot run at the same time. An explicit `--iface` must match the active session. Add `--json` after a command for machine-readable results and errors. A later limit, remove, import, export, or stop command reports recent background rule, socket filter, or capacity errors.
 
 When link speed is unknown, import a settings file containing capacity budgets before applying a limit. Import validates the complete file and process identities. It selects the saved interface when starting a session. Import and export use paths relative to the command's working directory.
 
