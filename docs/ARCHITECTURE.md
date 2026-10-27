@@ -4,6 +4,8 @@ bandctl is a Textual app in front of one `Shaper` object. The app never shells o
 
 ## Shares
 
+`groups.py` validates named group definitions. Group names are unique without regard to case, and a PID can occur only once across all groups. The shared-class enforcement and group controls are still under development.
+
 `rules.py` validates automatic-rule values and matches a case-insensitive substring of the process name. When several rules match, the first rule takes precedence. Its tracker identifies instances by PID and start time, skips processes without a known start time, preserves manual removals for a seen instance, and delays retries after a failure.
 
 `schedule.py` defines daily local-clock windows with inclusive starts and exclusive ends. A window can cross midnight; equal endpoints are rejected. Rule matching skips scheduled rules outside their window and picks the first active match.
