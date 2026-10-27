@@ -92,3 +92,18 @@ class WarningTests(unittest.TestCase):
                 self.assertEqual(json.loads(stdout.getvalue())["warnings"], ["filter failed"])
             else:
                 self.assertIn("filter failed", stderr.getvalue())
+
+
+class StopFailureTests(unittest.TestCase):
+    def test_failed_stop_reports_the_session_error_without_waiting(self):
+        from bandctl.__main__ import main
+        response = {"ok": False, "error": "cleanup failed"}
+        stderr = io.StringIO()
+        with patch("os.geteuid", return_value=0), \
+             patch("bandctl.cli_client.ensure_session"), \
+             patch("bandctl.cli_client.wait_for_stop") as wait, \
+             patch("bandctl.cli_transport.request", return_value=response), \
+             contextlib.redirect_stderr(stderr):
+            self.assertEqual(main(["stop"]), 1)
+        wait.assert_not_called()
+        self.assertIn("cleanup failed", stderr.getvalue())

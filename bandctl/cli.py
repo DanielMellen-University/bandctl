@@ -83,10 +83,10 @@ def run_command(args) -> int:
             iface = saved.iface
         ensure_session(iface, start=args.command in ("limit", "import"))
         response = request(SOCKET_PATH, payload, timeout=30.0)
-        if args.command == "stop":
-            wait_for_stop()
         if not response["ok"]:
             raise ValueError(response.get("error", "request failed"))
+        if args.command == "stop":
+            wait_for_stop()
         result = response.get("result", {})
         warnings = response.get("warnings", [])
         if args.json:
