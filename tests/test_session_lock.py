@@ -42,3 +42,49 @@ class SessionLockTests(unittest.TestCase):
                     raise ValueError("failed")
             with SessionLock(path):
                 pass
+
+
+class MainLockTests(unittest.TestCase):
+    def test_root_tui_refuses_a_contended_session(self):
+        import contextlib
+        import io
+        from unittest.mock import patch
+        from bandctl.__main__ import main
+
+        stderr = io.StringIO()
+        with patch("bandctl.__main__.os.geteuid", return_value=0), \
+             patch("bandctl.__main__.SessionLock") as lock, \
+             patch("bandctl.__main__.BandctlApp") as app, contextlib.redirect_stderr(stderr):
+            lock.return_value.acquire.side_effect = SessionLockError("another bandctl session is already running")
+            self.assertEqual(main([]), 1)
+        app.assert_not_called()
+        self.assertIn("another bandctl session", stderr.getvalue())
+
+    def test_initialization_failure_releases_lock(self):
+        from unittest.mock import Mock, patch
+        from bandctl.__main__ import main
+
+        lock = Mock()
+        with patch("bandctl.__main__.os.geteuid", return_value=0), \
+             patch("bandctl.__main__.SessionLock", return_value=lock), \
+             patch("bandctl.__main__.BandctlApp", side_effect=RuntimeError("failed")):
+            with self.assertRaisesRegex(RuntimeError, "failed"):
+                main([])
+        lock.release.assert_called_once()
+
+    def test_root_tui_cleans_up_before_unlocking(self):
+        from unittest.mock import Mock, patch
+        from bandctl.__main__ import main
+
+        order = []
+        app = Mock()
+        app.is_root = True
+        app.shaper.teardown.side_effect = lambda: order.append("cleanup")
+        lock = Mock()
+        lock.release.side_effect = lambda: order.append("unlock")
+        with patch("bandctl.__main__.os.geteuid", return_value=0), \
+             patch("bandctl.__main__.SessionLock", return_value=lock), \
+             patch("bandctl.__main__.BandctlApp", return_value=app), \
+             patch("bandctl.__main__.signal.signal"), patch("bandctl.__main__.atexit.register"):
+            self.assertEqual(main([]), 0)
+        self.assertEqual(order, ["cleanup", "unlock"])

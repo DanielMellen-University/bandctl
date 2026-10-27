@@ -39,6 +39,8 @@ sudo .venv/bin/python -m bandctl
 
 `bandctl list` prints running PIDs, users, and process names. `bandctl list --json` returns PID, user, name, and socket count as JSON. Command-line arguments are omitted. Other non-interactive commands are still under development.
 
+Only one root bandctl session can control shaping at a time. A second root session exits with an error until the first finishes cleanup. The read-only process list does not take the lock.
+
 ## Not root
 
 The window still opens. A dialog shows the `sudo` command. After you dismiss it, the process list works. Apply and Remove are disabled. No cgroup, nft table, or qdisc is created.

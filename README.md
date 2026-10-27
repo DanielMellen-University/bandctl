@@ -55,7 +55,7 @@ sudo bandctl
 sudo bandctl --iface wlan0
 ```
 
-bandctl has to be root to move processes between cgroups and to change qdiscs. The installer is what makes `sudo bandctl` find Textual. `sudo python -m bandctl` often does not.
+bandctl has to be root to move processes between cgroups and to change qdiscs. Only one root bandctl session can control shaping at a time. The installer is what makes `sudo bandctl` find Textual. `sudo python -m bandctl` often does not.
 
 Without root the UI still opens. It lists processes and tells you the exact command to re-run. Apply and remove stay disabled, and nothing is installed on the interface.
 

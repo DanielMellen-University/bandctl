@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Root TUI sessions hold an exclusive lock until cleanup finishes, so two sessions cannot control the same shaping state.
+
 - `bandctl list` and `bandctl list --json` show running processes without opening the TUI.
 
 - Import and export rules, schedules, budgets, and groups as a JSON settings file with `x`. Group process identities are checked before import. `--config` selects the saved interface and imports explicitly at startup.

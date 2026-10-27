@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import atexit
+import os
 import signal
 import sys
 
@@ -12,6 +13,7 @@ from bandctl.app import BandctlApp
 from bandctl.cli import list_processes
 from bandctl.iface import IfaceError, check_iface
 from bandctl.settings import read_settings
+from bandctl.session_lock import SessionLock, SessionLockError
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -51,16 +53,31 @@ def main(argv: list[str] | None = None) -> int:
             check_iface(args.iface)
         except IfaceError as exc:
             parser.error(str(exc))
-    app = BandctlApp(iface=args.iface, startup_settings=args.config)
+    lock = None
+    if os.geteuid() == 0:
+        lock = SessionLock()
+        try:
+            lock.acquire()
+        except SessionLockError as exc:
+            print(f"bandctl: {exc}", file=sys.stderr)
+            return 1
+    try:
+        app = BandctlApp(iface=args.iface, startup_settings=args.config)
 
-    def _stop(signum, _frame) -> None:
-        if app.shaper is not None:
-            app.shaper.teardown()
-        raise SystemExit(128 + signum)
+        def _stop(signum, _frame) -> None:
+            if app.shaper is not None:
+                app.shaper.teardown()
+            raise SystemExit(128 + signum)
 
-    signal.signal(signal.SIGTERM, _stop)
-    atexit.register(_cleanup, app)
-    app.run()
+        signal.signal(signal.SIGTERM, _stop)
+        atexit.register(_cleanup, app)
+        try:
+            app.run()
+        finally:
+            _cleanup(app)
+    finally:
+        if lock is not None:
+            lock.release()
     return 0
 
 
