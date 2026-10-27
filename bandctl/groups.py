@@ -48,3 +48,22 @@ def validate_groups(groups: list[Group]) -> None:
         if members.intersection(group.members):
             raise ValueError("a process cannot belong to multiple groups")
         members.update(group.members)
+
+
+def active_groups(shares) -> list[Group]:
+    """Build group definitions from a snapshot of installed process shares."""
+    grouped = {}
+    for share in shares.values():
+        if share.group is None:
+            continue
+        key = share.group.casefold()
+        if key not in grouped:
+            grouped[key] = (share, [])
+        first, members = grouped[key]
+        if (share.group, share.minor, share.down_pct, share.up_pct) != (
+            first.group, first.minor, first.down_pct, first.up_pct
+        ):
+            raise ValueError("group members have conflicting limits")
+        members.append(share.pid)
+    return [Group(first.group, first.down_pct, first.up_pct, tuple(sorted(members)))
+            for first, members in sorted(grouped.values(), key=lambda entry: entry[0].group.casefold())]

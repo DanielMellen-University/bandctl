@@ -31,3 +31,27 @@ class GroupTests(unittest.TestCase):
             validate_groups([first, Group("games", 5, None)])
         with self.assertRaisesRegex(ValueError, "multiple groups"):
             validate_groups([first, Group("Browser", 5, None, (12,))])
+
+
+class ActiveGroupsTests(unittest.TestCase):
+    def test_groups_are_sorted_with_sorted_members_and_skip_individual_shares(self):
+        from bandctl.groups import active_groups
+        from bandctl.shaper import Share
+
+        shares = {
+            43: Share(43, 30, None, 10, "/", group="Work"),
+            42: Share(42, 30, None, 10, "/", group="Work"),
+            9: Share(9, None, 5, 11, "/", group="Audio"),
+            1: Share(1, 10, None, 12, "/"),
+        }
+        self.assertEqual(active_groups(shares), [Group("Audio", None, 5, (9,)), Group("Work", 30, None, (42, 43))])
+
+    def test_conflicting_group_state_is_rejected(self):
+        from bandctl.groups import active_groups
+        from bandctl.shaper import Share
+
+        for second in (Share(43, 20, None, 10, "/", group="work"),
+                       Share(43, 30, None, 11, "/", group="work"),
+                       Share(43, 30, None, 10, "/", group="WORK")):
+            with self.subTest(second=second), self.assertRaisesRegex(ValueError, "conflicting"):
+                active_groups({42: Share(42, 30, None, 10, "/", group="work"), 43: second})
