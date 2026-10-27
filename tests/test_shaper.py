@@ -155,6 +155,22 @@ class SharedClassTests(unittest.TestCase):
         shaper.remove(43)
         self.assertFalse(shaper.shares)
 
+    def test_group_update_changes_all_members_and_rolls_back_on_error(self):
+        shaper, host = self.group_shaper()
+        shaper.apply_group(Group("work", None, 20, (42, 43)), {42: 100, 43: 100}, None, 100_000_000)
+        old_revisions = [shaper.shares[pid].revision for pid in (42, 43)]
+        shaper.update_group("WORK", 30, 40, 100_000_000, 100_000_000)
+        for pid, revision in zip((42, 43), old_revisions):
+            share = shaper.shares[pid]
+            self.assertEqual((share.down_pct, share.up_pct), (30, 40))
+            self.assertNotEqual(share.revision, revision)
+        with patch.object(shaper, "_sync", side_effect=[ShaperError("forced"), None]):
+            with self.assertRaisesRegex(ShaperError, "forced"):
+                shaper.update_group("work", None, 10, None, 100_000_000)
+        self.assertEqual([(shaper.shares[pid].down_pct, shaper.shares[pid].up_pct) for pid in (42, 43)],
+                         [(30, 40), (30, 40)])
+        self.assertEqual((shaper._down_cap, shaper._up_cap), (100_000_000, 100_000_000))
+
     def test_group_preflight_rejects_reused_or_limited_pid(self):
         shaper, host = self.group_shaper()
         group = Group("work", None, 20, (42, 43))

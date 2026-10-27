@@ -282,6 +282,42 @@ class Shaper:
                     pass
                 raise
 
+    def update_group(self, name: str, down_pct: int | None, up_pct: int | None,
+                     down_cap: int | None, up_cap: int | None) -> None:
+        """Change the shared ceiling for every current member at once."""
+        try:
+            group = Group(name, down_pct, up_pct)
+        except ValueError as exc:
+            raise ShaperError(str(exc)) from exc
+        with self._lock:
+            if self._torn:
+                raise ShaperError("shaper is shut down")
+            members = [share for share in self._shares.values()
+                       if share.group is not None and share.group.casefold() == group.name.casefold()]
+            if not members:
+                raise ShaperError(f"group {group.name} has no members")
+            if group.down_pct is not None and not down_cap:
+                raise ShaperError("download capacity is unknown; enter a download budget")
+            if group.up_pct is not None and not up_cap:
+                raise ShaperError("upload capacity is unknown; enter an upload budget")
+            old_shares = {share.pid: _copy_share(share) for share in members}
+            old_caps = (self._down_cap, self._up_cap)
+            self._down_cap, self._up_cap = down_cap, up_cap
+            for share in members:
+                self._revision += 1
+                share.down_pct, share.up_pct = group.down_pct, group.up_pct
+                share.revision = self._revision
+            try:
+                self._sync()
+            except Exception:
+                self._shares.update(old_shares)
+                self._down_cap, self._up_cap = old_caps
+                try:
+                    self._sync()
+                except ShaperError:
+                    pass
+                raise
+
     def apply_tracked(
         self, pid: int, down_pct: int | None, up_pct: int | None,
         down_cap: int | None, up_cap: int | None, command: str = "", *,
