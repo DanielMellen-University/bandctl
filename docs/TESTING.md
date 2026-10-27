@@ -58,3 +58,14 @@ Do this on a machine where losing the current qdisc for a minute is acceptable. 
 Upload-only is the same with a sender (`iperf3 -c` or similar) and `tc -s class show dev eth0`. No IFB device should appear.
 
 If you kill the process with `kill -9`, start bandctl once as root and quit. `/run/bandctl.json` from the crashed run is what the second start uses to restore the qdisc and the cgroups.
+
+## Manual check of the command line, needs root
+
+Same warning as above: the root qdisc is replaced while a limit exists. These steps use the same curl download.
+
+1. Start the download from step 4 above. Note the PID with `bandctl list`.
+2. `sudo bandctl --iface eth0 limit <pid> --down 10`. It prints `pid <pid>: down 10%, up unlimited` and returns. If the header would say the link is unknown, the command fails and asks for a budget; import a settings file with a capacity budget first.
+3. Confirm the same `tc` and `nft` output as step 6 above. The limit stays after the command exits because a background session holds it.
+4. `sudo bandctl export settings.json`, then `sudo bandctl remove <pid>`, then `sudo bandctl import settings.json`. Export and import should each print the path.
+5. `sudo bandctl stop`. It prints `session stopped` after cleanup. The qdisc, nft table, IFB device, and cgroup should be gone, as in step 8.
+6. While a session is running, `sudo bandctl` (the TUI) should exit with "another bandctl session is already running".

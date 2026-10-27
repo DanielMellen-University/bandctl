@@ -4,7 +4,7 @@ Terminal UI for per-process bandwidth shares on Linux.
 
 Pick a running process and give it a download percent and an upload percent. Each percent is a ceiling on that direction's link capacity: 30% of a 100 Mbit/s link is 30 Mbit/s, and the process cannot go past it while bandctl is running. Under the UI this is a cgroup, nftables marks, and an HTB qdisc. Quit, and those rules are removed.
 
-Version 0.1.0. Download and upload are capped separately. Each process has a one-minute graph of its download and upload rates and an estimated count of the TCP data it has moved since bandctl started. Auto-apply rules put a limit on matching processes as they show up, optionally only during a daily time window. `/` searches the process list by name, pid, or user. Rates can be shown in bits or bytes, the table sorts by measured usage, and a log shows any tc, nft, or cgroup errors. Shares, groups, and rules are not saved across runs.
+Version 0.1.0. Download and upload are capped separately. Each process has a one-minute graph of its download and upload rates and an estimated count of the TCP data it has moved since bandctl started. Auto-apply rules put a limit on matching processes as they show up, optionally only during a daily time window. `/` searches the process list by name, pid, or user. Rates can be shown in bits or bytes, the table sorts by measured usage, and a log shows any tc, nft, or cgroup errors. Named groups share one ceiling, and settings can be exported and imported as JSON. Every action is also available as a non-interactive command, such as `sudo bandctl limit firefox --down 30`. Shares, groups, and rules are not saved across runs.
 
 ## Layout
 
@@ -12,8 +12,12 @@ Version 0.1.0. Download and upload are capped separately. Each process has a one
 bandctl/
   __main__.py    python -m bandctl
   cli.py         non-interactive commands
+  cli_client.py   find or start the background session
+  cli_protocol.py CLI request validation and dispatch
   cli_session.py  CLI session and rule reconciliation
+  cli_transport.py  private local socket for CLI requests
   cli_worker.py   background shaping session
+  session_lock.py exclusive lock for shaping state
   app.py         Textual screens, keys, and the 1 second refresh
   widgets.py     the not-root dialog and the rule editor
   group_screen.py  the shared-limit editor
