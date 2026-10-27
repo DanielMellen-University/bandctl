@@ -165,6 +165,10 @@ class Shaper:
             raise ShaperError("enter a download percent, an upload percent, or both")
         if self._torn:
             raise ShaperError("shaper is shut down")
+        if down_pct is not None and not down_cap:
+            raise ShaperError("download capacity is unknown; enter a download budget")
+        if up_pct is not None and not up_cap:
+            raise ShaperError("upload capacity is unknown; enter an upload budget")
         with self._lock:
             if pid in self._shares and self._shares[pid].group is not None:
                 raise ShaperError("remove the process from its group before applying an individual limit")

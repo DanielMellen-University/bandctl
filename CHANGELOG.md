@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A first individual limit now requires a known capacity before moving the process.
+
 - Root TUI sessions hold an exclusive lock until cleanup finishes, so two sessions cannot control the same shaping state.
 
 - `bandctl list` and `bandctl list --json` show running processes without opening the TUI.

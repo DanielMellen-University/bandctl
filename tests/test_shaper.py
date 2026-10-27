@@ -373,6 +373,17 @@ class ImportGroupTests(unittest.TestCase):
 
 
 class ApplyTests(unittest.TestCase):
+    def test_first_share_needs_capacity_before_moving_process(self):
+        for down, up, down_cap, up_cap in ((30, None, None, None), (None, 10, None, 0), (30, 10, 100_000_000, None)):
+            with self.subTest(down=down, up=up):
+                shaper, host = _shaper()
+                with self.assertRaisesRegex(ShaperError, "capacity is unknown"):
+                    shaper.apply(42, down, up, down_cap, up_cap)
+                self.assertFalse(shaper.shares)
+                self.assertFalse(host.commands)
+                self.assertNotIn("/sys/fs/cgroup/bandctl/bandctl-42", host.dirs)
+                self.assertNotIn("/run/bandctl.json", host.files)
+
     def test_shares_snapshot_does_not_change_when_live_share_changes(self):
         shaper, host = _shaper()
         shaper.apply(42, None, 10, None, 100_000_000)
