@@ -298,6 +298,80 @@ class SharedClassTests(unittest.TestCase):
             self.assertEqual(shaper.sample(), {42: (0.0, 4000.0), 43: (0.0, 4000.0)})
 
 
+class ImportGroupTests(unittest.TestCase):
+    BOOT = "12345678-1234-4234-8234-123456789abc"
+
+    def setup_shaper(self):
+        shaper, host = _shaper()
+        host.files["/proc/sys/kernel/random/boot_id"] = self.BOOT
+        for pid in (42, 43, 44):
+            host.files[f"/proc/{pid}/stat"] = f"{pid} (work) S " + "0 " * 18 + "100"
+            host.files[f"/proc/{pid}/cgroup"] = "0::/user.slice/session.scope\n"
+        return shaper, host
+
+    def settings(self, groups):
+        from bandctl.settings import GroupSettings, Settings
+        items = tuple(GroupSettings(group, tuple(100 for _ in group.members)) for group in groups)
+        return Settings("eth0", None, None, (), items, self.BOOT if items else None)
+
+    def test_replace_groups_keeps_adds_and_removes_members(self):
+        shaper, host = self.setup_shaper()
+        shaper.apply_group(Group("old", 20, None, (42, 44)), {42: 100, 44: 100}, 100_000_000, None)
+        settings = self.settings([Group("new", 30, 10, (42, 43))])
+        shaper.replace_groups(settings, 100_000_000, 100_000_000)
+        self.assertEqual(set(shaper.shares), {42, 43})
+        self.assertEqual(shaper.shares[42].group, "new")
+        self.assertEqual(shaper.shares[42].minor, shaper.shares[43].minor)
+        self.assertEqual((shaper.shares[42].down_pct, shaper.shares[43].up_pct), (30, 10))
+        self.assertNotIn("/sys/fs/cgroup/bandctl/bandctl-44", host.dirs)
+        self.assertEqual(host.files["/sys/fs/cgroup/user.slice/session.scope/cgroup.procs"], "44\n")
+
+    def test_preflight_rejects_reused_pid_and_individual_limits(self):
+        shaper, host = self.setup_shaper()
+        settings = self.settings([Group("new", 30, None, (42, 43))])
+        host.files["/proc/43/stat"] = "43 (new) S " + "0 " * 18 + "101"
+        with self.assertRaisesRegex(ShaperError, "changed"):
+            shaper.replace_groups(settings, 100_000_000, None)
+        self.assertFalse(shaper.shares)
+        self.assertEqual(host.commands, [])
+        host.files["/proc/43/stat"] = "43 (work) S " + "0 " * 18 + "100"
+        shaper.apply(42, None, 10, None, 100_000_000)
+        with self.assertRaisesRegex(ShaperError, "individual"):
+            shaper.replace_groups(settings, 100_000_000, 100_000_000)
+        self.assertIsNone(shaper.shares[42].group)
+
+    def test_preflight_rejects_wrong_boot_and_unknown_capacity(self):
+        shaper, host = self.setup_shaper()
+        settings = self.settings([Group("new", 30, None, (42,))])
+        host.files["/proc/sys/kernel/random/boot_id"] = "different"
+        with self.assertRaisesRegex(ShaperError, "different boot"):
+            shaper.replace_groups(settings, 100_000_000, None)
+        host.files["/proc/sys/kernel/random/boot_id"] = self.BOOT
+        with self.assertRaisesRegex(ShaperError, "capacity"):
+            shaper.replace_groups(settings, None, None)
+        self.assertFalse(shaper.shares)
+
+    def test_sync_failure_restores_previous_groups_and_processes(self):
+        shaper, host = self.setup_shaper()
+        shaper.apply_group(Group("old", 20, None, (42, 44)), {42: 100, 44: 100}, 100_000_000, None)
+        previous = shaper.shares
+        with patch.object(shaper, "_sync", side_effect=[ShaperError("forced"), None]):
+            with self.assertRaisesRegex(ShaperError, "forced"):
+                shaper.replace_groups(self.settings([Group("new", 30, None, (42, 43))]), 100_000_000, None)
+        self.assertEqual(shaper.shares, previous)
+        self.assertEqual(host.files["/sys/fs/cgroup/bandctl/bandctl-44/cgroup.procs"], "44\n")
+        self.assertNotIn("/sys/fs/cgroup/bandctl/bandctl-43", host.dirs)
+
+    def test_rollback_failure_reports_and_tracks_member(self):
+        shaper, host = self.setup_shaper()
+        settings = self.settings([Group("new", 30, None, (42,))])
+        with patch.object(shaper, "_sync", side_effect=[ShaperError("forced"), None]), \
+             patch.object(shaper, "_restore_share", side_effect=ShaperError("restore failed")):
+            with self.assertRaisesRegex(ShaperError, "rollback incomplete"):
+                shaper.replace_groups(settings, 100_000_000, None)
+        self.assertEqual(shaper.shares[42].group, "new")
+
+
 class ApplyTests(unittest.TestCase):
     def test_shares_snapshot_does_not_change_when_live_share_changes(self):
         shaper, host = _shaper()

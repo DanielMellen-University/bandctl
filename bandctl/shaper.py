@@ -326,6 +326,103 @@ class Shaper:
                     pass
                 raise
 
+    def replace_groups(self, settings, down_cap: int | None, up_cap: int | None) -> None:
+        """Replace group shares after verifying the whole import under the lock."""
+        from bandctl.settings import plan_group_changes
+
+        with self._lock:
+            if self._torn:
+                raise ShaperError("shaper is shut down")
+            if settings.iface != self.iface:
+                raise ShaperError("settings use a different interface")
+            if settings.groups:
+                try:
+                    boot_id = self.host.read("/proc/sys/kernel/random/boot_id").strip()
+                except OSError as exc:
+                    raise ShaperError("cannot verify the current boot") from exc
+                if boot_id != settings.boot_id:
+                    raise ShaperError("group members were recorded on a different boot")
+            try:
+                changes = plan_group_changes(settings, self._shares)
+            except ValueError as exc:
+                raise ShaperError(str(exc)) from exc
+            originals = {}
+            for item in settings.groups:
+                if not item.group.members:
+                    raise ShaperError(f"group {item.group.name} has no members")
+                for pid, start in zip(item.group.members, item.starts):
+                    try:
+                        stat = self.host.read(f"/proc/{pid}/stat")
+                    except OSError as exc:
+                        raise ShaperError(f"cannot verify pid {pid}") from exc
+                    if parse_start_ticks(stat) != start:
+                        raise ShaperError(f"pid {pid} changed since the process scan")
+                    if pid in changes.add:
+                        self._check_leaf_empty(pid)
+                        originals[pid] = self._read_cgroup(pid)
+            old = {pid: _copy_share(share) for pid, share in self._shares.items()}
+            old_caps = (self._down_cap, self._up_cap)
+            replacement = {pid: _copy_share(share) for pid, share in old.items() if share.group is None}
+            for item in settings.groups:
+                minor = self._alloc_minor()
+                for pid, start in zip(item.group.members, item.starts):
+                    previous = old.get(pid)
+                    self._revision += 1
+                    replacement[pid] = Share(
+                        pid, item.group.down_pct, item.group.up_pct, minor,
+                        previous.original_cgroup if previous else originals[pid],
+                        previous.command if previous else "", start, self._revision, item.group.name,
+                    )
+            removed = []
+            attempted = []
+            self._shares = replacement
+            self._down_cap, self._up_cap = down_cap, up_cap
+            try:
+                self._require_caps()
+                for pid in sorted(changes.remove):
+                    removed.append(old[pid])
+                    self._restore_share(old[pid])
+                for pid in sorted(changes.add):
+                    share = replacement[pid]
+                    attempted.append(share)
+                    self._move_to_leaf(share)
+                self._sync()
+            except Exception as exc:
+                problems = []
+                self._shares = old
+                self._down_cap, self._up_cap = old_caps
+                for share in reversed(attempted):
+                    try:
+                        self._restore_share(share)
+                    except ShaperError as restore_error:
+                        self._shares[share.pid] = share
+                        problems.append(str(restore_error))
+                    else:
+                        self._rmdir_leaf(share.pid)
+                for share in removed:
+                    status = self._process_status(share)
+                    if status in ("gone", "changed"):
+                        self._shares.pop(share.pid, None)
+                    elif status != "same":
+                        problems.append(f"cannot verify pid {share.pid} during rollback")
+                    else:
+                        try:
+                            self._move_to_leaf(share)
+                        except (OSError, ShaperError) as move_error:
+                            problems.append(f"cannot restore group for pid {share.pid}: {move_error}")
+                if problems and attempted:
+                    # A newly moved member may still need the imported capacities.
+                    self._down_cap, self._up_cap = down_cap, up_cap
+                try:
+                    self._sync()
+                except (OSError, ShaperError) as sync_error:
+                    problems.append(str(sync_error))
+                if problems:
+                    raise ShaperError(f"{exc}; rollback incomplete: {'; '.join(problems)}") from exc
+                raise
+            for pid in changes.remove:
+                self._rmdir_leaf(pid)
+
     def update_group(self, name: str, down_pct: int | None, up_pct: int | None,
                      down_cap: int | None, up_cap: int | None) -> None:
         """Change the shared ceiling for every current member at once."""
