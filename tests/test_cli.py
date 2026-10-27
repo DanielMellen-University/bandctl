@@ -44,3 +44,33 @@ class ListTests(unittest.TestCase):
         with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as caught:
             main(["--config", "settings.json", "list"])
         self.assertEqual(caught.exception.code, 2)
+
+
+class LimitInputTests(unittest.TestCase):
+    def test_resolves_pid_and_case_insensitive_exact_name(self):
+        from bandctl.cli import resolve_process
+        first = ProcessInfo(42, "Firefox", "", "user", 0, 100)
+        second = ProcessInfo(43, "firefox-helper", "", "user", 0, 101)
+        self.assertEqual(resolve_process("42", [first, second]), first)
+        self.assertEqual(resolve_process("firefox", [first, second]), first)
+        with self.assertRaisesRegex(ValueError, "no process"):
+            resolve_process("fox", [first, second])
+
+    def test_refuses_ambiguous_or_unverified_processes(self):
+        from bandctl.cli import resolve_process
+        processes = [ProcessInfo(42, "firefox", "", "user", 0, 100),
+                     ProcessInfo(43, "Firefox", "", "user", 0, 101)]
+        with self.assertRaisesRegex(ValueError, "more than one"):
+            resolve_process("firefox", processes)
+        with self.assertRaisesRegex(ValueError, "cannot verify"):
+            resolve_process("42", [ProcessInfo(42, "firefox", "", "user", 0)])
+        with self.assertRaisesRegex(ValueError, "enter"):
+            resolve_process("  ", processes)
+
+    def test_percentages_match_tui_validation(self):
+        from bandctl.cli import limit_percentages
+        self.assertEqual(limit_percentages("30", "10%"), (30, 10))
+        self.assertEqual(limit_percentages(None, "100"), (None, 100))
+        for down, up in ((None, None), ("0", None), ("101", None), ("1.5", None), ("", None)):
+            with self.subTest(down=down, up=up), self.assertRaises(ValueError):
+                limit_percentages(down, up)
