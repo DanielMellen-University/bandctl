@@ -15,6 +15,7 @@ python3 -m venv .venv
 | `tests/test_rates.py` | Percent parsing (rejects 0, 101, and junk). 30% of 100 Mbit/s is 30 Mbit/s and 3.75 MB/s. Over-commit keeps the ceils and shrinks the rates. |
 | `tests/test_history.py` | One-minute rate history, missing samples, process removal, and peak grouping for narrow graphs. |
 | `tests/test_traffic.py` socket accounting | Individual socket deltas, new sockets, resets, sample gaps, PID totals, and retention of idle processes. |
+| `tests/test_settings.py` | Settings round trips and rejection of invalid fields, schedules, budgets, process identities, and overlapping groups. |
 | `tests/test_groups.py` | Group name, share, and membership validation, including duplicate names and processes, and the active group view. |
 | `tests/test_rules.py` | Automatic rule validation, matching, process identity, manual overrides, and retry timing. |
 | `tests/test_schedule.py` | Daily local-time windows, including boundaries and overnight schedules. |

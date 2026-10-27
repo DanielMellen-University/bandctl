@@ -2,6 +2,10 @@
 
 bandctl is a Textual app in front of one `Shaper` object. The app never shells out itself. `shaper.py` is the only place that runs `tc`, `nft`, `ip`, and `modprobe`, or that writes a cgroup file.
 
+## Settings interchange
+
+`settings.py` parses and validates a versioned JSON settings format before returning it. It includes the interface, budgets in bits per second, automatic rules with optional daily windows, and group members with PID start times. It rejects duplicate or unknown fields and overlapping groups. The file operations and import controls are still under development. Process arguments are not included.
+
 ## Shares
 
 `groups.py` validates named group definitions and builds a sorted group view from installed shares, rejecting conflicting member state. Group names are unique without regard to case, and a PID can occur only once across all groups. The shaper plans one HTB class per class ID, even when several process leaves share it. Members with conflicting limits for one class ID are rejected. The shaper can install a group of unlimited process instances after checking their start times. A failed installation, including a failed process move, restores members where possible and keeps any process that could not be restored tracked. The shaper can add a verified, unlimited process to an existing group, and retains tracking if a failed addition cannot be restored. The shaper can update every member's ceiling together, restoring the old shares if synchronization fails. The group editor creates groups, updates ceilings, and adds members. Removing a member uses the existing per-process Remove action.
