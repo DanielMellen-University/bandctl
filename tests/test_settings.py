@@ -13,7 +13,8 @@ class SettingsTests(unittest.TestCase):
     def settings(self):
         return Settings("eth0", 100_000_000, None,
                         (AutoRule("steam", 20, 5, DailyWindow(time(18), time(23))),),
-                        (GroupSettings(Group("work", 30, None, (42, 43)), (100, 101)),))
+                        (GroupSettings(Group("work", 30, None, (42, 43)), (100, 101)),),
+                        "12345678-1234-4234-8234-123456789abc")
 
     def test_round_trip_includes_rules_schedules_groups_and_budgets(self):
         settings = self.settings()
@@ -46,6 +47,16 @@ class SettingsTests(unittest.TestCase):
         data["groups"][0]["members"][0]["start_ticks"] = None
         with self.assertRaises(ValueError):
             loads(json.dumps(data))
+
+    def test_groups_require_a_valid_boot_identity(self):
+        data = json.loads(dumps(self.settings()))
+        for boot_id in (None, "invalid", True, "12345678-1234-4234-8234-123456789ABC"):
+            data["boot_id"] = boot_id
+            with self.subTest(boot_id=boot_id), self.assertRaises(ValueError):
+                loads(json.dumps(data))
+        data["groups"] = []
+        data["boot_id"] = None
+        self.assertIsNone(loads(json.dumps(data)).boot_id)
 
     def test_rejects_overlapping_groups(self):
         data = json.loads(dumps(self.settings()))

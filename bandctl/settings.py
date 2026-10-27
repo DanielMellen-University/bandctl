@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from uuid import UUID
 from dataclasses import dataclass
 
 from bandctl.groups import Group, validate_groups
@@ -27,6 +28,7 @@ class Settings:
     up_budget: int | None
     rules: tuple[AutoRule, ...]
     groups: tuple[GroupSettings, ...]
+    boot_id: str | None = None
 
     def __post_init__(self) -> None:
         if (not isinstance(self.iface, str) or not self.iface or self.iface in (".", "..")
@@ -37,6 +39,15 @@ class Settings:
             if budget is not None and (type(budget) is not int or budget < 1):
                 raise ValueError("budgets must be positive whole numbers of bits per second")
         validate_groups([item.group for item in self.groups])
+        if self.groups and self.boot_id is None:
+            raise ValueError("groups need a boot ID to verify process identities")
+        if self.boot_id is not None:
+            try:
+                canonical = str(UUID(self.boot_id))
+            except (ValueError, TypeError, AttributeError) as exc:
+                raise ValueError("invalid boot ID") from exc
+            if canonical != self.boot_id:
+                raise ValueError("invalid boot ID")
 
 
 def _object(value, fields: set[str], label: str) -> dict:
@@ -66,7 +77,7 @@ def loads(text: str) -> Settings:
         raw = json.loads(text, object_pairs_hook=_unique_pairs)
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise ValueError("invalid settings JSON") from exc
-    obj = _object(raw, {"version", "interface", "down_budget_bps", "up_budget_bps", "rules", "groups"}, "settings")
+    obj = _object(raw, {"version", "interface", "down_budget_bps", "up_budget_bps", "rules", "groups", "boot_id"}, "settings")
     if type(obj["version"]) is not int or obj["version"] != 1:
         raise ValueError("unsupported settings version")
     rules = []
@@ -89,7 +100,7 @@ def loads(text: str) -> Settings:
                    for member in _list(item["members"], "group members")]
         group = Group(item["name"], item["down"], item["up"], tuple(member["pid"] for member in members))
         groups.append(GroupSettings(group, tuple(member["start_ticks"] for member in members)))
-    return Settings(obj["interface"], obj["down_budget_bps"], obj["up_budget_bps"], tuple(rules), tuple(groups))
+    return Settings(obj["interface"], obj["down_budget_bps"], obj["up_budget_bps"], tuple(rules), tuple(groups), obj["boot_id"])
 
 
 def dumps(settings: Settings) -> str:
@@ -106,7 +117,7 @@ def dumps(settings: Settings) -> str:
         groups.append({"name": group.name, "down": group.down_pct, "up": group.up_pct,
                        "members": [{"pid": pid, "start_ticks": start} for pid, start in zip(group.members, item.starts)]})
     return json.dumps({"version": 1, "interface": settings.iface, "down_budget_bps": settings.down_budget,
-                       "up_budget_bps": settings.up_budget, "rules": rules, "groups": groups}, indent=2) + "\n"
+                       "up_budget_bps": settings.up_budget, "rules": rules, "groups": groups, "boot_id": settings.boot_id}, indent=2) + "\n"
 
 
 def read_settings(path) -> Settings:
