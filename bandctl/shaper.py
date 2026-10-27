@@ -292,11 +292,14 @@ class Shaper:
             down = self._class_bytes(IFB) if self._ifb else {}
             up = self._class_bytes(self.iface) if self._egress else {}
             result: dict[int, tuple[float, float]] = {}
+            by_minor: dict[int, tuple[float, float]] = {}
             for pid, share in self._shares.items():
-                result[pid] = (
-                    self._delta_bps("down", share.minor, down.get(share.minor), dt),
-                    self._delta_bps("up", share.minor, up.get(share.minor), dt),
-                )
+                if share.minor not in by_minor:
+                    by_minor[share.minor] = (
+                        self._delta_bps("down", share.minor, down.get(share.minor), dt),
+                        self._delta_bps("up", share.minor, up.get(share.minor), dt),
+                    )
+                result[pid] = by_minor[share.minor]
             self._sample_at = now
             return result
 
@@ -566,6 +569,14 @@ class Shaper:
         self._ifb = True
 
     def _sync_direction(self, dev: str, shares: list[Share], capacity: int) -> None:
+        # Members with the same minor share one class and one ceiling.
+        unique: dict[int, Share] = {}
+        for share in shares:
+            previous = unique.get(share.minor)
+            if previous is not None and (previous.down_pct, previous.up_pct) != (share.down_pct, share.up_pct):
+                raise ShaperError(f"conflicting limits for class {share.minor}")
+            unique[share.minor] = share
+        shares = list(unique.values())
         ceils_bps: list[int] = []
         for share in shares:
             percent = share.down_pct if dev == IFB else share.up_pct

@@ -134,6 +134,37 @@ class ParseTests(unittest.TestCase):
         self.assertIn("hook prerouting", script)
 
 
+class SharedClassTests(unittest.TestCase):
+    def test_members_share_one_class_and_one_ceiling(self):
+        shaper, host = _shaper()
+        shares = [Share(42, None, 60, 10, "/"), Share(43, None, 60, 10, "/")]
+        shaper._sync_direction("eth0", shares, 100_000_000)
+        classes = [line for line in _joined(host) if "classid 1:10 " in line]
+        self.assertEqual(len(classes), 1)
+        self.assertIn("rate 60000kbit ceil 60000kbit", classes[0])
+        script = nft_script(shares)
+        self.assertIn('"bandctl-42" ct mark set 10', script)
+        self.assertIn('"bandctl-43" ct mark set 10', script)
+
+    def test_conflicting_members_fail_before_changing_classes(self):
+        shaper, host = _shaper()
+        shares = [Share(42, None, 10, 10, "/"), Share(43, None, 20, 10, "/")]
+        with self.assertRaisesRegex(ShaperError, "conflicting"):
+            shaper._sync_direction("eth0", shares, 100_000_000)
+        self.assertEqual(host.commands, [])
+
+    def test_shared_counter_is_sampled_once_for_all_members(self):
+        shaper, host = _shaper()
+        shaper._shares = {42: Share(42, None, 10, 10, "/"),
+                          43: Share(43, None, 10, 10, "/")}
+        shaper._egress = True
+        with patch.object(shaper, "_sync_flows"), patch.object(shaper, "_class_bytes", return_value={10: 1000}), \
+             patch("bandctl.shaper.time.monotonic", return_value=2.0):
+            shaper._sample_at = 1.0
+            shaper._bytes[("up", 10)] = 500
+            self.assertEqual(shaper.sample(), {42: (0.0, 4000.0), 43: (0.0, 4000.0)})
+
+
 class ApplyTests(unittest.TestCase):
     def test_conditional_apply_preserves_an_existing_limit(self):
         shaper, host = _shaper()
