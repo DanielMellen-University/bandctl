@@ -6,6 +6,7 @@ import time
 import unittest
 from unittest.mock import patch
 
+from bandctl.groups import Group
 from bandctl.rates import htb_plan, percent_to_bps
 from bandctl.procscan import SockFlow
 from bandctl.shaper import (
@@ -135,6 +136,46 @@ class ParseTests(unittest.TestCase):
 
 
 class SharedClassTests(unittest.TestCase):
+    def group_shaper(self):
+        shaper, host = _shaper()
+        for pid in (42, 43):
+            host.files[f"/proc/{pid}/stat"] = f"{pid} (work) S " + "0 " * 18 + "100"
+        return shaper, host
+
+    def test_install_and_remove_group_members(self):
+        shaper, host = self.group_shaper()
+        shaper.apply_group(Group("work", 30, 20, (42, 43)), {42: 100, 43: 100}, 100_000_000, 100_000_000)
+        first, second = shaper.shares[42], shaper.shares[43]
+        self.assertEqual((first.minor, first.group), (second.minor, "work"))
+        with self.assertRaisesRegex(ShaperError, "group"):
+            shaper.apply(42, None, 5, None, 100_000_000)
+        shaper.remove(42)
+        self.assertIn(43, shaper.shares)
+        self.assertIn(("eth0", second.minor), shaper._classes)
+        shaper.remove(43)
+        self.assertFalse(shaper.shares)
+
+    def test_group_preflight_rejects_reused_or_limited_pid(self):
+        shaper, host = self.group_shaper()
+        group = Group("work", None, 20, (42, 43))
+        with self.assertRaisesRegex(ShaperError, "changed"):
+            shaper.apply_group(group, {42: 100, 43: 101}, None, 100_000_000)
+        self.assertFalse(shaper.shares)
+        self.assertEqual(host.commands, [])
+        shaper.apply(42, None, 10, None, 100_000_000)
+        with self.assertRaisesRegex(ShaperError, "already has"):
+            shaper.apply_group(group, {42: 100, 43: 100}, None, 100_000_000)
+        self.assertEqual(set(shaper.shares), {42})
+
+    def test_group_sync_failure_restores_all_members(self):
+        shaper, host = self.group_shaper()
+        with patch.object(shaper, "_sync", side_effect=[ShaperError("forced"), None]):
+            with self.assertRaisesRegex(ShaperError, "forced"):
+                shaper.apply_group(Group("work", None, 20, (42, 43)), {42: 100, 43: 100}, None, 100_000_000)
+        self.assertFalse(shaper.shares)
+        self.assertNotIn("/sys/fs/cgroup/bandctl/bandctl-42", host.dirs)
+        self.assertNotIn("/sys/fs/cgroup/bandctl/bandctl-43", host.dirs)
+
     def test_members_share_one_class_and_one_ceiling(self):
         shaper, host = _shaper()
         shares = [Share(42, None, 60, 10, "/"), Share(43, None, 60, 10, "/")]

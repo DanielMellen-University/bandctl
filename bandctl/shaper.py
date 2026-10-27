@@ -32,6 +32,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
+from bandctl.groups import Group
 from bandctl.procscan import SockFlow, parse_proc_net, parse_start_ticks
 from bandctl.rates import htb_plan, percent_to_bps
 
@@ -82,6 +83,7 @@ class Share:
     command: str = ""
     start_ticks: int | None = None
     revision: int = 0
+    group: str | None = None
 
 
 @dataclass
@@ -163,6 +165,8 @@ class Shaper:
         if self._torn:
             raise ShaperError("shaper is shut down")
         with self._lock:
+            if pid in self._shares and self._shares[pid].group is not None:
+                raise ShaperError("remove the process from its group before applying an individual limit")
             if only_if_unlimited and pid in self._shares:
                 raise ShaperError(f"pid {pid} already has a limit")
             if expected_start_ticks is not None:
@@ -213,6 +217,70 @@ class Shaper:
                     pass
                 raise
         return _applied_text(share)
+
+    def apply_group(
+        self, group: Group, starts: dict[int, int], down_cap: int | None, up_cap: int | None,
+    ) -> None:
+        """Install a group of previously unlimited, verified process instances."""
+        with self._lock:
+            if self._torn:
+                raise ShaperError("shaper is shut down")
+            if not group.members:
+                raise ShaperError("select at least one process")
+            if any(share.group is not None and share.group.casefold() == group.name.casefold()
+                   for share in self._shares.values()):
+                raise ShaperError("group already exists")
+            if set(starts) != set(group.members) or any(type(tick) is not int or tick < 0 for tick in starts.values()):
+                raise ShaperError("verify the start time of every group member")
+            originals = {}
+            for pid in group.members:
+                if pid in self._shares:
+                    raise ShaperError(f"pid {pid} already has a limit")
+                try:
+                    stat = self.host.read(f"/proc/{pid}/stat")
+                except OSError as exc:
+                    raise ShaperError(f"cannot verify pid {pid}") from exc
+                if parse_start_ticks(stat) != starts[pid]:
+                    raise ShaperError(f"pid {pid} changed since the process scan")
+                self._check_leaf_empty(pid)
+                originals[pid] = self._read_cgroup(pid)
+            if group.down_pct is not None and not down_cap:
+                raise ShaperError("download capacity is unknown; enter a download budget")
+            if group.up_pct is not None and not up_cap:
+                raise ShaperError("upload capacity is unknown; enter an upload budget")
+            old_caps = (self._down_cap, self._up_cap)
+            minor = self._alloc_minor()
+            self._down_cap, self._up_cap = down_cap, up_cap
+            created = []
+            try:
+                for pid in group.members:
+                    self._revision += 1
+                    share = Share(pid, group.down_pct, group.up_pct, minor, originals[pid],
+                                  start_ticks=starts[pid], revision=self._revision, group=group.name)
+                    try:
+                        self._move_to_leaf(share)
+                    except Exception:
+                        self._rmdir_leaf(pid)
+                        raise
+                    self._shares[pid] = share
+                    created.append(share)
+                self._sync()
+            except Exception:
+                for share in reversed(created):
+                    try:
+                        self._restore_share(share)
+                    except ShaperError:
+                        # Keep a process tracked if it could not be restored.
+                        continue
+                    self._shares.pop(share.pid, None)
+                    self._rmdir_leaf(share.pid)
+                if not any(share.pid in self._shares for share in created):
+                    self._down_cap, self._up_cap = old_caps
+                try:
+                    self._sync()
+                except ShaperError:
+                    pass
+                raise
 
     def apply_tracked(
         self, pid: int, down_pct: int | None, up_pct: int | None,
@@ -883,7 +951,7 @@ class Shaper:
 
 def _copy_share(share: Share) -> Share:
     return Share(share.pid, share.down_pct, share.up_pct, share.minor, share.original_cgroup, share.command,
-                 share.start_ticks, share.revision)
+                 share.start_ticks, share.revision, share.group)
 
 
 def _applied_text(share: Share) -> str:
