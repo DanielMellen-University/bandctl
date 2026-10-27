@@ -71,6 +71,12 @@ Press `g` to open shared limits. Enter a name, a comma-separated list of running
 
 To remove one member, close the editor, select that process in the main table, and press `u` or Remove. The other members keep their shared ceiling. The group disappears when its last member is removed. A process must leave its group before it can receive an individual limit. The selected process's detail line names its group. Its bars compare that process's measured rate with the group's ceiling; they do not show the group's combined rate. Groups last until bandctl exits.
 
+## Import and export settings
+
+Press `x`, enter a path, and choose Export to write a JSON settings file. Submit any budget edits first. The file contains the interface, budgets in bits per second, auto-apply rules and schedules, and group definitions. It does not contain process command lines or individual limits. Export replaces the destination with a file readable only by its owner.
+
+Choose Import to load a file. bandctl validates all fields before changing settings. Imported rules, budgets, and groups replace the current ones. Individual limits remain; an imported group cannot claim a process with an individual limit. Group members are identified by PID, start time, and boot ID. If a member has exited, its PID was reused, or the machine has rebooted, the import is refused. The interface in the file must match the current interface. Restart bandctl with `--iface` for that interface before importing. A shaper error can prevent import; if rollback also fails, the error reports that it is incomplete. Settings are never loaded automatically.
+
 ## Auto-apply rules
 
 Press `t` to open the rule editor. Enter part of a process name and one or both percentages, then press Enter or choose Add. Rules match process names without regard to case. They do not match command arguments. The editor needs root, like Apply. The first active matching rule wins. Select a rule and choose Delete to remove it, or Close to return to the process list. Rules last until bandctl exits.

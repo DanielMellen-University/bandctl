@@ -14,6 +14,9 @@ bandctl/
   app.py         Textual screens, keys, and the 1 second refresh
   widgets.py     the not-root dialog and the rule editor
   group_screen.py  the shared-limit editor
+  settings_screen.py  explicit settings import and export
+  settings.py    settings format and validation
+  settings_session.py  session import and export
   groups.py      group validation and active group view
   history.py     the one-minute rate history behind the graphs
   rules.py       auto-apply rule matching and ownership
@@ -120,6 +123,7 @@ Keys:
 | `b` | Toggle Mbit/s and MB/s |
 | `t` | Edit auto-apply rules |
 | `g` | Edit shared limits |
+| `x` | Import or export settings |
 | `q` | Quit and remove every rule this process installed |
 
 The log under the bars keeps the last successes and failures. A failed `tc`, `nft`, or cgroup write is one line there and in the status bar. The previous share is left in place when an update fails. A brand new share is rolled back, and the empty cgroup made for it is removed. If Remove cannot put a running process back in its old cgroup, the share stays listed so you can try again. A process that has already exited is dropped.
@@ -127,6 +131,8 @@ The log under the bars keeps the last successes and failures. A failed `tc`, `nf
 Press `t` to add or delete auto-apply rules. Enter part of a process name and a download percent, an upload percent, or both, then press Enter or Add. Optionally enter daily start and end times in `HH:MM`. The limit is removed when the window ends. Matching ignores case, and the first active matching rule wins. Rules need root, like Apply. Rules apply to matching running processes and new processes while bandctl is open. Existing limits are left alone. A manual change takes precedence for that process instance. Rules are kept for this session only and are cleared on exit. The log reports failures and retries them after 15 seconds.
 
 Press `g` to create a named shared limit. Enter a name, comma-separated PIDs, and one or both percentages, then choose Create. The processes must be running and have no existing limit. Their combined traffic shares one ceiling in each direction. Select a group row to fill its name and percentages, then choose Update to change its limits. To add a process, enter its PID and choose Add. Use Remove on the main screen to remove one member; the group ends when its last member is removed. Group members show the group name in the detail line. The bars show the selected process's rate against the shared ceiling, not the combined group rate. Groups last for the session only.
+
+Press `x` to import or export settings as JSON. Export includes the interface, submitted budgets, auto-apply rules and schedules, and groups. It replaces the chosen file and makes it readable only by its owner. Import checks the entire file before applying it. It replaces the current rules, budgets, and groups, while leaving individual limits in place. An imported group cannot use a PID that already has an individual limit. Group members must still be the same running processes on the same boot. The file's interface must match the interface bandctl is using; restart with `--iface` to use a different one. Rules and groups are loaded only when you choose Import.
 
 Full steps and the manual check with a real download are in [docs/USAGE.md](docs/USAGE.md) and [docs/TESTING.md](docs/TESTING.md).
 
@@ -192,3 +198,7 @@ A search for `resolve` finds `systemd-resolved` even though it is idle and below
 The shared-limit editor at 80 by 24.
 
 ![Shared limits at 80x24](docs/screenshots/groups-80x24.png)
+
+The settings file controls at 80 by 24.
+
+![Settings file at 80x24](docs/screenshots/settings-80x24.png)

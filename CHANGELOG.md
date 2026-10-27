@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Import and export rules, schedules, budgets, and groups as a JSON settings file with `x`. Group process identities are checked before import.
+
 - Named groups can share one download and upload ceiling. Press `g` to create and edit groups or add a process. Remove a member from the main table.
 
 - Each process has a one-minute graph of its download and upload rates beside the bars.

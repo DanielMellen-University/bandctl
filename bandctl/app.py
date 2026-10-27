@@ -32,6 +32,7 @@ from bandctl.rates import (
     percent_to_bps,
 )
 from bandctl.shaper import Shaper, ShaperError
+from bandctl.settings_screen import SettingsScreen
 from bandctl.rules import AutoRule, RuleTracker, ScheduledOwnership
 from bandctl.traffic import TrafficSampler, above_share, read_ss
 from bandctl.widgets import RootRequired, RulesScreen
@@ -81,6 +82,7 @@ class BandctlApp(App):
         Binding("a", "apply_limit", "Apply"),
         Binding("u", "remove_limit", "Remove"),
         Binding("g", "edit_groups", "Groups"),
+        Binding("x", "edit_settings", "Config"),
         Binding("slash", "focus_filter", "Search", key_display="/"),
         Binding("s", "cycle_sort", "Sort"),
         Binding("n", "toggle_all", "All"),
@@ -228,9 +230,9 @@ class BandctlApp(App):
         return f"sudo {sys.executable} -m bandctl{extra}"
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
-        if self.is_mounted and self.screen_stack and isinstance(self.screen, (RootRequired, RulesScreen, GroupsScreen)):
+        if self.is_mounted and self.screen_stack and isinstance(self.screen, (RootRequired, RulesScreen, GroupsScreen, SettingsScreen)):
             if action in {"quit", "apply_limit", "remove_limit", "focus_filter", "cycle_sort", "toggle_all",
-                          "toggle_unit", "edit_rules", "edit_groups", "refresh_now", "focus_table"}:
+                          "toggle_unit", "edit_rules", "edit_groups", "edit_settings", "refresh_now", "focus_table"}:
                 return False
         return super().check_action(action, parameters)
 
@@ -241,13 +243,13 @@ class BandctlApp(App):
         if size is not None:
             self._width = size.width
             self._height = size.height
-        if self.is_mounted and self.screen_stack and not isinstance(self.screen, (RootRequired, RulesScreen, GroupsScreen)):
+        if self.is_mounted and self.screen_stack and not isinstance(self.screen, (RootRequired, RulesScreen, GroupsScreen, SettingsScreen)):
             self._render()
 
     def _on_screen_size(self, _old, new) -> None:
         self._width = new.width
         self._height = new.height
-        if self.is_mounted and self.screen_stack and not isinstance(self.screen, (RootRequired, RulesScreen, GroupsScreen)):
+        if self.is_mounted and self.screen_stack and not isinstance(self.screen, (RootRequired, RulesScreen, GroupsScreen, SettingsScreen)):
             self._render()
 
     def _dims(self) -> tuple[int, int]:
@@ -274,7 +276,7 @@ class BandctlApp(App):
             self.action_remove_limit()
 
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
-        if (not self.screen_stack or isinstance(self.screen, (RootRequired, RulesScreen, GroupsScreen))
+        if (not self.screen_stack or isinstance(self.screen, (RootRequired, RulesScreen, GroupsScreen, SettingsScreen))
                 or event.data_table.id != "procs"):
             return
         try:
@@ -291,7 +293,7 @@ class BandctlApp(App):
     def on_key(self, event) -> None:
         # Enter in the table applies. Enter inside a percent field is handled
         # by Input.Submitted, and a click only moves the highlight.
-        if (event.key == "enter" and not isinstance(self.screen, (RootRequired, RulesScreen, GroupsScreen))
+        if (event.key == "enter" and not isinstance(self.screen, (RootRequired, RulesScreen, GroupsScreen, SettingsScreen))
                 and self.focused is self.query_one("#procs", DataTable)):
             self.action_apply_limit()
 
@@ -361,6 +363,31 @@ class BandctlApp(App):
             self._note("groups updated")
             self.action_refresh_now()
 
+    def action_edit_settings(self) -> None:
+        if not self.is_root:
+            self._note("not running as root. " + self.sudo_command(), bad=True)
+            return
+        if self._busy:
+            self._note("refresh in progress; try again")
+            return
+        if self.shaper is None:
+            self._note("no interface to shape", bad=True)
+            return
+        self.push_screen(SettingsScreen(self.shaper, self.iface, self._detected_bps,
+                                        self._down_budget, self._up_budget, self._rules, self._procs),
+                         self._settings_closed)
+
+    def _settings_closed(self, settings) -> None:
+        if settings is None:
+            return
+        self._rules = list(settings.rules)
+        self._down_budget, self._up_budget = settings.down_budget, settings.up_budget
+        self._write_budget_inputs()
+        self._pushed_caps = self._effective_caps()
+        self._note("settings imported")
+        self._render()
+        self.action_refresh_now()
+
     def action_apply_limit(self) -> None:
         if not self.is_root:
             self._note("not running as root. " + self.sudo_command(), bad=True)
@@ -420,7 +447,7 @@ class BandctlApp(App):
         self._render()
 
     async def _refresh(self) -> None:
-        if self._busy or isinstance(self.screen, (RootRequired, RulesScreen, GroupsScreen)):
+        if self._busy or isinstance(self.screen, (RootRequired, RulesScreen, GroupsScreen, SettingsScreen)):
             return
         self._busy = True
         try:
