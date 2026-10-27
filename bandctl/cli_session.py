@@ -11,6 +11,10 @@ from bandctl.settings_session import export_session, import_session
 from bandctl.shaper import ShaperError
 
 
+WARNING_PREFIXES = ("capacity update:", "flow refresh:", "scheduled limit for pid", "auto rule for pid")
+WARNING_SECONDS = 60.0
+
+
 class CliSession:
     """Apply CLI requests through the same shaper and validation as the TUI."""
 
@@ -24,6 +28,7 @@ class CliSession:
         self.up_budget: int | None = None
         self.rules = []
         self.warnings: list[str] = []
+        self._warning_times: dict[str, float] = {}
         self._tracker = RuleTracker()
         self._scheduled = ScheduledOwnership()
 
@@ -105,7 +110,13 @@ class CliSession:
                 self._tracker.applied(proc)
                 self._scheduled.applied(proc, rule, revision)
                 messages.append(f"auto rule: {message}")
-        self.warnings = [message for message in messages if message.startswith(
-            ("capacity update:", "flow refresh:", "scheduled limit for pid", "auto rule for pid")
-        )]
+        self._remember_warnings(messages, now)
         return messages
+
+    def _remember_warnings(self, messages: list[str], now: float) -> None:
+        """Keep background errors for a minute so a later command can still report them."""
+        for message in messages:
+            if message.startswith(WARNING_PREFIXES):
+                self._warning_times[message] = now
+        self._warning_times = {m: t for m, t in self._warning_times.items() if now - t <= WARNING_SECONDS}
+        self.warnings = list(self._warning_times)

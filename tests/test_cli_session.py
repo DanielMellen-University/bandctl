@@ -64,6 +64,17 @@ class CliSessionTests(unittest.TestCase):
             self.session.refresh(now=1, current=time(10))
         self.assertTrue(any("filter failed" in warning for warning in self.session.warnings))
 
+    def test_warnings_outlive_one_refresh_then_expire(self):
+        from datetime import time
+        from unittest.mock import patch
+        with patch.object(self.shaper, "_sync_flows", side_effect=ShaperError("filter failed")):
+            self.session.refresh(now=1, current=time(10))
+        self.assertTrue(self.session.warnings)
+        self.session.refresh(now=20, current=time(10))
+        self.assertTrue(any("filter failed" in warning for warning in self.session.warnings))
+        self.session.refresh(now=70, current=time(10))
+        self.assertEqual(self.session.warnings, [])
+
     def test_refresh_applies_and_expires_scheduled_rules(self):
         from datetime import time
         from bandctl.schedule import DailyWindow
