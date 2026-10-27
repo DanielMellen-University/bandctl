@@ -148,3 +148,26 @@ class SettingsSessionTests(unittest.TestCase):
             validate_targets(settings, "eth0", boot, valid[:1])
         with self.assertRaisesRegex(ValueError, "pid 43"):
             validate_targets(settings, "eth0", boot, [valid[0], SimpleNamespace(pid=43, start_ticks=102)])
+
+
+class GroupChangesTests(unittest.TestCase):
+    def test_plans_retained_added_and_removed_members(self):
+        from bandctl.settings import GroupChanges, plan_group_changes
+        from bandctl.shaper import Share
+
+        settings = SettingsTests().settings()
+        shares = {42: Share(42, 30, None, 10, "/", start_ticks=100, group="old"),
+                  44: Share(44, None, 10, 10, "/", start_ticks=102, group="old"),
+                  1: Share(1, None, 10, 11, "/")}
+        self.assertEqual(plan_group_changes(settings, shares), GroupChanges(frozenset({42}), frozenset({43}), frozenset({44})))
+        self.assertEqual(set(shares), {1, 42, 44})
+
+    def test_rejects_individual_limits_and_changed_instances(self):
+        from bandctl.settings import plan_group_changes
+        from bandctl.shaper import Share
+
+        settings = SettingsTests().settings()
+        with self.assertRaisesRegex(ValueError, "individual limit"):
+            plan_group_changes(settings, {42: Share(42, 30, None, 10, "/", start_ticks=100)})
+        with self.assertRaisesRegex(ValueError, "changed"):
+            plan_group_changes(settings, {42: Share(42, 30, None, 10, "/", start_ticks=99, group="old")})

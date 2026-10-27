@@ -186,3 +186,27 @@ def validate_targets(settings: Settings, iface: str, boot_id: str, processes) ->
         for pid, start in zip(item.group.members, item.starts):
             if starts.get(pid) != start:
                 raise ValueError(f"cannot verify group member pid {pid}")
+
+
+@dataclass(frozen=True)
+class GroupChanges:
+    """The process members to retain, add, or remove for an import."""
+
+    keep: frozenset[int]
+    add: frozenset[int]
+    remove: frozenset[int]
+
+
+def plan_group_changes(settings: Settings, shares) -> GroupChanges:
+    """Reject conflicts with individual limits and plan group membership changes."""
+    desired = {pid: start for item in settings.groups
+               for pid, start in zip(item.group.members, item.starts)}
+    existing = {pid: share for pid, share in shares.items() if share.group is not None}
+    for pid, start in desired.items():
+        share = shares.get(pid)
+        if share is not None and share.group is None:
+            raise ValueError(f"pid {pid} already has an individual limit")
+        if share is not None and share.start_ticks != start:
+            raise ValueError(f"group member pid {pid} changed")
+    old, new = set(existing), set(desired)
+    return GroupChanges(frozenset(old & new), frozenset(new - old), frozenset(old - new))
