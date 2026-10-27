@@ -16,7 +16,7 @@ python3 -m venv .venv
 | `tests/test_history.py` | One-minute rate history, missing samples, process removal, and peak grouping for narrow graphs. |
 | `tests/test_traffic.py` socket accounting | Individual socket deltas, new sockets, resets, sample gaps, PID totals, and retention of idle processes. |
 | `tests/test_session_lock.py` | Exclusive lock contention, release, and refusal to follow a symlink, and TUI cleanup before release, using temporary files and mocks. |
-| `tests/test_cli_session.py` | Verified CLI session limits and removals, capacity failures, PID reuse, and settings imports using a fake host. |
+| `tests/test_cli_session.py` | Verified CLI session limits and removals, capacity failures, PID reuse, settings imports, scheduled rules, and manual overrides using a fake host. |
 | `tests/test_cli.py` | Text and JSON process lists, omission of command arguments, CLI dispatch without opening the TUI, process resolution, and share validation. |
 | `tests/test_settings_screen.py` | Export and import through the TUI, explicit startup import, and rejection of an invalid file without changing the session. |
 | `tests/test_settings_session.py` | Session export and import against a fake host, including invalid files, missing processes, and shaper failures. |

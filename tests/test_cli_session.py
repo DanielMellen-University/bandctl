@@ -43,6 +43,25 @@ class CliSessionTests(unittest.TestCase):
             self.session.remove("42")
         self.assertIn(42, self.shaper.shares)
 
+    def test_refresh_applies_and_expires_scheduled_rules(self):
+        from datetime import time
+        from bandctl.schedule import DailyWindow
+        self.session.rules = [AutoRule("firefox", 20, None, DailyWindow(time(9), time(17)))]
+        messages = self.session.refresh(now=1, current=time(10))
+        self.assertTrue(any("auto rule" in message for message in messages))
+        self.assertEqual(self.shaper.shares[42].down_pct, 20)
+        messages = self.session.refresh(now=2, current=time(17))
+        self.assertTrue(any("schedule ended" in message for message in messages))
+        self.assertFalse(self.shaper.shares)
+
+    def test_manual_remove_prevents_rule_reapplying_to_same_process(self):
+        from datetime import time
+        self.session.rules = [AutoRule("firefox", 20, None)]
+        self.session.refresh(now=1, current=time(10))
+        self.session.remove("42")
+        self.session.refresh(now=2, current=time(10))
+        self.assertFalse(self.shaper.shares)
+
     def test_settings_are_committed_only_after_import_succeeds(self):
         self.session.rules = [AutoRule("old", 10, None)]
         with tempfile.TemporaryDirectory() as directory:

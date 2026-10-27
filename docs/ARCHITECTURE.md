@@ -4,7 +4,7 @@ bandctl is a Textual app in front of one `Shaper` object. The app never shells o
 
 ## Command line
 
-`cli.py` formats a process scan as text or JSON without process arguments. `bandctl list` does not start the TUI or the shaper. The CLI also validates share inputs and resolves a PID or exact process name, refusing ambiguous names and unknown start times. `cli_session.py` uses the shaper for verified limit and remove requests and commits imported settings after validation. The process controller and command transport are still under development. `session_lock.py` provides a nonblocking exclusive lock for future ownership of host shaping state; the root TUI holds it until cleanup completes. CLI mutation commands are still under development.
+`cli.py` formats a process scan as text or JSON without process arguments. `bandctl list` does not start the TUI or the shaper. The CLI also validates share inputs and resolves a PID or exact process name, refusing ambiguous names and unknown start times. `cli_session.py` uses the shaper for verified limit and remove requests and commits imported settings after validation. Its refresh reconciles the same automatic-rule and schedule trackers used by the TUI. The process controller and command transport are still under development. `session_lock.py` provides a nonblocking exclusive lock for future ownership of host shaping state; the root TUI holds it until cleanup completes. CLI mutation commands are still under development.
 
 ## Settings interchange
 
