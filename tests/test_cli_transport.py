@@ -1,0 +1,70 @@
+"""Local socket transport with a fake session and temporary paths."""
+import json
+import os
+import socket
+import tempfile
+import threading
+import time
+import unittest
+from pathlib import Path
+from unittest.mock import Mock
+
+from bandctl.cli_transport import request, serve
+
+
+def wait_ready(path):
+    for _ in range(100):
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                client.connect(path)
+            return
+        except (FileNotFoundError, ConnectionRefusedError):
+            time.sleep(0.01)
+    raise RuntimeError("socket did not become ready")
+
+
+class TransportTests(unittest.TestCase):
+    def test_request_dispatch_and_stop_remove_private_socket(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "session.sock")
+            session = Mock()
+            session.limit.return_value = {"pid": 42}
+            thread = threading.Thread(target=serve, args=(session, path), kwargs={"interval": 0.05})
+            thread.start()
+            wait_ready(path)
+            try:
+                self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
+                result = request(path, {"command": "limit", "target": "42", "down": "30", "up": None})
+                self.assertEqual(result, {"ok": True, "result": {"pid": 42}})
+                time.sleep(0.1)
+                self.assertTrue(session.refresh.called)
+                self.assertTrue(request(path, {"command": "stop"})["ok"])
+            finally:
+                thread.join(timeout=3)
+            self.assertFalse(thread.is_alive())
+            self.assertFalse(Path(path).exists())
+
+    def test_malformed_request_does_not_stop_server(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "session.sock")
+            thread = threading.Thread(target=serve, args=(Mock(), path))
+            thread.start()
+            wait_ready(path)
+            try:
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                    client.connect(path)
+                    client.sendall(b"not json\\n")
+                    response = json.loads(client.recv(4096))
+                    self.assertFalse(response["ok"])
+                self.assertTrue(request(path, {"command": "stop"})["ok"])
+            finally:
+                thread.join(timeout=3)
+            self.assertFalse(thread.is_alive())
+
+    def test_existing_file_is_not_replaced(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "session.sock"
+            path.write_text("keep")
+            with self.assertRaises(OSError):
+                serve(Mock(), str(path))
+            self.assertEqual(path.read_text(), "keep")
