@@ -61,6 +61,21 @@ class TransportTests(unittest.TestCase):
                 thread.join(timeout=3)
             self.assertFalse(thread.is_alive())
 
+    def test_stop_reports_cleanup_failure_before_reply(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "session.sock")
+            cleanup = Mock(return_value=["could not restore cgroup"])
+            thread = threading.Thread(target=serve, args=(Mock(), path), kwargs={"on_stop": cleanup})
+            thread.start()
+            wait_ready(path)
+            try:
+                response = request(path, {"command": "stop"})
+            finally:
+                thread.join(timeout=3)
+            cleanup.assert_called_once()
+            self.assertEqual(response, {"ok": False, "error": "could not restore cgroup"})
+            self.assertFalse(thread.is_alive())
+
     def test_existing_file_is_not_replaced(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "session.sock"

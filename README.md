@@ -11,7 +11,9 @@ Version 0.1.0. Download and upload are capped separately. Each process has a one
 ```
 bandctl/
   __main__.py    python -m bandctl
-  cli.py         non-interactive process listing
+  cli.py         non-interactive commands
+  cli_session.py  CLI session and rule reconciliation
+  cli_worker.py   background shaping session
   app.py         Textual screens, keys, and the 1 second refresh
   widgets.py     the not-root dialog and the rule editor
   group_screen.py  the shared-limit editor
@@ -137,9 +139,19 @@ Press `x` to import or export settings as JSON. Export includes the interface, s
 
 Full steps and the manual check with a real download are in [docs/USAGE.md](docs/USAGE.md) and [docs/TESTING.md](docs/TESTING.md).
 
-## Process list from a script
+## Command line
 
-`bandctl list` lists running processes without opening the TUI. Add `--json` for machine-readable output. The list does not include command-line arguments. Other non-interactive commands are still under development.
+`bandctl list` lists running processes without opening the TUI. Add `--json` for machine-readable output. The list does not include command-line arguments. Limits use the same 1 to 100 percentages as the TUI:
+
+```
+sudo bandctl limit firefox --down 30 --up 10
+sudo bandctl remove firefox
+sudo bandctl export settings.json
+sudo bandctl import settings.json
+sudo bandctl stop
+```
+
+A name must match exactly and identify one process; use a PID when names are ambiguous. Put `--iface` before the command to choose an interface. Limit and import start a background session if one is not already running. The session keeps limits and scheduled rules active after the command exits. `stop` removes its limits and waits for cleanup. The TUI and CLI cannot control shaping at the same time. Commands that change or export the session require root. Add `--json` to a command for machine-readable output. If link speed is unknown, import a settings file with submitted capacity budgets before setting a limit.
 
 ## What a share means
 

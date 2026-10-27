@@ -11,6 +11,7 @@ _FIELDS = {
     "export": {"command", "path"},
     "import": {"command", "path"},
     "stop": {"command"},
+    "ping": {"command"},
 }
 
 
@@ -22,6 +23,8 @@ def dispatch(session, request) -> tuple[dict, bool]:
         command = request["command"]
         if command not in _FIELDS or set(request) != _FIELDS[command]:
             raise ValueError("invalid command fields")
+        if command == "ping":
+            return {"ok": True, "result": {"iface": session.iface}}, False
         if command in ("limit", "remove"):
             if not isinstance(request["target"], str):
                 raise ValueError("target must be text")

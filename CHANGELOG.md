@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- CLI limit, remove, import, export, and stop commands use a locked background shaping session.
+
 - A first individual limit now requires a known capacity before moving the process.
 
 - Root TUI sessions hold an exclusive lock until cleanup finishes, so two sessions cannot control the same shaping state.

@@ -50,3 +50,61 @@ def limit_percentages(down: str | None, up: str | None) -> tuple[int | None, int
     if down_pct is None and up_pct is None:
         raise ValueError("enter a download percent, an upload percent, or both")
     return down_pct, up_pct
+
+
+def run_command(args) -> int:
+    """Send one CLI operation to the active local session."""
+    import json
+    import os
+    import sys
+    from bandctl.cli_client import ensure_session, wait_for_stop
+    from bandctl.cli_transport import request
+    from bandctl.cli_worker import SOCKET_PATH
+    from bandctl.iface import IfaceError
+    from bandctl.settings import read_settings
+
+    try:
+        if os.geteuid() != 0:
+            raise ValueError("root is required for this command")
+        if args.command == "limit":
+            limit_percentages(args.down, args.up)
+            payload = {"command": "limit", "target": args.target, "down": args.down, "up": args.up}
+        elif args.command == "remove":
+            payload = {"command": "remove", "target": args.target}
+        elif args.command in ("import", "export"):
+            payload = {"command": args.command, "path": os.path.abspath(args.path)}
+        else:
+            payload = {"command": "stop"}
+        iface = args.iface
+        if args.command == "import":
+            saved = read_settings(payload["path"])
+            if iface is not None and iface != saved.iface:
+                raise ValueError("--iface differs from the settings file interface")
+            iface = saved.iface
+        ensure_session(iface, start=args.command in ("limit", "import"))
+        response = request(SOCKET_PATH, payload)
+        if args.command == "stop":
+            wait_for_stop()
+        if not response["ok"]:
+            raise ValueError(response.get("error", "request failed"))
+        result = response.get("result", {})
+        if args.json:
+            print(json.dumps(result))
+        elif args.command == "limit":
+            down = "unlimited" if result["down"] is None else f"{result['down']}%"
+            up = "unlimited" if result["up"] is None else f"{result['up']}%"
+            print(f"pid {result['pid']}: down {down}, up {up}")
+        elif args.command == "remove":
+            print(f"removed limit for pid {result['pid']}")
+        elif args.command == "stop":
+            print("session stopped")
+        else:
+            verb = "imported" if args.command == "import" else "exported"
+            print(f"settings {verb}: {result['path']}")
+        return 0
+    except (ValueError, OSError, IfaceError) as exc:
+        if args.json:
+            print(json.dumps({"error": str(exc)}), file=sys.stderr)
+        else:
+            print(f"bandctl: {exc}", file=sys.stderr)
+        return 1

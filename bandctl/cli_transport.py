@@ -48,7 +48,7 @@ def request(path: str, payload: dict, *, timeout: float = 3.0) -> dict:
     return response
 
 
-def serve(session, path: str, *, interval: float = 1.0) -> None:
+def serve(session, path: str, *, interval: float = 1.0, on_stop=None) -> None:
     """Serve requests until stop; the caller owns the session lock and teardown."""
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
         # Bind under a restrictive umask so the socket is private from creation.
@@ -75,6 +75,13 @@ def serve(session, path: str, *, interval: float = 1.0) -> None:
                         try:
                             payload = json.loads(_read_line(connection).decode("utf-8"))
                             response, stopping = dispatch(session, payload)
+                            if stopping and on_stop is not None:
+                                try:
+                                    notes = on_stop()
+                                    if notes:
+                                        response = {"ok": False, "error": "; ".join(notes)}
+                                except (OSError, RuntimeError) as exc:
+                                    response = {"ok": False, "error": str(exc)}
                         except (ValueError, UnicodeDecodeError, OSError) as exc:
                             response = {"ok": False, "error": str(exc)}
                         try:

@@ -35,9 +35,21 @@ sudo .venv/bin/python -m bandctl
 
 `--iface` is the device whose root qdisc will be replaced while an upload share exists, and whose ingress is redirected while a download share exists. The default is the device on the IPv4 default route. The name has to match a device in `/sys/class/net`. If it does not, bandctl exits before the UI opens and lists the devices it found, for example `no network interface named 'eth9'. Interfaces here: eth0, lo, wlan0.`
 
-## List processes without the UI
+## Command line
 
-`bandctl list` prints running PIDs, users, and process names. `bandctl list --json` returns PID, user, name, and socket count as JSON. Command-line arguments are omitted. Other non-interactive commands are still under development.
+`bandctl list` prints running PIDs, users, and process names. `bandctl list --json` returns PID, user, name, and socket count as JSON. Command-line arguments are omitted. The other commands need root:
+
+```
+sudo bandctl --iface eth0 limit firefox --down 30 --up 10
+sudo bandctl remove firefox
+sudo bandctl export settings.json
+sudo bandctl import settings.json
+sudo bandctl stop
+```
+
+A target is a PID or an exact process name, ignoring case. If several processes have the same name, use a PID. Shares are whole percentages from 1 to 100. Leave a direction out to leave it uncapped. The first limit or import starts a background session, which keeps limits and scheduled rules active after the command exits. `stop` removes limits and waits for cleanup. Remove, export, and stop need an existing CLI session. A root TUI and CLI session cannot run at the same time. An explicit `--iface` must match the active session. Add `--json` after a command for machine-readable results and errors.
+
+When link speed is unknown, import a settings file containing capacity budgets before applying a limit. Import validates the complete file and process identities. It selects the saved interface when starting a session. Import and export use paths relative to the command's working directory.
 
 Only one root bandctl session can control shaping at a time. A second root session exits with an error until the first finishes cleanup. The read-only process list does not take the lock.
 

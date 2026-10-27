@@ -10,7 +10,7 @@ import sys
 
 from bandctl import __version__
 from bandctl.app import BandctlApp
-from bandctl.cli import list_processes
+from bandctl.cli import list_processes, run_command
 from bandctl.iface import IfaceError, check_iface
 from bandctl.settings import read_settings
 from bandctl.session_lock import SessionLock, SessionLockError
@@ -34,12 +34,30 @@ def main(argv: list[str] | None = None) -> int:
     commands = parser.add_subparsers(dest="command")
     list_parser = commands.add_parser("list", help="List running processes.")
     list_parser.add_argument("--json", action="store_true", help="Write JSON output.")
+    limit_parser = commands.add_parser("limit", help="Set a process limit.")
+    limit_parser.add_argument("target", help="PID or exact process name.")
+    limit_parser.add_argument("--down", help="Download percent from 1 to 100.")
+    limit_parser.add_argument("--up", help="Upload percent from 1 to 100.")
+    limit_parser.add_argument("--json", action="store_true", help="Write JSON output.")
+    remove_parser = commands.add_parser("remove", help="Remove a process limit.")
+    remove_parser.add_argument("target", help="PID or exact process name.")
+    remove_parser.add_argument("--json", action="store_true", help="Write JSON output.")
+    for command in ("import", "export"):
+        file_parser = commands.add_parser(command, help=f"{command.capitalize()} settings.")
+        file_parser.add_argument("path", help="Settings file path.")
+        file_parser.add_argument("--json", action="store_true", help="Write JSON output.")
+    stop_parser = commands.add_parser("stop", help="Stop the CLI session and remove its limits.")
+    stop_parser.add_argument("--json", action="store_true", help="Write JSON output.")
     args = parser.parse_args(argv)
     if args.command == "list":
         if args.config is not None:
             parser.error("--config is only available when opening the TUI")
         sys.stdout.write(list_processes(json_output=args.json))
         return 0
+    if args.command is not None:
+        if args.config is not None:
+            parser.error("--config is only available when opening the TUI")
+        return run_command(args)
     if args.config is not None:
         try:
             settings = read_settings(args.config)
