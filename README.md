@@ -137,7 +137,7 @@ Keys:
 
 The log under the bars keeps the last successes and failures. A failed `tc`, `nft`, or cgroup write is one line there and in the status bar. The previous share is left in place when an update fails. A brand new share is rolled back, and the empty cgroup made for it is removed. If the process cannot be restored, the error reports an incomplete rollback and the share stays listed so you can try Remove. Its ceiling may not be active. If Remove cannot put a running process back in its old cgroup, the share stays listed so you can try again. A process that has already exited is dropped.
 
-If restoring the root qdisc fails, bandctl reports the error and keeps the recovery file. Remove can retry while the session is open; after exit, the next start retries recovery.
+If restoring the root qdisc or removing the download redirect fails, bandctl reports the error and keeps the recovery file. Remove can retry while the session is open; after exit, the next start retries recovery.
 
 Press `t` to add or delete auto-apply rules. Enter part of a process name and a download percent, an upload percent, or both, then press Enter or Add. Optionally enter daily start and end times in `HH:MM`. The limit is removed when the window ends. Matching ignores case, and the first active matching rule wins. Rules need root, like Apply. Rules apply to matching running processes and new processes while bandctl is open. Existing limits are left alone. A manual change takes precedence for that process instance. Rules are kept for this session only and are cleared on exit. The log reports failures and retries them after 15 seconds.
 

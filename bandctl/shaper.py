@@ -128,6 +128,7 @@ class Shaper:
     _ifb: bool = False
     _ifb_owned: bool = False
     _ingress_owned: bool = False
+    _ifb_cleanup_error: str | None = None
     _saved_qdisc: str | None = None
     _classes: set[tuple[str, int]] = field(default_factory=set)
     _filters: set[tuple[str, int, str]] = field(default_factory=set)
@@ -647,12 +648,11 @@ class Shaper:
             else:
                 notes.extend(self._scrub(self.iface, restore_qdisc=False, ifb_owned=False, ingress_owned=False))
             self._shares.clear()
-            self._ifb = False
             self._classes.clear()
             self._filters.clear()
-            if self._egress:
+            if self._egress or self._ifb_owned or self._ingress_owned:
                 self._torn = True
-                self.recovery_error = f"recovery failed: {notes[-1]}"
+                self.recovery_error = f"recovery failed: {self._ifb_cleanup_error or notes[-1]}"
             else:
                 self._unlink_state()
         return notes
@@ -680,7 +680,7 @@ class Shaper:
                 notes.extend(self._scrub(self.iface, restore_qdisc=replaced_root,
                                          ifb_owned=self._ifb_owned, ingress_owned=self._ingress_owned))
             self._remove_tree()
-            if not self._egress:
+            if not self._egress and not self._ifb_owned and not self._ingress_owned:
                 self._unlink_state()
         return notes
 
@@ -793,7 +793,7 @@ class Shaper:
         if down_shares:
             self._ensure_ifb()
         elif self._ifb:
-            self._destroy_ifb()
+            self._destroy_ifb(remove_ingress=self._ingress_owned, remove_ifb=self._ifb_owned)
         if self._shares:
             self._run(["nft", "-f", "-"], nft_script(list(self._shares.values())))
         else:
@@ -829,6 +829,8 @@ class Shaper:
         self._egress = True
 
     def _ensure_ifb(self) -> None:
+        if self._ifb_cleanup_error:
+            raise ShaperError(f"download cleanup is incomplete: {self._ifb_cleanup_error}")
         if self._ifb:
             return
         created_ifb = False
@@ -959,26 +961,43 @@ class Shaper:
     def _destroy_ifb(self, iface: str | None = None, *, remove_ingress: bool = True,
                      remove_ifb: bool = True) -> None:
         iface = self.iface if iface is None else iface
-        if remove_ingress:
-            try:
-                self._run(["tc", "qdisc", "del", "dev", iface, "ingress"])
-            except ShaperError:
-                pass
-            self._ingress_owned = False
-        if remove_ifb:
-            try:
-                self._run(["tc", "qdisc", "del", "dev", IFB, "root"])
-            except ShaperError:
-                pass
-            self._ifb_owned = False
-            try:
-                self._run(["ip", "link", "del", IFB])
-            except ShaperError:
-                pass
+        try:
+            if remove_ingress:
+                self._delete_if_present(["tc", "qdisc", "del", "dev", iface, "ingress"])
+                self._ingress_owned = False
+                self._record_download_cleanup()
+            if remove_ifb:
+                self._delete_if_present(["ip", "link", "del", IFB])
+                self._ifb_owned = False
+                self._record_download_cleanup()
+        except ShaperError as exc:
+            self._ifb_cleanup_error = str(exc)
+            self._ifb = True
+            raise
         self._ifb = False
+        self._ifb_cleanup_error = None
         self._drop_dev(IFB)
         # Ingress lived on the real device. Deleting it drops download flowers.
         self._forget_flows(iface, "ffff:")
+
+    def _delete_if_present(self, args: list[str]) -> None:
+        try:
+            self._run(args)
+        except ShaperError as exc:
+            text = str(exc).lower()
+            if not any(part in text for part in ("no such file", "not found", "cannot find device", "does not exist")):
+                raise
+
+    def _record_download_cleanup(self) -> None:
+        state = self._read_state()
+        if state is None:
+            return
+        state["ifb_owned"] = self._ifb_owned
+        state["ingress_owned"] = self._ingress_owned
+        try:
+            self.host.write_state(self.state_path, json.dumps(state) + "\n")
+        except (OSError, ShaperError) as exc:
+            raise ShaperError(f"cannot write recovery state: {exc}") from exc
 
     def _drop_dev(self, dev: str) -> None:
         self._classes = {item for item in self._classes if item[0] != dev}
@@ -1006,9 +1025,15 @@ class Shaper:
             else:
                 ifb_owned = ingress_owned = True
         if ifb_owned or ingress_owned:
-            self._destroy_ifb(iface, remove_ingress=bool(ingress_owned), remove_ifb=bool(ifb_owned))
-            if ifb_owned:
-                notes.append(f"removed {IFB}")
+            self._ifb_owned = bool(ifb_owned)
+            self._ingress_owned = bool(ingress_owned)
+            try:
+                self._destroy_ifb(iface, remove_ingress=self._ingress_owned, remove_ifb=self._ifb_owned)
+            except ShaperError as exc:
+                notes.append(str(exc))
+            else:
+                if ifb_owned:
+                    notes.append(f"removed {IFB}")
         if restore_qdisc:
             self._egress = True
             try:

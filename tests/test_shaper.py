@@ -847,6 +847,69 @@ class ApplyTests(unittest.TestCase):
 class CleanupTests(unittest.TestCase):
     """Fixes for teardown, remove, and failed apply."""
 
+    def test_failed_ingress_removal_keeps_ifb_and_share_for_retry(self):
+        shaper, host = _shaper()
+        shaper.apply(42, 10, None, 100_000_000, None)
+        host.fail_substr = "tc qdisc del dev eth0 ingress"
+        with self.assertRaisesRegex(ShaperError, "forced failure"):
+            shaper.remove(42)
+        self.assertIn(42, shaper.shares)
+        self.assertTrue(host.ifb_exists)
+        self.assertNotIn("ip link del ifb-bandctl", _joined(host))
+        host.fail_substr = None
+        shaper.remove(42)
+        self.assertFalse(host.ifb_exists)
+
+    def test_failed_ifb_removal_preserves_state_for_recovery(self):
+        shaper, host = _shaper()
+        shaper.apply(42, 10, None, 100_000_000, None)
+        host.fail_substr = "ip link del ifb-bandctl"
+        notes = shaper.teardown()
+        self.assertTrue(any("forced failure" in note for note in notes))
+        self.assertTrue(host.ifb_exists)
+        state = json.loads(host.files["/run/bandctl.json"])
+        self.assertTrue(state["ifb_owned"])
+        self.assertFalse(state["ingress_owned"])
+        again = Shaper("eth0", host=host, state_path="/run/bandctl.json")
+        again.recover()
+        self.assertIn("forced failure", again.recovery_error)
+        self.assertIn("/run/bandctl.json", host.files)
+        host.fail_substr = None
+        retry = Shaper("eth0", host=host, state_path="/run/bandctl.json")
+        retry.recover()
+        self.assertFalse(host.ifb_exists)
+        self.assertNotIn("/run/bandctl.json", host.files)
+
+    def test_retry_after_failed_ifb_removal_does_not_delete_ingress_twice(self):
+        shaper, host = _shaper()
+        shaper.apply(42, 10, None, 100_000_000, None)
+        host.fail_substr = "ip link del ifb-bandctl"
+        with self.assertRaises(ShaperError):
+            shaper.remove(42)
+        host.fail_substr = None
+        shaper.remove(42)
+        self.assertEqual(_joined(host).count("tc qdisc del dev eth0 ingress"), 1)
+
+    def test_recovery_accepts_already_removed_download_objects(self):
+        shaper, host = _shaper()
+        host.files["/run/bandctl.json"] = json.dumps({
+            "iface": "eth0", "root_replaced": False, "ifb_owned": True,
+            "ingress_owned": True, "pids": {},
+        })
+        original_run = host.run
+
+        def missing(args, input_text=None):
+            if args == ["tc", "qdisc", "del", "dev", "eth0", "ingress"]:
+                raise ShaperError("No such file or directory", args)
+            if args == ["ip", "link", "del", "ifb-bandctl"]:
+                raise ShaperError('Cannot find device "ifb-bandctl"', args)
+            return original_run(args, input_text)
+
+        host.run = missing
+        shaper.recover()
+        self.assertIsNone(shaper.recovery_error)
+        self.assertNotIn("/run/bandctl.json", host.files)
+
     def test_recovery_without_state_leaves_existing_ifb_alone(self):
         shaper, host = _shaper()
         host.ifb_exists = True
