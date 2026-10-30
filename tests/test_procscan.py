@@ -60,6 +60,17 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(flow.remote_port, 0)
         self.assertEqual(flow.remote_ip, "")
 
+    def test_flows_skip_ports_outside_valid_range(self):
+        header = "sl local_address rem_address st tx rx tr retr uid timeout inode\n"
+        rows = (
+            "0: 0800000A:10000 04030201:01BB 01 0 0 0 0 0 11\n"
+            "1: 0800000A:0050 04030201:10000 01 0 0 0 0 0 12\n"
+            "2: 0800000A:0050 04030201:-1 01 0 0 0 0 0 13\n"
+            "3: 0800000A:FFFF 04030201:01BB 01 0 0 0 0 0 14\n"
+        )
+        self.assertEqual(set(parse_proc_net(header + rows, "tcp", "ip")), {"14"})
+        self.assertEqual(set(parse_proc_net(header + rows, "udp", "ip")), {"14"})
+
     def test_ipv6_and_v4_mapped(self):
         # ::1 port 80 to ::1 port 443. Each 32-bit word is little-endian in the file.
         text = (

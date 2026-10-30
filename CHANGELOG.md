@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Malformed socket rows with invalid ports are skipped before filters are built.
+
 - Failed share and group operations report incomplete rollback when restoration or synchronization fails.
 
 - CLI sessions retry failed capacity updates even if the detected speed returns to its prior value.

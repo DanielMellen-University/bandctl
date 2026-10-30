@@ -109,6 +109,8 @@ def _decode_endpoint(field: str, family: str) -> tuple[str, int, str]:
     """Return ``(address, port, family)``. Mapped IPv6 comes back as ``ip``."""
     ip_hex, port_hex = field.split(":")
     port = int(port_hex, 16)
+    if not 0 <= port <= 65535:
+        raise ValueError(port_hex)
     if family == "ip":
         raw = bytes.fromhex(ip_hex)
         if len(raw) != 4:
