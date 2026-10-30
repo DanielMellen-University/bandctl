@@ -734,7 +734,12 @@ class Shaper:
                 self._torn = True
                 self.recovery_error = f"recovery failed: {self._ifb_cleanup_error or self._nft_cleanup_error or pending_error or (tree_errors[0] if tree_errors else notes[-1])}"
             else:
-                self._unlink_state()
+                try:
+                    self._unlink_state()
+                except ShaperError as exc:
+                    self._torn = True
+                    self.recovery_error = f"recovery failed: {exc}"
+                    notes.append(self.recovery_error)
         return notes
 
     def teardown(self) -> list[str]:
@@ -764,7 +769,10 @@ class Shaper:
             tree_errors = self._remove_tree(protected_pids=pending_pids)
             notes.extend(tree_errors)
             if not pending_pids and not tree_errors and not self._egress and not self._ifb_owned and not self._ingress_owned and not self._nft_cleanup_error:
-                self._unlink_state()
+                try:
+                    self._unlink_state()
+                except ShaperError as exc:
+                    notes.append(str(exc))
         return notes
 
     # --- internals -------------------------------------------------------
@@ -1261,8 +1269,10 @@ class Shaper:
     def _unlink_state(self) -> None:
         try:
             self.host.unlink(self.state_path)
-        except OSError:
+        except FileNotFoundError:
             return
+        except (OSError, ShaperError) as exc:
+            raise ShaperError(f"cannot remove recovery state: {exc}") from exc
 
     def _sync_flows(self) -> None:
         """Install or remove flower filters so open sockets follow the shares.

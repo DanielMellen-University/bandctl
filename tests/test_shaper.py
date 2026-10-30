@@ -1213,6 +1213,27 @@ class ApplyTests(unittest.TestCase):
 class CleanupTests(unittest.TestCase):
     """Fixes for teardown, remove, and failed apply."""
 
+    def test_failed_state_removal_is_reported_and_recovery_blocks_startup(self):
+        for operation in ("recover", "teardown"):
+            with self.subTest(operation=operation):
+                shaper, host = _shaper()
+                host.files["/run/bandctl.json"] = json.dumps({
+                    "iface": "eth0", "pids": {}, "root_replaced": False,
+                    "ifb_owned": False, "ingress_owned": False, "nft_owned": False,
+                })
+                with patch.object(host, "unlink", side_effect=PermissionError("unlink denied")):
+                    notes = getattr(shaper, operation)()
+                self.assertTrue(any("unlink denied" in note for note in notes))
+                self.assertIn("/run/bandctl.json", host.files)
+                if operation == "recover":
+                    self.assertIn("unlink denied", shaper.recovery_error)
+                    with self.assertRaisesRegex(ShaperError, "shut down"):
+                        shaper.apply(42, None, 10, None, 100_000_000)
+                retry = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+                retry.recover()
+                self.assertIsNone(retry.recovery_error)
+                self.assertNotIn("/run/bandctl.json", host.files)
+
     def test_missing_cleanup_commands_keep_recovery_state(self):
         for missing in ("nft", "tc", "ip"):
             with self.subTest(command=missing):
