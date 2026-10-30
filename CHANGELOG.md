@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Failed CLI commands also report recent background warnings.
+
 - Process restoration reads the cgroup v2 entry even when legacy paths contain colons.
 
 - Original cgroup paths retain Unicode line separators during restoration.

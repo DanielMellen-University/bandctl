@@ -101,9 +101,6 @@ def serve(session, path: str, *, interval: float = 1.0, on_stop=None) -> None:
                             except RecursionError as exc:
                                 raise ValueError("request is nested too deeply") from exc
                             response, stopping = dispatch(session, payload)
-                            warnings = getattr(session, "warnings", None)
-                            if isinstance(warnings, list) and warnings:
-                                response["warnings"] = list(warnings)
                             if stopping and on_stop is not None:
                                 try:
                                     notes = on_stop()
@@ -111,6 +108,9 @@ def serve(session, path: str, *, interval: float = 1.0, on_stop=None) -> None:
                                         response = {"ok": False, "error": "; ".join(notes)}
                                 except (OSError, RuntimeError) as exc:
                                     response = {"ok": False, "error": str(exc)}
+                            warnings = getattr(session, "warnings", None)
+                            if isinstance(warnings, list) and warnings:
+                                response["warnings"] = list(warnings)
                         except (ValueError, UnicodeDecodeError, OSError) as exc:
                             response = {"ok": False, "error": str(exc)}
                         try:

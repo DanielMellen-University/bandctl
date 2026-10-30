@@ -94,6 +94,26 @@ class WarningTests(unittest.TestCase):
                 self.assertIn("filter failed", stderr.getvalue())
 
 
+    def test_failed_command_reports_background_warnings_in_text_and_json(self):
+        from bandctl.__main__ import main
+        response = {"ok": False, "error": "cannot remove limit", "warnings": ["flow refresh: filter failed"]}
+        for json_output in (False, True):
+            stdout, stderr = io.StringIO(), io.StringIO()
+            args = ["remove", "42"] + (["--json"] if json_output else [])
+            with self.subTest(json_output=json_output), patch("os.geteuid", return_value=0), \
+                 patch("bandctl.cli_client.ensure_session"), \
+                 patch("bandctl.cli_transport.request", return_value=response), \
+                 contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                self.assertEqual(main(args), 1)
+            if json_output:
+                result = json.loads(stderr.getvalue())
+                self.assertEqual(result["error"], "cannot remove limit")
+                self.assertEqual(result["warnings"], ["flow refresh: filter failed"])
+            else:
+                self.assertIn("cannot remove limit", stderr.getvalue())
+                self.assertIn("flow refresh: filter failed", stderr.getvalue())
+
+
 class StopFailureTests(unittest.TestCase):
     def test_failed_stop_reports_the_session_error_without_waiting(self):
         from bandctl.__main__ import main

@@ -63,6 +63,7 @@ def run_command(args) -> int:
     from bandctl.iface import IfaceError
     from bandctl.settings import read_settings
 
+    warnings = []
     try:
         if os.geteuid() != 0:
             raise ValueError("root is required for this command")
@@ -83,12 +84,12 @@ def run_command(args) -> int:
             iface = saved.iface
         ensure_session(iface, start=args.command in ("limit", "import"))
         response = request(SOCKET_PATH, payload, timeout=30.0)
+        warnings = response.get("warnings", [])
         if not response["ok"]:
             raise ValueError(response.get("error", "request failed"))
         if args.command == "stop":
             wait_for_stop()
         result = response.get("result", {})
-        warnings = response.get("warnings", [])
         if args.json:
             if warnings:
                 result = {**result, "warnings": warnings}
@@ -110,7 +111,12 @@ def run_command(args) -> int:
         return 0
     except (ValueError, OSError, IfaceError) as exc:
         if args.json:
-            print(json.dumps({"error": str(exc)}), file=sys.stderr)
+            error = {"error": str(exc)}
+            if warnings:
+                error["warnings"] = warnings
+            print(json.dumps(error), file=sys.stderr)
         else:
             print(f"bandctl: {exc}", file=sys.stderr)
+            for warning in warnings:
+                print(f"bandctl: {warning}", file=sys.stderr)
         return 1

@@ -142,7 +142,9 @@ class TransportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = str(Path(directory) / "session.sock")
             cleanup = Mock(return_value=["could not restore cgroup"])
-            thread = threading.Thread(target=serve, args=(Mock(), path), kwargs={"on_stop": cleanup})
+            session = Mock()
+            session.warnings = ["flow refresh: filter failed"]
+            thread = threading.Thread(target=serve, args=(session, path), kwargs={"on_stop": cleanup})
             thread.start()
             wait_ready(path)
             try:
@@ -150,7 +152,8 @@ class TransportTests(unittest.TestCase):
             finally:
                 thread.join(timeout=3)
             cleanup.assert_called_once()
-            self.assertEqual(response, {"ok": False, "error": "could not restore cgroup"})
+            self.assertEqual(response, {"ok": False, "error": "could not restore cgroup",
+                                        "warnings": ["flow refresh: filter failed"]})
             self.assertFalse(thread.is_alive())
 
     def test_existing_file_is_not_replaced(self):
