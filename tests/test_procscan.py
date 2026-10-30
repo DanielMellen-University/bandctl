@@ -6,6 +6,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from bandctl.procscan import (
     format_cmdline,
@@ -85,6 +86,12 @@ class ParseTests(unittest.TestCase):
         long = format_cmdline(b"x" * 200, "x", limit=10)
         self.assertEqual(long, "xxxxxxx...")
 
+    def test_user_lookup_failure_keeps_numeric_uid(self):
+        for error in (OSError("user database unavailable"), OverflowError("UID out of range")):
+            with self.subTest(error=type(error).__name__), \
+                 patch("bandctl.procscan.pwd.getpwuid", side_effect=error):
+                self.assertEqual(user_from_status("Uid:\t12345\t12345\t12345\t12345\n"), "12345")
+
     def test_user(self):
         self.assertEqual(user_from_status("Uid:\t0\t0\t0\t0\n"), "root")
         self.assertEqual(user_from_status("Name:\tnobody\n", fallback_uid=999999), "999999")
@@ -105,6 +112,14 @@ class ScanTests(unittest.TestCase):
         self.assertEqual(found[7].comm, "curl")
         self.assertEqual(found[7].start_ticks, 12345)
         self.assertEqual(found[8].sockets, 0)
+
+    def test_scan_survives_user_database_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._pid(root, 7, "curl", b"curl\0", "Uid:\t1000\t1000\t1000\t1000\n", None)
+            with patch("bandctl.procscan.pwd.getpwuid", side_effect=OSError("lookup failed")):
+                found = scan_processes(root, skip_pid=0)
+        self.assertEqual([(proc.pid, proc.user) for proc in found], [(7, "1000")])
 
     def test_live_proc_skips_self(self):
         found = scan_processes()

@@ -140,7 +140,7 @@ def user_from_status(status_text: str, fallback_uid: int | None = None) -> str:
         return "?"
     try:
         return pwd.getpwuid(uid).pw_name
-    except KeyError:
+    except (KeyError, OSError, OverflowError):
         return str(uid)
 
 

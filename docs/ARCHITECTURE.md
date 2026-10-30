@@ -124,6 +124,8 @@ Before moving a process or replacing a root qdisc, the shaper records the recove
 
 ## UI
 
+If user lookup fails, the process scan shows the numeric UID and continues.
+
 `app.py` refreshes once a second on a worker thread (`asyncio.to_thread`) so the `/proc` walk, `ss -tinp`, and `tc -s class show` do not block the keyboard. The Down and Up columns are the change in `bytes_received` and `bytes_acked` on non-loopback TCP sockets. The table hides a process at or below 1% of link capacity, or of that measured total when the link speed is unknown. `tc -s class show` still drives the flower refresh. The shaper lock is an `RLock` shared with Apply. Selection is a pid, not a row index, so a rescan does not lose the highlight. Column widths are chosen so the table fits the terminal. User and sockets are dropped first. The command column takes the leftover width. If that would leave it under 16 cells, the percent headers become `Dn%` and `Up%` and the rate columns lose a cell. The table has no horizontal scrollbar.
 
 The screen gets size classes that `theme.tcss` keys off:

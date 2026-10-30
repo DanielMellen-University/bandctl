@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Process scans show a numeric UID if user lookup fails.
+
 - Recovery state stays until exit cleanup, even after the last share is removed.
 
 - The TUI reports cleanup errors after exit and returns a failure status.
