@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Process restoration reads the cgroup v2 entry even when legacy paths contain colons.
+
 - Original cgroup paths retain Unicode line separators during restoration.
 
 - Original cgroup paths keep trailing spaces so processes return to the correct cgroup.
