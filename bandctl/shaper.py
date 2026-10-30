@@ -1649,7 +1649,7 @@ class LinuxHost:
         return proc.stdout
 
     def read(self, path: str) -> str:
-        return Path(path).read_text(encoding="utf-8", errors="replace")
+        return Path(path).read_text(encoding="utf-8", errors="surrogateescape")
 
     def readlink(self, path: str) -> str:
         return os.readlink(path)

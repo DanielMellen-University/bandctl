@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Non-UTF-8 cgroup paths are rejected instead of being changed to a different path during restoration.
+
 - Settings screen paths keep leading and trailing spaces, so export does not replace a different file.
 
 - Leaf cleanup checks that each process is still in the leaf before moving it to the root cgroup.

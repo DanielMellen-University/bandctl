@@ -2144,6 +2144,53 @@ class CleanupTests(unittest.TestCase):
                 self.assertFalse(any(path.startswith("/sys/fs/cgroup/bandctl") for path in host.files))
                 self.assertEqual(host.commands, [])
 
+    def test_non_utf8_original_cgroup_is_rejected_before_move(self):
+        shaper, host = _shaper()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "cgroup"
+            path.write_bytes(b"0::/session-\xff.scope\n")
+            read = host.read
+
+            def read_cgroup(source):
+                return LinuxHost().read(str(path)) if source == "/proc/42/cgroup" else read(source)
+
+            with patch.object(host, "read", side_effect=read_cgroup):
+                with self.assertRaisesRegex(ShaperError, "invalid cgroup"):
+                    shaper.apply(42, None, 10, None, 100_000_000)
+            self.assertEqual(host.commands, [])
+            self.assertEqual(shaper.shares, {})
+            self.assertNotIn("/run/bandctl.json", host.files)
+
+    def test_recovery_rejects_non_utf8_cgroup_without_changing_host(self):
+        shaper, host = _shaper()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "state.json"
+            path.write_bytes(b'{"iface":"eth0","pids":{"42":"/session-\xff.scope"}}')
+            read = host.read
+
+            def read_state(source):
+                return LinuxHost().read(str(path)) if source == "/run/bandctl.json" else read(source)
+
+            with patch.object(host, "read", side_effect=read_state):
+                shaper.recover()
+            self.assertIn("invalid pid or cgroup", shaper.recovery_error)
+            self.assertEqual(host.commands, [])
+            self.assertTrue(path.exists())
+
+    def test_valid_replacement_character_in_cgroup_path_is_preserved(self):
+        shaper, host = _shaper()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "cgroup"
+            path.write_text("0::/session-\ufffd.scope\n", encoding="utf-8")
+            read = host.read
+
+            def read_cgroup(source):
+                return LinuxHost().read(str(path)) if source == "/proc/42/cgroup" else read(source)
+
+            with patch.object(host, "read", side_effect=read_cgroup):
+                shaper.apply(42, None, 10, None, 100_000_000)
+            self.assertEqual(json.loads(host.files["/run/bandctl.json"])["pids"]["42"], "/session-\ufffd.scope")
+
     def test_original_cgroup_ignores_colons_in_legacy_controller_path(self):
         shaper, host = _shaper()
         host.files["/proc/42/cgroup"] = "4:cpu:/legacy::name\n0::/user.slice/session.scope\n"
