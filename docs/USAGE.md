@@ -129,3 +129,5 @@ A failed new share is rolled back, and its empty cgroup is removed. If the proce
 - `/run/bandctl.json` is removed
 
 A crash skips that path. The next start reads `/run/bandctl.json` and finishes it. Reboot also drops the qdisc and the file, because neither is persistent.
+
+If restoring the root qdisc fails, bandctl reports the error and keeps the recovery file. Remove can retry while the session is open. After exit, the next start retries recovery; if it still fails, new limits stay disabled.

@@ -847,6 +847,49 @@ class ApplyTests(unittest.TestCase):
 class CleanupTests(unittest.TestCase):
     """Fixes for teardown, remove, and failed apply."""
 
+    def test_remove_reports_root_qdisc_restoration_failure(self):
+        shaper, host = _shaper()
+        shaper.apply(42, None, 10, None, 100_000_000)
+        host.fail_substr = "tc qdisc del dev eth0 root"
+        with self.assertRaisesRegex(ShaperError, "forced failure"):
+            shaper.remove(42)
+        self.assertIn(42, shaper.shares)
+        self.assertTrue(shaper.upload_active)
+        self.assertNotIn("tc qdisc add dev eth0 root fq_codel", _joined(host))
+        with self.assertRaisesRegex(ShaperError, "qdisc.*restore"):
+            shaper.apply(42, None, 20, None, 100_000_000)
+        host.fail_substr = None
+        shaper.remove(42)
+        self.assertEqual(shaper.shares, {})
+
+    def test_teardown_reports_failed_qdisc_restore_and_keeps_recovery_state(self):
+        shaper, host = _shaper()
+        shaper.apply(42, None, 10, None, 100_000_000)
+        host.fail_substr = "tc qdisc add dev eth0 root"
+        notes = shaper.teardown()
+        self.assertTrue(any("forced failure" in note for note in notes))
+        self.assertIn("/run/bandctl.json", host.files)
+        host.fail_substr = None
+        again = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+        again.recover()
+        self.assertIn("tc qdisc add dev eth0 root fq_codel", _joined(host))
+        self.assertNotIn("/run/bandctl.json", host.files)
+
+    def test_failed_recovery_preserves_state_and_disables_new_limits(self):
+        shaper, host = _shaper()
+        shaper.apply(42, None, 10, None, 100_000_000)
+        host.fail_substr = "tc qdisc add dev eth0 root"
+        again = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+        notes = again.recover()
+        self.assertTrue(any("forced failure" in note for note in notes))
+        self.assertIn("/run/bandctl.json", host.files)
+        with self.assertRaisesRegex(ShaperError, "shut down"):
+            again.apply(43, None, 10, None, 100_000_000)
+        host.fail_substr = None
+        retry = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+        retry.recover()
+        self.assertNotIn("/run/bandctl.json", host.files)
+
     def test_failed_state_replace_preserves_previous_file(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "state.json"

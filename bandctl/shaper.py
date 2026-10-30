@@ -124,6 +124,7 @@ class Shaper:
     _down_cap: int | None = None
     _up_cap: int | None = None
     _egress: bool = False
+    _root_restore_failed: bool = False
     _ifb: bool = False
     _saved_qdisc: str | None = None
     _classes: set[tuple[str, int]] = field(default_factory=set)
@@ -634,15 +635,19 @@ class Shaper:
                     except (ShaperError, ValueError) as exc:
                         notes.append(str(exc))
                 self._saved_qdisc = qdisc
-                notes.extend(self._scrub(iface, restore_qdisc=state.get("root_replaced", True)))
+                restore_root = bool(state.get("root_replaced", True))
+                self._egress = restore_root
+                notes.extend(self._scrub(iface, restore_qdisc=restore_root))
             else:
                 notes.extend(self._scrub(self.iface, restore_qdisc=False))
             self._shares.clear()
-            self._egress = False
             self._ifb = False
             self._classes.clear()
             self._filters.clear()
-            self._unlink_state()
+            if self._egress:
+                self._torn = True
+            else:
+                self._unlink_state()
         return notes
 
     def teardown(self) -> list[str]:
@@ -667,7 +672,8 @@ class Shaper:
                 notes.append(str(exc))
                 notes.extend(self._scrub(self.iface, restore_qdisc=replaced_root))
             self._remove_tree()
-            self._unlink_state()
+            if not self._egress:
+                self._unlink_state()
         return notes
 
     # --- internals -------------------------------------------------------
@@ -792,6 +798,8 @@ class Shaper:
         self._write_state()
 
     def _ensure_egress(self) -> None:
+        if self._root_restore_failed:
+            raise ShaperError("root qdisc restore is incomplete; remove the limit to retry")
         if self._egress:
             return
         current = self._root_kind(self.iface)
@@ -927,14 +935,14 @@ class Shaper:
     def _restore_root_qdisc(self, iface: str | None = None) -> None:
         iface = self.iface if iface is None else iface
         kind = self._saved_qdisc or "fq_codel"
+        self._root_restore_failed = True
         try:
             self._run(["tc", "qdisc", "del", "dev", iface, "root"])
-        except ShaperError:
-            pass
-        try:
-            self._run(["tc", "qdisc", "add", "dev", iface, "root", kind])
-        except ShaperError:
-            pass
+        except ShaperError as exc:
+            if not any(text in str(exc).lower() for text in ("no such file", "not found")):
+                raise
+        self._run(["tc", "qdisc", "add", "dev", iface, "root", kind])
+        self._root_restore_failed = False
         self._egress = False
         self._drop_dev(iface)
         # The root qdisc took the upload flower filters with it.
@@ -983,8 +991,13 @@ class Shaper:
         except ShaperError:
             pass
         if restore_qdisc:
-            self._restore_root_qdisc(iface)
-            notes.append(f"restored root qdisc on {iface}")
+            self._egress = True
+            try:
+                self._restore_root_qdisc(iface)
+            except ShaperError as exc:
+                notes.append(str(exc))
+            else:
+                notes.append(f"restored root qdisc on {iface}")
         self._remove_tree()
         return notes
 

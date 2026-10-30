@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Failed root qdisc restoration is reported and keeps recovery state for a retry.
+
 - Recovery state updates replace the old file atomically, so a failed write does not truncate it.
 
 - A process is not moved until its original cgroup is recorded for crash recovery.
