@@ -105,7 +105,13 @@ def check_iface(name: str, net_root: Path | None = None) -> str:
     _validate_iface_name(name)
     root = net_root or Path("/sys/class/net")
     if not (root / name).exists():
-        known = list_ifaces(root)
+        known = []
+        for candidate in list_ifaces(root):
+            try:
+                _validate_iface_name(candidate)
+            except IfaceError:
+                continue
+            known.append(candidate)
         hint = f" Interfaces here: {', '.join(known)}." if known else ""
         raise IfaceError(f"no network interface named {name!r}.{hint}")
     return name

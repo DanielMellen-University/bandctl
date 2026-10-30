@@ -142,6 +142,16 @@ class CheckTests(unittest.TestCase):
         self.assertIn("no network interface named 'eth9'", message)
         self.assertIn("eth0, lo, wlan0", message)
 
+    def test_missing_device_hint_omits_unusable_interface_names(self):
+        for name in ("eth\x1b[2J", "eth\udcff"):
+            (self.net / name).mkdir()
+        with self.assertRaises(IfaceError) as caught:
+            check_iface("eth9", self.net)
+        message = str(caught.exception)
+        self.assertIn("eth0, lo, wlan0", message)
+        self.assertNotIn("\x1b", message)
+        self.assertNotIn("\udcff", message)
+
     def test_bad_names_are_rejected_before_the_lookup(self):
         for name in ("", ".", "..", "../eth0", "eth 0", "x" * 16):
             with self.assertRaises(IfaceError, msg=name) as caught:
