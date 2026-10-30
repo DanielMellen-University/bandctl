@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+import stat
+import tempfile
 import time
 import threading
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from bandctl.groups import Group
@@ -13,6 +16,7 @@ from bandctl.rates import htb_plan, percent_to_bps
 from bandctl.procscan import SockFlow
 from bandctl.shaper import (
     IFB,
+    LinuxHost,
     Share,
     Shaper,
     ShaperError,
@@ -65,6 +69,9 @@ class FakeHost:
 
     def write(self, path: str, data: str) -> None:
         self.files[path] = data
+
+    def write_state(self, path: str, data: str) -> None:
+        self.write(path, data)
 
     def mkdir(self, path: str) -> None:
         self.dirs.add(path)
@@ -839,6 +846,33 @@ class ApplyTests(unittest.TestCase):
 
 class CleanupTests(unittest.TestCase):
     """Fixes for teardown, remove, and failed apply."""
+
+    def test_failed_state_replace_preserves_previous_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "state.json"
+            path.write_text("previous state")
+            shaper = Shaper("eth0", host=LinuxHost(), state_path=str(path))
+            shaper._shares[42] = Share(42, None, 10, 10, "/original", start_ticks=100)
+            with patch("os.replace", side_effect=OSError("replace failed")):
+                with self.assertRaisesRegex(ShaperError, "cannot write recovery state"):
+                    shaper._write_state(required=True)
+            self.assertEqual(path.read_text(), "previous state")
+            self.assertEqual(list(Path(directory).iterdir()), [path])
+
+    def test_state_write_is_private_and_preserves_old_file_on_flush_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "state.json"
+            shaper = Shaper("eth0", host=LinuxHost(), state_path=str(path))
+            shaper._shares[42] = Share(42, None, 10, 10, "/original", start_ticks=100)
+            shaper._write_state(required=True)
+            original = path.read_text()
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o600)
+            self.assertEqual(json.loads(original)["pids"]["42"], "/original")
+            with patch("os.fsync", side_effect=OSError("flush failed")):
+                with self.assertRaisesRegex(ShaperError, "cannot write recovery state"):
+                    shaper._write_state(required=True)
+            self.assertEqual(path.read_text(), original)
+            self.assertEqual(list(Path(directory).iterdir()), [path])
 
     def test_records_original_cgroup_before_moving_process(self):
         shaper, host = _shaper()

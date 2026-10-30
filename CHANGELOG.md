@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Recovery state updates replace the old file atomically, so a failed write does not truncate it.
+
 - A process is not moved until its original cgroup is recorded for crash recovery.
 
 - Crash recovery checks the saved process identity and cgroup before restoring a PID, so a reused PID is not moved to the old process's cgroup.

@@ -26,6 +26,7 @@ import json
 import os
 import re
 import subprocess
+import tempfile
 import threading
 import time
 from dataclasses import dataclass, field
@@ -48,6 +49,8 @@ class Host(Protocol):
     def read(self, path: str) -> str: ...
 
     def write(self, path: str, data: str) -> None: ...
+
+    def write_state(self, path: str, data: str) -> None: ...
 
     def mkdir(self, path: str) -> None: ...
 
@@ -1032,7 +1035,7 @@ class Shaper:
             "start_ticks": {str(share.pid): share.start_ticks for share in self._shares.values()},
         }
         try:
-            self.host.write(self.state_path, json.dumps(payload) + "\n")
+            self.host.write_state(self.state_path, json.dumps(payload) + "\n")
         except (OSError, ShaperError) as exc:
             if required:
                 raise ShaperError(f"cannot write recovery state: {exc}") from exc
@@ -1304,6 +1307,27 @@ class LinuxHost:
             Path(path).write_text(data, encoding="utf-8")
         except OSError as exc:
             raise ShaperError(f"{path}: {exc.strerror or exc}") from exc
+
+    def write_state(self, path: str, data: str) -> None:
+        destination = Path(path)
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=destination.parent,
+                                             prefix=".bandctl-state-", delete=False) as stream:
+                temporary = stream.name
+                stream.write(data)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, destination)
+            temporary = None
+        except OSError as exc:
+            raise ShaperError(f"{path}: {exc.strerror or exc}") from exc
+        finally:
+            if temporary is not None:
+                try:
+                    os.unlink(temporary)
+                except OSError:
+                    pass
 
     def mkdir(self, path: str) -> None:
         try:
