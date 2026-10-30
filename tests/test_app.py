@@ -226,7 +226,7 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("1.50 MB", str(title.render()))
             self.assertLessEqual(len(str(title.render())), title.content_size.width)
 
-    async def test_filter_matches_name_and_pid_and_restores_rows(self):
+    async def test_filter_matches_process_fields_and_restores_rows(self):
         app = _app(FakeShaper())
         async with app.run_test(size=(80, 24)) as pilot:
             await pilot.press("n", "slash")
@@ -237,6 +237,12 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             field.value = "7"
             await pilot.pause()
             self.assertEqual(app._shown, [7])
+            field.value = "EXAMPLE.COM"
+            await pilot.pause()
+            self.assertEqual(app._shown, [42])
+            field.value = "ROOT"
+            await pilot.pause()
+            self.assertEqual(app._shown, [1])
             field.value = "no-such-process"
             await pilot.pause()
             self.assertEqual(app._shown, [])
