@@ -11,7 +11,7 @@ from bandctl.settings_session import export_session, import_session
 from bandctl.shaper import ShaperError
 
 
-WARNING_PREFIXES = ("capacity update:", "flow refresh:", "scheduled limit for pid", "auto rule for pid")
+WARNING_PREFIXES = ("capacity update:", "flow refresh:", "scheduled limit for pid", "auto rule for pid", "refresh failed:")
 WARNING_SECONDS = 60.0
 
 
@@ -125,3 +125,7 @@ class CliSession:
                 self._warning_times[message] = now
         self._warning_times = {m: t for m, t in self._warning_times.items() if now - t <= WARNING_SECONDS}
         self.warnings = list(self._warning_times)
+
+    def record_refresh_failure(self, exc: Exception) -> None:
+        """Retain an interrupted refresh alongside other recent warnings."""
+        self._remember_warnings([f"refresh failed: {exc}"], time.monotonic())

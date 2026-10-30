@@ -136,7 +136,7 @@ def serve(session, path: str, *, interval: float = 1.0, on_stop=None) -> None:
                     try:
                         session.refresh()
                     except (OSError, RuntimeError, ValueError) as exc:
-                        session.warnings = [f"refresh failed: {exc}"]
+                        session.record_refresh_failure(exc)
                     next_refresh = time.monotonic() + interval
         finally:
             try:

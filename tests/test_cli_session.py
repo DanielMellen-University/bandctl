@@ -103,6 +103,16 @@ class CliSessionTests(unittest.TestCase):
         self.session._remember_warnings([first], 3)
         self.assertEqual(self.session.warnings, [second, first])
 
+    def test_refresh_failure_preserves_other_warnings_and_expires(self):
+        from unittest.mock import patch
+
+        self.session._remember_warnings(["flow refresh: filter failed"], 1)
+        with patch("bandctl.cli_session.time.monotonic", return_value=2):
+            self.session.record_refresh_failure(OSError("scan failed"))
+        self.assertEqual(self.session.warnings, ["flow refresh: filter failed", "refresh failed: scan failed"])
+        self.session._remember_warnings([], 63)
+        self.assertEqual(self.session.warnings, [])
+
     def test_refresh_applies_and_expires_scheduled_rules(self):
         from datetime import time
         from bandctl.schedule import DailyWindow

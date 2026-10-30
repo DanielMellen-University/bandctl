@@ -97,6 +97,38 @@ class TransportTests(unittest.TestCase):
                 thread.join(timeout=3)
             self.assertFalse(thread.is_alive())
 
+    def test_refresh_failure_is_reported_after_a_successful_refresh(self):
+        from bandctl.cli_session import CliSession
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "session.sock")
+            shaper = Mock()
+            shaper.flow_warning = None
+            shaper.shares = {}
+            recovered = threading.Event()
+            calls = 0
+
+            def processes():
+                nonlocal calls
+                calls += 1
+                if calls == 1:
+                    raise OSError("process scan failed")
+                recovered.set()
+                return []
+
+            session = CliSession(shaper, "eth0", None, processes)
+            thread = threading.Thread(target=serve, args=(session, path), kwargs={"interval": 0.02})
+            thread.start()
+            wait_ready(path)
+            try:
+                self.assertTrue(recovered.wait(3))
+                response = request(path, {"command": "ping"})
+                self.assertIn("refresh failed: process scan failed", response.get("warnings", []))
+            finally:
+                request(path, {"command": "stop"})
+                thread.join(timeout=3)
+            self.assertFalse(thread.is_alive())
+
     def test_many_background_warnings_do_not_break_session_requests(self):
         with tempfile.TemporaryDirectory() as directory:
             path = str(Path(directory) / "session.sock")

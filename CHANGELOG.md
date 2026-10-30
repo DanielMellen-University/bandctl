@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- CLI sessions retain transient refresh failures for later commands to report.
+
 - Settings reject invalid Unicode in rule and group names before import.
 
 - Documented the limit on matching existing wildcard-bound UDP sockets.
