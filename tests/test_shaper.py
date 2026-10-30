@@ -846,6 +846,54 @@ class ApplyTests(unittest.TestCase):
         self.assertNotIn(42, shaper.shares)
         self.assertFalse(shaper.upload_active)
 
+    def test_failed_retirement_restores_previous_class_plan(self):
+        shaper, host = _shaper()
+        host.files["/proc/42/stat"] = "42 (work) S " + "0 " * 18 + "100"
+        shaper.apply(42, None, 60, None, 100_000_000, expected_start_ticks=100)
+        shaper.apply(43, None, 60, None, 100_000_000)
+        host.files.pop("/proc/42/stat")
+        host.files.pop("/proc/42/cgroup")
+        host.commands.clear()
+        run = host.run
+        listdir = host.listdir
+        failed = [False]
+
+        def fail_once(args, input_text=None):
+            if not failed[0] and args[:3] == ["tc", "filter", "del"] and "10" in args:
+                failed[0] = True
+                raise ShaperError("class filter deletion failed")
+            return run(args, input_text)
+
+        def list_live(path):
+            if path == "/proc/42/fd":
+                raise FileNotFoundError("process exited")
+            return listdir(path)
+
+        with patch.object(host, "run", side_effect=fail_once), \
+             patch.object(host, "listdir", side_effect=list_live):
+            shaper.sample()
+        self.assertIn("class filter deletion failed", shaper.flow_warning)
+        self.assertNotIn("rollback incomplete", shaper.flow_warning)
+        self.assertEqual(set(shaper.shares), {42, 43})
+        defaults = [cmd for cmd in _joined(host) if "classid 1:999" in cmd]
+        self.assertIn("rate 1kbit", defaults[-1])
+        shaper.sample()
+        self.assertNotIn(42, shaper.shares)
+        self.assertIsNone(shaper.flow_warning)
+
+    def test_failed_retirement_reports_incomplete_rollback(self):
+        shaper, host = _shaper()
+        host.files["/proc/42/stat"] = "42 (work) S " + "0 " * 18 + "100"
+        shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+        host.files.pop("/proc/42/stat")
+        with patch.object(shaper, "_sync", side_effect=[ShaperError("retire failed"),
+                                                       ShaperError("restore failed")]):
+            shaper.sample()
+        self.assertIn("retire failed", shaper.flow_warning)
+        self.assertIn("rollback incomplete", shaper.flow_warning)
+        self.assertIn("restore failed", shaper.flow_warning)
+        self.assertIn(42, shaper.shares)
+
     def test_sample_keeps_share_when_identity_is_unreadable(self):
         shaper, host = _shaper()
         stat = "/proc/42/stat"

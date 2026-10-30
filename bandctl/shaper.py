@@ -643,9 +643,15 @@ class Shaper:
             self._shares.pop(share.pid)
         try:
             self._sync()
-        except ShaperError:
+        except (OSError, ShaperError) as exc:
             self._shares.update({share.pid: share for share in stale})
-            raise
+            try:
+                self._sync()
+            except (OSError, ShaperError) as rollback_exc:
+                raise ShaperError(f"{exc}; rollback incomplete: {rollback_exc}") from exc
+            if isinstance(exc, ShaperError):
+                raise
+            raise ShaperError(str(exc)) from exc
         for share in stale:
             self._rmdir_leaf(share.pid)
 
@@ -1411,6 +1417,11 @@ class Shaper:
         fd_dir = f"/proc/{pid}/fd"
         try:
             names = self.host.listdir(fd_dir)
+        except FileNotFoundError as exc:
+            share = self._shares.get(pid)
+            if share is not None and self._process_status(share) == "gone":
+                return []
+            raise ShaperError(f"cannot read {fd_dir}: {exc}") from exc
         except OSError as exc:
             raise ShaperError(f"cannot read {fd_dir}: {exc}") from exc
         found: list[SockFlow] = []
