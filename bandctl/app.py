@@ -623,9 +623,12 @@ class BandctlApp(App):
         except RateError as exc:
             self._note(str(exc), bad=True)
             return False
+        old_budgets = (self._down_budget, self._up_budget)
         self._down_budget = down
         self._up_budget = up
-        self._push_caps()
+        if not self._push_caps():
+            self._down_budget, self._up_budget = old_budgets
+            return False
         if announce:
             self._note("capacity updated")
             self._render()
@@ -637,18 +640,22 @@ class BandctlApp(App):
         down.value = "" if self._down_budget is None else format_budget_input(self._down_budget, self.unit)
         up.value = "" if self._up_budget is None else format_budget_input(self._up_budget, self.unit)
 
-    def _push_caps(self) -> None:
+    def _push_caps(self) -> bool:
         if self.shaper is None or not self.shaper.shares:
-            return
+            return True
         caps = self._effective_caps()
         if caps == self._pushed_caps:
-            return
+            return True
         try:
             self.shaper.set_capacities(*caps)
         except ShaperError as exc:
+            # A failed rollback can leave class rates out of sync. Retry even
+            # if the next requested capacities equal the last successful ones.
+            self._pushed_caps = (None, None)
             self._note(str(exc), bad=True)
-            return
+            return False
         self._pushed_caps = caps
+        return True
 
     def _render(self) -> None:
         if not self.is_mounted:

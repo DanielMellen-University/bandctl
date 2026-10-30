@@ -79,7 +79,7 @@ The header shows the detected link speed from `/sys/class/net/<iface>/speed`. Th
 
 When `ip route` is unavailable, bandctl picks the active IPv4 default route with the lowest metric from `/proc/net/route`.
 
-The two budget fields are in the unit shown in the header. `b` flips between Mbit/s and MB/s and rewrites a budget you already typed so the underlying bit rate stays the same. Apply reads those fields, and so does Enter while the cursor is in one of them. Empty means "use the detected speed again".
+The two budget fields are in the unit shown in the header. `b` flips between Mbit/s and MB/s and rewrites a budget you already typed so the underlying bit rate stays the same. Apply reads those fields, and so does Enter while the cursor is in one of them. Empty means "use the detected speed again". If updating active limits fails, the previous submitted budgets are retained and the error is shown. If rollback also fails, class rates may not match those budgets. The fields keep your edits so you can retry.
 
 The graphs beside the bars show the selected process's download and upload rates over the last 60 seconds, with the newest sample on the right. Each graph scales to its own peak. When the graph is narrower than 60 characters, each character shows the highest rate in its group of seconds. Blank spaces indicate spans with no samples. History is kept while the process remains in the list and is discarded when it exits or its PID is reused, when the process start time is available.
 

@@ -574,6 +574,27 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(fake.applied, [])
         self.assertFalse(fake.torn)
 
+    async def test_failed_budget_update_keeps_previous_budget_and_blocks_apply(self):
+        fake = FakeShaper()
+        fake.apply(42, 10, None, 100_000_000, 100_000_000, expected_start_ticks=42)
+        fake.applied.clear()
+        app = _app(fake)
+        async with app.run_test(size=(100, 32)):
+            app._selected = 42
+            app.query_one("#down-budget", Input).value = "200"
+            app.query_one("#down-pct", Input).value = "20"
+            with patch.object(fake, "set_capacities", side_effect=ShaperError("capacity update failed")):
+                self.assertFalse(app._commit_budgets(announce=True))
+                self.assertIn("capacity update failed", app._status_text)
+                self.assertIsNone(app._down_budget)
+                self.assertEqual(app.query_one("#down-budget", Input).value, "200")
+                app.action_apply_limit()
+                self.assertIn("capacity update failed", app._status_text)
+                self.assertEqual(fake.applied, [])
+            self.assertTrue(app._commit_budgets(announce=True))
+            self.assertEqual(app._down_budget, 200_000_000)
+            self.assertEqual(app._status_text, "capacity updated")
+
     async def test_apply_uses_a_budget_that_was_not_submitted(self):
         fake = FakeShaper()
         app = _app(fake, link_bps=None)

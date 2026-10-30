@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Failed TUI budget updates keep the previous budget and show the error instead of reporting success.
+
 - Failed capacity updates restore earlier class rates where possible and report incomplete rollback.
 
 - Initial refresh and socket filter failures stay visible in the TUI status.
