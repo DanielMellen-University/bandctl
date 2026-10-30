@@ -49,11 +49,25 @@ def request(path: str, payload: dict, *, timeout: float = 3.0) -> dict:
 
 
 def _encode_response(response: dict) -> bytes:
-    """Keep recent warnings within the client's response limit."""
+    """Keep errors and recent warnings within the client's response limit."""
     def encode(value):
         return json.dumps(value, allow_nan=False).encode("utf-8") + b"\n"
 
     encoded = encode(response)
+    if len(encoded) <= _MAX_MESSAGE:
+        return encoded
+    error = response.get("error")
+    if isinstance(error, str) and len(json.dumps(error).encode("utf-8")) > _MAX_MESSAGE // 2:
+        suffix = " ... [error truncated]"
+        low, high = 0, len(error)
+        while low < high:
+            middle = (low + high + 1) // 2
+            if len(json.dumps(error[:middle] + suffix).encode("utf-8")) <= _MAX_MESSAGE // 2:
+                low = middle
+            else:
+                high = middle - 1
+        response = dict(response, error=error[:low] + suffix)
+        encoded = encode(response)
     warnings = response.get("warnings")
     if len(encoded) <= _MAX_MESSAGE or not isinstance(warnings, list) or not warnings:
         return encoded

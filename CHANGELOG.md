@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Long CLI cleanup errors are truncated so the client can report them.
+
 - Failed CLI commands also report recent background warnings.
 
 - Process restoration reads the cgroup v2 entry even when legacy paths contain colons.

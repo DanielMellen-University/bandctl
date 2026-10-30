@@ -156,6 +156,25 @@ class TransportTests(unittest.TestCase):
                                         "warnings": ["flow refresh: filter failed"]})
             self.assertFalse(thread.is_alive())
 
+    def test_large_cleanup_failure_is_reported_within_response_limit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "session.sock")
+            notes = [f"could not restore pid {pid}: " + "failure " * 10 for pid in range(500)]
+            session = Mock()
+            session.warnings = ["flow refresh: filter failed"]
+            thread = threading.Thread(target=serve, args=(session, path), kwargs={"on_stop": lambda: notes})
+            thread.start()
+            wait_ready(path)
+            try:
+                response = request(path, {"command": "stop"})
+            finally:
+                thread.join(timeout=3)
+            self.assertFalse(thread.is_alive())
+            self.assertFalse(response["ok"])
+            self.assertIn("could not restore pid 0", response["error"])
+            self.assertIn("error truncated", response["error"])
+            self.assertIn("flow refresh: filter failed", response["warnings"])
+
     def test_existing_file_is_not_replaced(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "session.sock"
