@@ -422,10 +422,14 @@ class BandctlApp(App):
             self._note(str(exc), bad=True)
             return
         proc = self._proc(self._selected)
-        command = proc.cmdline if proc else str(self._selected)
+        if proc is None or proc.start_ticks is None:
+            self._note(f"cannot verify pid {self._selected}; rescan and try again", bad=True)
+            return
+        command = proc.cmdline
         down_cap, up_cap = self._effective_caps()
         try:
-            message = self.shaper.apply(self._selected, down, up, down_cap, up_cap, command)
+            message = self.shaper.apply(self._selected, down, up, down_cap, up_cap, command,
+                                        expected_start_ticks=proc.start_ticks)
         except ShaperError as exc:
             self._note(str(exc), bad=True)
             return

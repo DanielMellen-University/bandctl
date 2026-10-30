@@ -18,9 +18,9 @@ from bandctl.widgets import RootRequired, RulesScreen
 
 
 PROCS = [
-    ProcessInfo(1, "systemd", "/sbin/systemd", "root", 4),
-    ProcessInfo(42, "curl", "curl https://example.com", "daniel", 2),
-    ProcessInfo(7, "bash", "bash", "daniel", 0),
+    ProcessInfo(1, "systemd", "/sbin/systemd", "root", 4, 1),
+    ProcessInfo(42, "curl", "curl https://example.com", "daniel", 2, 42),
+    ProcessInfo(7, "bash", "bash", "daniel", 0, 7),
 ]
 
 
@@ -99,6 +99,27 @@ def _app(fake, *, root=True, link_bps=100_000_000, rates=None):
 
 
 class AppTests(unittest.IsolatedAsyncioTestCase):
+    async def test_manual_apply_verifies_selected_process_identity(self):
+        fake = FakeShaper()
+        proc = ProcessInfo(42, "curl", "curl", "user", 1, 123)
+        app = BandctlApp(iface="eth0", shaper=fake, processes=lambda: [proc],
+                         link_bps=100_000_000, is_root=True, rates=_rates)
+        async with app.run_test(size=(80, 24)) as pilot:
+            app.query_one("#down-pct", Input).value = "10"
+            app.action_apply_limit()
+            self.assertEqual(fake.expected_starts, [123])
+
+    async def test_manual_apply_rejects_unknown_process_identity(self):
+        fake = FakeShaper()
+        proc = ProcessInfo(42, "curl", "curl", "user", 1)
+        app = BandctlApp(iface="eth0", shaper=fake, processes=lambda: [proc],
+                         link_bps=100_000_000, is_root=True, rates=_rates)
+        async with app.run_test(size=(80, 24)) as pilot:
+            app.query_one("#down-pct", Input).value = "10"
+            app.action_apply_limit()
+            self.assertEqual(fake.applied, [])
+            self.assertIn("cannot verify", app._status_text)
+
     async def test_session_total_is_visible_and_stays_in_bytes_when_units_change(self):
         app = _app(FakeShaper())
         async with app.run_test(size=(120, 40)) as pilot:

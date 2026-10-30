@@ -786,6 +786,15 @@ class ApplyTests(unittest.TestCase):
 class CleanupTests(unittest.TestCase):
     """Fixes for teardown, remove, and failed apply."""
 
+    def test_update_rejects_a_new_process_with_an_old_share(self):
+        shaper, host = _shaper()
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "200"
+        with self.assertRaisesRegex(ShaperError, "changed"):
+            shaper.apply(42, None, 20, None, 100_000_000, expected_start_ticks=200)
+        self.assertEqual(shaper.shares[42].up_pct, 10)
+
     def test_failed_apply_keeps_process_tracked_when_restore_fails(self):
         shaper, host = _shaper()
         host.fail_substr = "nft -f"

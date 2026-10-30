@@ -108,6 +108,8 @@ The table lists processes using more than 1% of the link. When the link speed is
 
 Type a download percent, an upload percent, or both (1 to 100). Leave a field blank to leave that direction uncapped. Enter in a percent field, the Apply button, or `a` installs the share. `u` removes it. Limited rows are orange, except the selected row, which stays green so the text stays readable. The bar is green while usage is under the ceiling and orange when it is at the cap.
 
+Apply verifies the selected process start time. If the process has exited, its PID was reused, or its start time cannot be read, rescan and try again.
+
 Beside each bar, a small graph shows the selected process's last 60 seconds of download or upload rates. The newest sample is on the right. Each graph scales to its own highest rate in that window. At narrow widths, each character covers several seconds and shows the highest rate in that span. Blank spaces indicate spans with no samples.
 
 `TCP total` is the selected process's estimated download plus upload bytes since bandctl started. A table column shows the total when there is room. The count uses bytes even when rates use bits per second. It covers observed TCP sockets, not UDP or loopback. Short-lived or unreported sockets can be missed, and bytes already transferred on a socket first seen after startup can be included. Shared sockets count for each listed owner. Treat the total as an estimate.

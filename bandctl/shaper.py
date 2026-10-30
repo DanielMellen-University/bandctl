@@ -174,6 +174,10 @@ class Shaper:
                 raise ShaperError("remove the process from its group before applying an individual limit")
             if only_if_unlimited and pid in self._shares:
                 raise ShaperError(f"pid {pid} already has a limit")
+            existing = self._shares.get(pid)
+            if (existing is not None and existing.start_ticks is not None
+                    and expected_start_ticks is not None and existing.start_ticks != expected_start_ticks):
+                raise ShaperError(f"pid {pid} changed since its limit was applied")
             if expected_start_ticks is not None:
                 try:
                     stat = self.host.read(f"/proc/{pid}/stat")
