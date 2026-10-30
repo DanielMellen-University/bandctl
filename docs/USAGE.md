@@ -53,7 +53,7 @@ If the background session receives SIGTERM, it finishes its current operation be
 
 When link speed is unknown, import a settings file containing capacity budgets before applying a limit. Import validates the complete file and process identities. It selects the saved interface when starting a session. Import and export use paths relative to the command's working directory.
 
-Only one root bandctl session can control shaping at a time. A second root session exits with an error until the first finishes cleanup. The read-only process list does not take the lock.
+Only one root bandctl session can control shaping at a time. A second root session exits with an error until the first finishes cleanup. If CLI commands start together, a command waits briefly for the first CLI session to open and checks its interface and wildcard setting. The read-only process list does not take the lock.
 
 ## Not root
 

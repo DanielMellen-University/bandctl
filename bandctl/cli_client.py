@@ -49,6 +49,7 @@ def ensure_session(iface: str | None, *, start: bool, socket_path: str = SOCKET_
                               start_new_session=True, close_fds=True)
     deadline = time.monotonic() + 5.0
     ready = False
+    lock_error = None
     try:
         while time.monotonic() < deadline:
             active = _ping(socket_path, match_wildcard=match_wildcard)
@@ -57,11 +58,15 @@ def ensure_session(iface: str | None, *, start: bool, socket_path: str = SOCKET_
                     raise ValueError(f"active session uses interface {active}")
                 ready = True
                 return active
-            if worker.poll() is not None:
+            if worker.poll() is not None and lock_error is None:
                 detail = worker.stderr.read(4096).decode("utf-8", errors="replace").strip() if worker.stderr else ""
-                raise ValueError(detail or "could not start CLI session")
+                if detail == "bandctl: another bandctl session is already running":
+                    # Another CLI worker may own the lock but not have bound its socket yet.
+                    lock_error = detail
+                else:
+                    raise ValueError(detail or "could not start CLI session")
             time.sleep(0.05)
-        raise ValueError("CLI session did not start")
+        raise ValueError(lock_error or "CLI session did not start")
     finally:
         if not ready and worker.poll() is None:
             try:

@@ -77,6 +77,40 @@ class ClientTests(unittest.TestCase):
                 ensure_session("eth0", start=True)
         worker.terminate.assert_not_called()
 
+    def test_concurrent_start_waits_for_the_winning_session(self):
+        worker = Mock()
+        worker.stderr = io.BytesIO(b"bandctl: another bandctl session is already running\n")
+        worker.poll.return_value = 1
+        with patch("bandctl.cli_client._ping", side_effect=[None, None, "eth0"]), \
+             patch("bandctl.cli_client.check_iface", return_value="eth0"), \
+             patch("bandctl.cli_client.subprocess.Popen", return_value=worker), \
+             patch("bandctl.cli_client.time.sleep"):
+            self.assertEqual(ensure_session("eth0", start=True), "eth0")
+        worker.terminate.assert_not_called()
+
+    def test_lock_contention_without_cli_session_reports_original_error(self):
+        worker = Mock()
+        worker.stderr = io.BytesIO(b"bandctl: another bandctl session is already running\n")
+        worker.poll.return_value = 1
+        with patch("bandctl.cli_client._ping", return_value=None), \
+             patch("bandctl.cli_client.check_iface", return_value="eth0"), \
+             patch("bandctl.cli_client.subprocess.Popen", return_value=worker), \
+             patch("bandctl.cli_client.time.monotonic", side_effect=[0, 1, 6]), \
+             patch("bandctl.cli_client.time.sleep"):
+            with self.assertRaisesRegex(ValueError, "another bandctl session is already running"):
+                ensure_session("eth0", start=True)
+
+    def test_concurrent_start_still_checks_the_winning_interface(self):
+        worker = Mock()
+        worker.stderr = io.BytesIO(b"bandctl: another bandctl session is already running\n")
+        worker.poll.return_value = 1
+        with patch("bandctl.cli_client._ping", side_effect=[None, None, "wlan0"]), \
+             patch("bandctl.cli_client.check_iface", return_value="eth0"), \
+             patch("bandctl.cli_client.subprocess.Popen", return_value=worker), \
+             patch("bandctl.cli_client.time.sleep"):
+            with self.assertRaisesRegex(ValueError, "active session uses interface wlan0"):
+                ensure_session("eth0", start=True)
+
     def test_start_timeout_terminates_its_own_worker(self):
         worker = Mock()
         worker.stderr = io.BytesIO()
