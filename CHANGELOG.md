@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Socket counts do not double-count duplicated file descriptors.
+
 - Socket scans recheck process identities before changing filters.
 
 - Process scans and CLI name matching preserve spaces in process names.

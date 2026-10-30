@@ -219,15 +219,15 @@ def _socket_count(fd_dir: Path, inodes: set[str]) -> int:
         names = list(fd_dir.iterdir())
     except (FileNotFoundError, ProcessLookupError, PermissionError, OSError):
         return 0
-    count = 0
+    sockets: set[str] = set()
     for fd in names:
         try:
             target = os.readlink(fd)
         except (FileNotFoundError, ProcessLookupError, PermissionError, OSError):
             continue
-        if not target.startswith("socket:["):
+        if not (target.startswith("socket:[") and target.endswith("]")):
             continue
         inode = target[8:-1]
         if inode in inodes:
-            count += 1
-    return count
+            sockets.add(inode)
+    return len(sockets)

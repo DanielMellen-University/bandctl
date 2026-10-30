@@ -124,6 +124,18 @@ class ScanTests(unittest.TestCase):
         self.assertEqual(found[7].start_ticks, 12345)
         self.assertEqual(found[8].sockets, 0)
 
+    def test_duplicate_file_descriptors_count_one_socket(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            net = root / "net"
+            net.mkdir()
+            (net / "tcp").write_text(TCP, encoding="utf-8")
+            self._pid(root, 7, "curl", b"curl\0", "Uid:\t1000\t1000\t1000\t1000\n", "555")
+            os.symlink("socket:[555]", root / "7" / "fd" / "4")
+            os.symlink("socket:[777]", root / "7" / "fd" / "5")
+            found = scan_processes(root, skip_pid=0)
+        self.assertEqual(found[0].sockets, 2)
+
     def test_scan_preserves_spaces_in_process_name(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
