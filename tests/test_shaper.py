@@ -1722,6 +1722,31 @@ class ApplyTests(unittest.TestCase):
                 self.assertIsNone(shaper.flow_warning)
                 self.assertEqual(shaper._flows, {})
 
+    def test_malformed_socket_table_keeps_filters_until_retry(self):
+        header = "sl local_address rem_address inode\n"
+        for damaged in ("", "not a socket table\n", header + "0: truncated\n",
+                        header + "0: invalid:0050 04030201:01BB 01 0 0 0 0 0 99\n"):
+            with self.subTest(damaged=damaged):
+                shaper, host = _shaper()
+                _open_socket(host)
+                shaper.apply(42, None, 10, None, 100_000_000)
+                existing = dict(shaper._flows)
+                self.assertTrue(existing)
+                original = host.files["/proc/net/tcp"]
+                host.files["/proc/net/tcp"] = damaged
+                host.commands.clear()
+                shaper.sample()
+                self.assertIsNotNone(shaper.flow_warning)
+                self.assertIn("/proc/net/tcp", shaper.flow_warning)
+                self.assertEqual(shaper._flows, existing)
+                self.assertFalse(any("filter del" in command and "flower" in command
+                                     for command in _joined(host)))
+                host.files["/proc/net/tcp"] = original
+                host.links.clear()
+                shaper.sample()
+                self.assertIsNone(shaper.flow_warning)
+                self.assertEqual(shaper._flows, {})
+
     def test_sample_retries_failed_flower_deletion(self):
         shaper, host = _shaper()
         _open_socket(host)

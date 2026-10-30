@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep socket filters when a socket table is malformed or truncated.
+
 - Decode socket addresses using the host byte order so filters match on big-endian Linux.
 
 - Keep socket baselines through long gaps in counters while the socket remains visible.

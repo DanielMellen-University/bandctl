@@ -1451,8 +1451,12 @@ class Shaper:
                 continue
             except OSError as exc:
                 raise ShaperError(f"cannot read {path}: {exc}") from exc
+            try:
+                flows = parse_proc_net(text, proto, family, strict=True)
+            except ValueError as exc:
+                raise ShaperError(f"cannot read {path}: {exc}") from exc
             self._known_net_tables.add(filename)
-            for inode, flow in parse_proc_net(text, proto, family).items():
+            for inode, flow in flows.items():
                 table.setdefault(inode, flow)
         return table
 

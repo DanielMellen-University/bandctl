@@ -70,7 +70,7 @@ def parse_socket_inodes(text: str) -> set[str]:
     return inodes
 
 
-def parse_proc_net(text: str, proto: str, family: str) -> dict[str, SockFlow]:
+def parse_proc_net(text: str, proto: str, family: str, *, strict: bool = False) -> dict[str, SockFlow]:
     """Inode to flow for one ``/proc/net`` table.
 
     ``proto`` is ``tcp`` or ``udp``. ``family`` is ``ip`` or ``ipv6``, matching
@@ -80,14 +80,21 @@ def parse_proc_net(text: str, proto: str, family: str) -> dict[str, SockFlow]:
     found: dict[str, SockFlow] = {}
     if proto not in ("tcp", "udp") or family not in ("ip", "ipv6"):
         raise ValueError(f"unsupported table {proto}/{family}")
-    for line in text.splitlines()[1:]:
+    lines = text.splitlines()
+    if strict and (not lines or not {"local_address", "inode"}.issubset(lines[0].split())):
+        raise ValueError("invalid socket table header")
+    for line in lines[1:]:
         parts = line.split()
         if len(parts) < 10 or not parts[9].isdigit():
+            if strict:
+                raise ValueError("invalid socket table row")
             continue
         try:
             local_ip, local_port, local_family = _decode_endpoint(parts[1], family)
             remote_ip, remote_port, remote_family = _decode_endpoint(parts[2], family)
-        except ValueError:
+        except ValueError as exc:
+            if strict:
+                raise ValueError("invalid socket table endpoint") from exc
             continue
         if local_port <= 0:
             continue
