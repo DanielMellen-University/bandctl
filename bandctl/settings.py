@@ -121,11 +121,15 @@ def dumps(settings: Settings) -> str:
 
 
 def read_settings(path) -> Settings:
-    """Read a bounded UTF-8 settings file and validate it completely."""
-    from pathlib import Path
+    """Read a bounded regular UTF-8 settings file and validate it completely."""
+    import os
+    import stat
 
     try:
-        with Path(path).open("rb") as stream:
+        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+        with os.fdopen(fd, "rb") as stream:
+            if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                raise ValueError("settings must be a regular file")
             raw = stream.read(1_048_577)
     except OSError as exc:
         raise ValueError(f"cannot read settings: {exc.strerror or exc}") from exc

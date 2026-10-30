@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Settings import rejects named pipes instead of waiting indefinitely for a writer.
+
 - Malformed socket rows with invalid ports are skipped before filters are built.
 
 - Failed share and group operations report incomplete rollback when restoration or synchronization fails.

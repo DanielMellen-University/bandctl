@@ -68,6 +68,26 @@ class SettingsTests(unittest.TestCase):
 
 
 class SettingsFileTests(unittest.TestCase):
+    def test_import_rejects_fifo_without_waiting_for_a_writer(self):
+        import os
+        import subprocess
+        import sys
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.fifo"
+            os.mkfifo(path)
+            code = ("from bandctl.settings import read_settings\n"
+                    "import sys\n"
+                    "try:\n"
+                    "    read_settings(sys.argv[1])\n"
+                    "except ValueError as exc:\n"
+                    "    print(exc)\n")
+            result = subprocess.run([sys.executable, "-c", code, str(path)],
+                                    capture_output=True, text=True, timeout=2, check=True)
+            self.assertIn("regular file", result.stdout)
+
     def test_file_round_trip_is_private(self):
         import os
         import stat
