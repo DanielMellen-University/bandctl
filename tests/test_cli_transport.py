@@ -156,6 +156,24 @@ class TransportTests(unittest.TestCase):
                                         "warnings": ["flow refresh: filter failed"]})
             self.assertFalse(thread.is_alive())
 
+    def test_maximum_sized_export_request_returns_its_result(self):
+        with tempfile.TemporaryDirectory() as directory:
+            socket_path = str(Path(directory) / "session.sock")
+            path = "/" + "/".join("\x01" * min(250, 2723 - i) for i in range(0, 2723, 250))
+            session = Mock()
+            session.warnings = []
+            thread = threading.Thread(target=serve, args=(session, socket_path))
+            thread.start()
+            wait_ready(socket_path)
+            try:
+                response = request(socket_path, {"command": "export", "path": path})
+                self.assertEqual(response, {"ok": True, "result": {"path": path}})
+            finally:
+                request(socket_path, {"command": "stop"})
+                thread.join(timeout=3)
+            session.export.assert_called_once_with(path)
+            self.assertFalse(thread.is_alive())
+
     def test_large_cleanup_failure_is_reported_within_response_limit(self):
         with tempfile.TemporaryDirectory() as directory:
             path = str(Path(directory) / "session.sock")

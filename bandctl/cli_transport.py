@@ -11,18 +11,19 @@ import time
 from bandctl.cli_protocol import dispatch
 
 _MAX_MESSAGE = 16_384
+_MAX_RESPONSE = _MAX_MESSAGE * 2
 
 
-def _read_line(connection: socket.socket) -> bytes:
+def _read_line(connection: socket.socket, *, limit: int = _MAX_MESSAGE) -> bytes:
     data = bytearray()
-    while len(data) <= _MAX_MESSAGE:
-        part = connection.recv(min(4096, _MAX_MESSAGE + 1 - len(data)))
+    while len(data) <= limit:
+        part = connection.recv(min(4096, limit + 1 - len(data)))
         if not part:
             break
         data.extend(part)
         if b"\n" in part:
             break
-    if len(data) > _MAX_MESSAGE:
+    if len(data) > limit:
         raise ValueError("request is too large")
     if not data.endswith(b"\n") or data.count(b"\n") != 1:
         raise ValueError("invalid request framing")
@@ -38,7 +39,7 @@ def request(path: str, payload: dict, *, timeout: float = 3.0) -> dict:
         connection.settimeout(timeout)
         connection.connect(path)
         connection.sendall(encoded)
-        data = _read_line(connection)
+        data = _read_line(connection, limit=_MAX_RESPONSE)
     try:
         response = json.loads(data.decode("utf-8"))
     except (ValueError, UnicodeDecodeError, RecursionError) as exc:
@@ -54,22 +55,22 @@ def _encode_response(response: dict) -> bytes:
         return json.dumps(value, allow_nan=False).encode("utf-8") + b"\n"
 
     encoded = encode(response)
-    if len(encoded) <= _MAX_MESSAGE:
+    if len(encoded) <= _MAX_RESPONSE:
         return encoded
     error = response.get("error")
-    if isinstance(error, str) and len(json.dumps(error).encode("utf-8")) > _MAX_MESSAGE // 2:
+    if isinstance(error, str) and len(json.dumps(error).encode("utf-8")) > _MAX_RESPONSE // 2:
         suffix = " ... [error truncated]"
         low, high = 0, len(error)
         while low < high:
             middle = (low + high + 1) // 2
-            if len(json.dumps(error[:middle] + suffix).encode("utf-8")) <= _MAX_MESSAGE // 2:
+            if len(json.dumps(error[:middle] + suffix).encode("utf-8")) <= _MAX_RESPONSE // 2:
                 low = middle
             else:
                 high = middle - 1
         response = dict(response, error=error[:low] + suffix)
         encoded = encode(response)
     warnings = response.get("warnings")
-    if len(encoded) <= _MAX_MESSAGE or not isinstance(warnings, list) or not warnings:
+    if len(encoded) <= _MAX_RESPONSE or not isinstance(warnings, list) or not warnings:
         return encoded
     marker = "Some background warnings omitted"
     limited = dict(response, warnings=[marker])
@@ -77,7 +78,7 @@ def _encode_response(response: dict) -> bytes:
     retained = []
     for warning in reversed(warnings):
         item_size = len(json.dumps(warning, allow_nan=False).encode("utf-8")) + 2
-        if size + item_size > _MAX_MESSAGE:
+        if size + item_size > _MAX_RESPONSE:
             break
         retained.append(warning)
         size += item_size
