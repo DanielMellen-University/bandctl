@@ -85,6 +85,18 @@ class ParseTests(unittest.TestCase):
         text = 'ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 users:(("a",pid=5,fd=1))\n\t bytes_sent:30\n'
         self.assertEqual(parse_ss_sockets(text), {(5, "10.0.0.2:1 1.1.1.1:443"): (0, 30)})
 
+    def test_ipv4_mapped_loopback_in_hex_is_excluded(self):
+        text = (
+            'ESTAB 0 0 [::ffff:7f00:1]:1234 [::ffff:c000:201]:443 '
+            'users:(("local",pid=5,fd=1)) sk:a\n'
+            '\t bytes_received:100 bytes_acked:20\n'
+            'ESTAB 0 0 [::ffff:c000:201]:1234 [::ffff:c633:6401]:443 '
+            'users:(("remote",pid=6,fd=1)) sk:b\n'
+            '\t bytes_received:200 bytes_acked:30\n'
+        )
+        self.assertEqual(parse_ss(text), {6: (200, 30)})
+        self.assertEqual(parse_ss_sockets(text), {(6, "sk:b"): (200, 30)})
+
     def test_sums_sockets_and_skips_loopback_and_unowned(self):
         found = parse_ss(_SS)
         self.assertEqual(found[42], (7500, 2500))

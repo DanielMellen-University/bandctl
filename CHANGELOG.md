@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- TCP sampling excludes IPv4-mapped loopback addresses written in hexadecimal.
+
 - Process identities are rechecked immediately before cgroup moves, including group and import operations.
 
 - Removal rollback checks the process identity again before moving it back into a limited cgroup. Socket scans also skip unverified process instances.

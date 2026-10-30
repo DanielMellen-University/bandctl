@@ -218,8 +218,6 @@ def _is_loopback(endpoint: str) -> bool:
     host = _host(endpoint)
     if not host or host in {"*", "0.0.0.0", "::"}:
         return False
-    if host.startswith("::ffff:"):
-        host = host[7:]
     try:
         addr = ipaddress.ip_address(host)
     except ValueError:
