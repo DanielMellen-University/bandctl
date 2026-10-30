@@ -811,6 +811,25 @@ class ApplyTests(unittest.TestCase):
         with self.assertRaises(ShaperError):
             shaper.apply(42, None, 10, None, 100_000_000)
 
+    def test_recover_rejects_invalid_pid_entries_before_cleanup(self):
+        for pid, original in (("bad", "/original"), ("0", "/original"),
+                              ("-1", "/original"), ("042", "/original"),
+                              ("2147483648", "/original"), ("42", None),
+                              ("42", "relative"), ("42", "/../outside"), ("42", "/bad\x00path")):
+            with self.subTest(pid=pid, original=original):
+                shaper, host = _shaper()
+                state = json.dumps({"iface": "eth0", "pids": {"43": "/original", pid: original}})
+                host.files["/run/bandctl.json"] = state
+                host.files["/sys/fs/cgroup/bandctl/bandctl-42/cgroup.procs"] = "42\n"
+
+                notes = shaper.recover()
+
+                self.assertTrue(any("invalid recovery state" in note for note in notes))
+                self.assertIsNotNone(shaper.recovery_error)
+                self.assertEqual(host.files["/run/bandctl.json"], state)
+                self.assertNotIn("/sys/fs/cgroup/cgroup.procs", host.files)
+                self.assertEqual(host.commands, [])
+
     def test_recover_uses_state_file(self):
         shaper, host = _shaper()
         shaper.apply(42, None, 10, None, 100_000_000)

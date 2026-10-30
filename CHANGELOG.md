@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Recovery rejects invalid PID entries and cgroup paths before changing host state.
+
 - Recovery keeps a leaf when a reused PID is still inside it, instead of moving the replacement.
 
 - Failed removals retry synchronization and report incomplete rollback.
