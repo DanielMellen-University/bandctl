@@ -651,6 +651,30 @@ class ApplyTests(unittest.TestCase):
         self.assertNotIn(original, host.files)
         self.assertFalse(shaper.upload_active)
 
+    def test_reused_pid_in_leaf_is_not_moved_by_cleanup(self):
+        for operation in ("teardown", "remove", "sample"):
+            with self.subTest(operation=operation):
+                shaper, host = _shaper()
+                host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+                shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+                shaper.apply(43, None, 10, None, 100_000_000)
+                host.files["/proc/42/stat"] = "42 (other) S " + "0 " * 18 + "200"
+                host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42\n"
+                host.files["/sys/fs/cgroup/bandctl/bandctl-42/cgroup.procs"] = "42\n"
+
+                with patch.object(host, "write", wraps=host.write) as write:
+                    if operation == "remove":
+                        with self.assertRaisesRegex(ShaperError, "cannot verify pid 42"):
+                            shaper.remove(42)
+                    elif operation == "sample":
+                        shaper.sample()
+                        self.assertIn("cannot verify pid 42", shaper.flow_warning)
+                    notes = shaper.teardown()
+
+                self.assertTrue(any("cannot verify pid 42" in note for note in notes))
+                self.assertFalse(any(call.args[1] == "42\n" for call in write.call_args_list))
+                self.assertIn("/run/bandctl.json", host.files)
+                self.assertIn("42", json.loads(host.files["/run/bandctl.json"])["pids"])
     def test_sample_retires_exited_process(self):
         shaper, host = _shaper()
         stat = "/proc/42/stat"

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Teardown, removal, and sampling keep a reused PID in its old leaf for safe recovery.
+
 - Recovery rejects duplicate fields before changing host state.
 
 - Recovery rejects malformed interface names before changing host state.

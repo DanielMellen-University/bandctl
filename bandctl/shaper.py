@@ -610,7 +610,13 @@ class Shaper:
         return "same" if start == share.start_ticks else "changed"
 
     def _retire_exited(self) -> None:
-        stale = [share for share in self._shares.values() if self._process_status(share) in ("gone", "changed")]
+        stale = []
+        for share in self._shares.values():
+            status = self._process_status(share)
+            if status == "changed":
+                self._check_reused_leaf(share)
+            if status in ("gone", "changed"):
+                stale.append(share)
         if not stale:
             return
         for share in stale:
@@ -625,12 +631,24 @@ class Shaper:
 
     def _restore_share(self, share: Share) -> bool:
         status = self._process_status(share)
+        if status == "changed":
+            self._check_reused_leaf(share)
         if status in ("gone", "changed"):
             return False
         if share.start_ticks is not None and status == "unknown":
             raise ShaperError(f"cannot verify pid {share.pid}")
         self._restore_pid(share.pid, share.original_cgroup)
         return True
+
+    def _check_reused_leaf(self, share: Share) -> None:
+        try:
+            cgroup = self._read_cgroup(share.pid)
+        except ShaperError as exc:
+            if isinstance(exc.__cause__, FileNotFoundError):
+                return
+            raise ShaperError(f"cannot verify pid {share.pid}: {exc}") from exc
+        if cgroup == f"/bandctl/bandctl-{share.pid}":
+            raise ShaperError(f"cannot verify pid {share.pid}: replacement is in the old cgroup")
 
     def recover(self) -> list[str]:
         """Best-effort cleanup of a previous run. Never raises."""
