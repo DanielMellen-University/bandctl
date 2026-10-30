@@ -34,6 +34,12 @@ class PercentTests(unittest.TestCase):
             with self.assertRaises(RateError):
                 parse_percent(text)
 
+    def test_rejects_unconvertible_digits_as_validation_errors(self):
+        for text in ("²", "9" * 5000):
+            with self.subTest(length=len(text)):
+                with self.assertRaises(RateError):
+                    parse_percent(text)
+
 
 class BudgetTests(unittest.TestCase):
     def test_units(self):

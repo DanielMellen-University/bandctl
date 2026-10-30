@@ -31,7 +31,10 @@ def parse_percent(text: str, *, allow_empty: bool = False) -> int | None:
         raise RateError("enter a percent from 1 to 100")
     if not raw.isdigit():
         raise RateError(f"{text.strip()!r} is not a whole-number percent")
-    value = int(raw)
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise RateError("enter a whole-number percent from 1 to 100") from exc
     if value < 1 or value > 100:
         raise RateError("percent must be from 1 to 100")
     return value

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Invalid Unicode digits and very long percentages show a validation error instead of crashing the main screen.
+
 - TCP sampling ignores socket identifiers embedded in process names.
 
 - TCP sampling no longer treats PID-like text in process names as another socket owner.
