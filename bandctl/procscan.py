@@ -175,7 +175,7 @@ def scan_processes(proc_root: str | Path = "/proc", *, skip_pid: int | None = No
     except OSError:
         return []
     for entry in entries:
-        if not entry.name.isdigit():
+        if not entry.name.isascii() or not entry.name.isdigit():
             continue
         pid = int(entry.name)
         if pid == skip_pid:

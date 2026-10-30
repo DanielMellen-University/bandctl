@@ -127,6 +127,15 @@ class ParseTests(unittest.TestCase):
 
 
 class ScanTests(unittest.TestCase):
+    def test_scan_skips_non_ascii_numeric_directory_names(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._pid(root, 7, "curl", b"curl\0", "Uid:\t1000\n", None)
+            self._pid(root, "１２", "other", b"other\0", "Uid:\t1000\n", None)
+            (root / "²").mkdir()
+            found = scan_processes(root, skip_pid=0)
+        self.assertEqual([proc.pid for proc in found], [7])
+
     def test_fake_proc(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

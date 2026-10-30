@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Skip non-ASCII numeric names when scanning process directories.
+
 - Keep socket filters when a socket table ends mid-line.
 
 - Match Unicode case variants in process searches.
