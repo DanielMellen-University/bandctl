@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -58,6 +59,12 @@ class ParseTests(unittest.TestCase):
         result = SimpleNamespace(returncode=1, stdout=_SS)
         with patch("bandctl.traffic.subprocess.run", return_value=result):
             self.assertIsNone(read_ss())
+
+    def test_read_ss_treats_missing_command_and_timeout_as_unavailable(self):
+        for error in (FileNotFoundError("ss"), subprocess.TimeoutExpired("ss", 2)):
+            with self.subTest(error=error), patch("bandctl.traffic.subprocess.run", side_effect=error) as run:
+                self.assertIsNone(read_ss())
+                self.assertEqual(run.call_args.kwargs["timeout"], 2)
 
     def test_read_ss_handles_non_utf8_process_names(self):
         def run(_args, **kwargs):
