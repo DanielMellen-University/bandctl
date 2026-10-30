@@ -949,7 +949,16 @@ class Shaper:
             failed = False
             for pid_text in procs.split():
                 try:
-                    self._restore_pid(int(pid_text), "/")
+                    pid = int(pid_text)
+                    try:
+                        cgroup = self._read_cgroup(pid)
+                    except ShaperError as exc:
+                        if isinstance(exc.__cause__, FileNotFoundError):
+                            continue
+                        raise
+                    if cgroup != f"/bandctl/{name}":
+                        continue
+                    self._restore_pid(pid, "/")
                 except (ShaperError, ValueError) as exc:
                     errors.append(f"cannot clean {leaf}: {exc}")
                     failed = True

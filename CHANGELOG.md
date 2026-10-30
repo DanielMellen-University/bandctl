@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Leaf cleanup checks that each process is still in the leaf before moving it to the root cgroup.
+
 - TUI removal checks the selected process and limit revision before removing a share.
 
 - CLI sessions retain transient refresh failures for later commands to report.

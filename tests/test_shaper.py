@@ -1951,11 +1951,50 @@ class CleanupTests(unittest.TestCase):
         self.assertEqual(notes, [])
         self.assertNotIn("/run/bandctl.json", host.files)
 
+    def test_leaf_cleanup_does_not_move_a_process_that_left_the_leaf(self):
+        shaper, host = _shaper()
+        leaf = "/sys/fs/cgroup/bandctl/bandctl-42"
+        host.dirs.update({"/sys/fs/cgroup/bandctl", leaf})
+        host.files[leaf + "/cgroup.procs"] = "43\n"
+        host.files["/proc/43/cgroup"] = "0::/other.slice\n"
+
+        self.assertEqual(shaper._remove_tree(), [])
+        self.assertNotIn("/sys/fs/cgroup/cgroup.procs", host.files)
+
+    def test_leaf_cleanup_keeps_a_leaf_when_process_cgroup_is_unreadable(self):
+        shaper, host = _shaper()
+        leaf = "/sys/fs/cgroup/bandctl/bandctl-42"
+        host.dirs.update({"/sys/fs/cgroup/bandctl", leaf})
+        host.files[leaf + "/cgroup.procs"] = "43\n"
+        read = host.read
+
+        def unreadable(path):
+            if path == "/proc/43/cgroup":
+                raise PermissionError("access denied")
+            return read(path)
+
+        with patch.object(host, "read", side_effect=unreadable):
+            errors = shaper._remove_tree()
+        self.assertTrue(any("access denied" in error for error in errors))
+        self.assertIn(leaf, host.dirs)
+        self.assertNotIn("/sys/fs/cgroup/cgroup.procs", host.files)
+
+    def test_leaf_cleanup_skips_a_process_that_exited_after_the_listing(self):
+        shaper, host = _shaper()
+        leaf = "/sys/fs/cgroup/bandctl/bandctl-42"
+        host.dirs.update({"/sys/fs/cgroup/bandctl", leaf})
+        host.files[leaf + "/cgroup.procs"] = "44\n"
+
+        self.assertEqual(shaper._remove_tree(), [])
+        self.assertNotIn(leaf, host.dirs)
+        self.assertNotIn("/sys/fs/cgroup/cgroup.procs", host.files)
+
     def test_last_remove_keeps_state_for_failed_child_cleanup(self):
         shaper, host = _shaper()
         shaper.apply(42, None, 10, None, 100_000_000)
         leaf = "/sys/fs/cgroup/bandctl/bandctl-42"
         host.files[leaf + "/cgroup.procs"] = "43\n"
+        host.files["/proc/43/cgroup"] = "0::/bandctl/bandctl-42\n"
         rmdir = host.rmdir
         write = host.write
 
@@ -1982,6 +2021,7 @@ class CleanupTests(unittest.TestCase):
         shaper.apply(42, None, 10, None, 100_000_000)
         leaf = "/sys/fs/cgroup/bandctl/bandctl-42/cgroup.procs"
         host.files[leaf] = "43\n"  # A child inherited the leaf cgroup.
+        host.files["/proc/43/cgroup"] = "0::/bandctl/bandctl-42\n"
         root = "/sys/fs/cgroup/cgroup.procs"
         write = host.write
 
