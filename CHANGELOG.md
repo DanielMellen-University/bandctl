@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Failed socket scans keep existing filters and report a warning until the scan succeeds.
+
 - Long sessions reuse free HTB class IDs before the kernel limit is reached.
 
 - Rate plans are checked before moving processes for limits, groups, and settings imports.

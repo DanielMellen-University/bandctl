@@ -1376,6 +1376,38 @@ class ApplyTests(unittest.TestCase):
         self.assertEqual(len(deleted), 1)
         self.assertEqual(shaper._flows, {})
 
+    def test_failed_socket_scan_keeps_existing_filters_until_retry(self):
+        for operation, path, error in (
+            ("read", "/proc/net/tcp", PermissionError("read denied")),
+            ("read", "/proc/net/tcp", FileNotFoundError("table disappeared")),
+            ("listdir", "/proc/42/fd", PermissionError("read denied")),
+            ("readlink", "/proc/42/fd/3", PermissionError("read denied")),
+        ):
+            with self.subTest(operation=operation, error=type(error).__name__):
+                shaper, host = _shaper()
+                _open_socket(host)
+                shaper.apply(42, None, 10, None, 100_000_000)
+                existing = dict(shaper._flows)
+                self.assertTrue(existing)
+                original = getattr(host, operation)
+
+                def fail_target(target):
+                    if target == path:
+                        raise error
+                    return original(target)
+
+                host.commands.clear()
+                with patch.object(host, operation, side_effect=fail_target):
+                    shaper.sample()
+                self.assertIsNotNone(shaper.flow_warning)
+                self.assertEqual(shaper._flows, existing)
+                self.assertFalse(any("filter del" in command and "flower" in command
+                                     for command in _joined(host)))
+                host.links.clear()
+                shaper.sample()
+                self.assertIsNone(shaper.flow_warning)
+                self.assertEqual(shaper._flows, {})
+
     def test_sample_retries_failed_flower_deletion(self):
         shaper, host = _shaper()
         _open_socket(host)

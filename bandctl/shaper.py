@@ -138,6 +138,7 @@ class Shaper:
     _sample_at: float = 0.0
     _torn: bool = False
     _flows: dict[tuple, InstalledFlow] = field(default_factory=dict)
+    _known_net_tables: set[str] = field(default_factory=set)
     _next_flow_handle: int = 1
     flow_warning: str | None = None
     recovery_error: str | None = None
@@ -1389,10 +1390,16 @@ class Shaper:
         table: dict[str, SockFlow] = {}
         assert self.host is not None
         for filename, proto, family in _NET_TABLES:
+            path = f"/proc/net/{filename}"
             try:
-                text = self.host.read(f"/proc/net/{filename}")
-            except OSError:
+                text = self.host.read(path)
+            except FileNotFoundError as exc:
+                if filename in self._known_net_tables:
+                    raise ShaperError(f"cannot read {path}: {exc}") from exc
                 continue
+            except OSError as exc:
+                raise ShaperError(f"cannot read {path}: {exc}") from exc
+            self._known_net_tables.add(filename)
             for inode, flow in parse_proc_net(text, proto, family).items():
                 table.setdefault(inode, flow)
         return table
@@ -1402,15 +1409,17 @@ class Shaper:
         fd_dir = f"/proc/{pid}/fd"
         try:
             names = self.host.listdir(fd_dir)
-        except OSError:
-            return []
+        except OSError as exc:
+            raise ShaperError(f"cannot read {fd_dir}: {exc}") from exc
         found: list[SockFlow] = []
         seen: set[str] = set()
         for name in names:
             try:
                 target = self.host.readlink(f"{fd_dir}/{name}")
-            except OSError:
+            except FileNotFoundError:
                 continue
+            except OSError as exc:
+                raise ShaperError(f"cannot read {fd_dir}/{name}: {exc}") from exc
             if not (target.startswith("socket:[") and target.endswith("]")):
                 continue
             inode = target[len("socket:[") : -1]

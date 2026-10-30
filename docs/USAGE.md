@@ -71,6 +71,8 @@ The status line and the log confirm the share, for example `pid 4242 download 30
 
 A transfer that is already running is included. The kernel does not move an existing socket into the new cgroup, so bandctl also matches the process's open connections by address and port. A connection opened later is marked by the cgroup rule as soon as it exists, and the address list catches up within about a second.
 
+If bandctl cannot scan socket tables or process descriptors, it reports a warning and keeps the existing filters until a scan succeeds. New or closed connections may not be reflected until then.
+
 `r` rescans `/proc` immediately. The table also refreshes every second. The selection stays on the same pid.
 
 ## Capacity
