@@ -139,6 +139,24 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(rates[5], (80.0, 40.0))
         self.assertEqual(sampler.totals[5], (20, 10))
 
+    def test_visible_socket_keeps_baseline_during_long_counter_gap(self):
+        header = 'ESTAB 0 0 10.0.0.2:1 1.1.1.1:1 users:(("x",pid=5,fd=1)) sk:a\n'
+        sampler = TrafficSampler()
+        sampler.rates(header + '\t bytes_received:1000 bytes_acked:500\n', 1)
+        sampler.rates(header + '\t cubic\n', 30)
+        sampler.rates(header + '\t cubic\n', 61)
+        rates = sampler.rates(header + '\t bytes_received:1061 bytes_acked:561\n', 62)
+        self.assertEqual(rates[5], (8.0, 8.0))
+        self.assertEqual(sampler.totals[5], (61, 61))
+
+    def test_unreported_socket_does_not_revive_expired_baseline(self):
+        header = 'ESTAB 0 0 10.0.0.2:1 1.1.1.1:1 users:(("x",pid=5,fd=1)) sk:a\n'
+        sampler = TrafficSampler()
+        sampler.rates(header + '\t bytes_received:1000\n', 1)
+        sampler.rates('', 61)
+        sampler.rates(header + '\t cubic\n', 62)
+        self.assertEqual(sampler.rates(header + '\t bytes_received:1020\n', 63)[5], (8160.0, 0.0))
+
     def test_first_reported_counters_after_a_gap_contribute_from_zero(self):
         header = 'ESTAB 0 0 10.0.0.2:1 1.1.1.1:1 users:(("x",pid=5,fd=1)) sk:a\n'
         sampler = TrafficSampler()

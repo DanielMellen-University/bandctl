@@ -140,7 +140,8 @@ class TrafficSampler:
 
     def rates(self, text: str, now: float) -> dict[int, tuple[float, float]]:
         # An ss record without counters is a gap, not a reset to zero.
-        current = {key: value for key, value in _parse_ss_socket_counters(text).items()
+        observed = _parse_ss_socket_counters(text)
+        current = {key: value for key, value in observed.items()
                    if value != (None, None)}
         prev = self._prev
         prev_at = self._prev_at
@@ -158,6 +159,11 @@ class TrafficSampler:
         self.primed = True
         self._prev_at = now
         self._prev = {key: value for key, value in prev.items() if now - value[4] <= 60}
+        for key, value in observed.items():
+            old = prev.get(key)
+            if (value == (None, None) and old is not None
+                    and (old[4] >= prev_at or now - old[4] <= 60)):
+                self._prev[key] = (*old[:4], now)
         rates: dict[int, list[float]] = {}
         for (pid, socket), (received, acked) in current.items():
             old = prev.get((pid, socket))

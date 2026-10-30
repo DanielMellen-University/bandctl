@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep socket baselines through long gaps in counters while the socket remains visible.
+
 - Keep each direction's socket baseline when only one byte counter is reported.
 
 - Keep socket counter baselines when a refresh omits byte counters, avoiding repeated traffic counts.
