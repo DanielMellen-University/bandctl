@@ -171,6 +171,33 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(fake.applied, [])
             self.assertIn("cannot verify", app._status_text)
 
+    async def test_manual_remove_rejects_a_limit_for_an_older_process(self):
+        fake = FakeShaper()
+        fake.apply(42, 10, None, 100_000_000, None, expected_start_ticks=100)
+        proc = ProcessInfo(42, "curl", "curl", "user", 1, 101)
+        app = BandctlApp(iface="eth0", shaper=fake, processes=lambda: [proc],
+                         link_bps=100_000_000, is_root=True, rates=_rates)
+        async with app.run_test(size=(80, 24)):
+            app.action_remove_limit()
+            self.assertIn(42, fake.shares)
+            self.assertEqual(fake.removed, [])
+            self.assertIn("changed", app._status_text)
+
+    async def test_manual_remove_does_not_remove_a_newer_limit(self):
+        class ConcurrentShaper(FakeShaper):
+            def remove(self, pid, *, expected_revision=None):
+                self._shares[pid].revision += 1
+                return super().remove(pid, expected_revision=expected_revision)
+
+        fake = ConcurrentShaper()
+        fake.apply(42, 10, None, 100_000_000, None, expected_start_ticks=42)
+        app = _app(fake)
+        async with app.run_test(size=(80, 24)):
+            app.action_remove_limit()
+            self.assertIn(42, fake.shares)
+            self.assertEqual(fake.removed, [])
+            self.assertIn("changed", app._status_text)
+
     async def test_session_total_is_visible_and_stays_in_bytes_when_units_change(self):
         app = _app(FakeShaper())
         async with app.run_test(size=(120, 40)) as pilot:

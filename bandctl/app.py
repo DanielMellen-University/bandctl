@@ -462,15 +462,21 @@ class BandctlApp(App):
         if self._selected is None or self.shaper is None:
             self._note("select a process first", bad=True)
             return
+        proc = self._proc(self._selected)
+        share = self.shaper.shares.get(self._selected)
+        if share is None:
+            self._note(f"pid {self._selected} has no limit", bad=True)
+            return
+        if proc is None or proc.start_ticks is None or share.start_ticks != proc.start_ticks:
+            self._note(f"pid {self._selected} changed or cannot be verified; rescan and try again", bad=True)
+            return
         try:
-            message = self.shaper.remove(self._selected)
+            message = self.shaper.remove(self._selected, expected_revision=share.revision)
         except ShaperError as exc:
             self._note(str(exc), bad=True)
             return
-        proc = self._proc(self._selected)
-        if proc is not None:
-            self._scheduled.forget(proc)
-            self._rule_tracker.applied(proc)
+        self._scheduled.forget(proc)
+        self._rule_tracker.applied(proc)
         self.query_one("#down-pct", Input).value = ""
         self.query_one("#up-pct", Input).value = ""
         self._note(message)

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- TUI removal checks the selected process and limit revision before removing a share.
+
 - CLI sessions retain transient refresh failures for later commands to report.
 
 - Settings reject invalid Unicode in rule and group names before import.
