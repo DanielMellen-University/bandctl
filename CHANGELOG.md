@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Recovery keeps a leaf when a reused PID is still inside it, instead of moving the replacement.
+
 - Failed removals retry synchronization and report incomplete rollback.
 
 - Settings import rejects named pipes instead of waiting indefinitely for a writer.

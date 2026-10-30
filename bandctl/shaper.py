@@ -689,13 +689,10 @@ class Shaper:
                                 current = parse_start_ticks(self.host.read(f"/proc/{pid}/stat"))
                             except OSError:
                                 current = None
-                            if type(start) is not int or current is None:
+                            if type(start) is not int or current != start:
                                 pending_pids.add(pid)
                                 pending_error = f"cannot verify pid {pid}"
                                 notes.append(pending_error)
-                                continue
-                            if current != start:
-                                notes.append(f"cannot verify pid {pid}")
                                 continue
                         try:
                             self._restore_pid(pid, str(original))
