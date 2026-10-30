@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Original cgroup paths retain Unicode line separators during restoration.
+
 - Original cgroup paths keep trailing spaces so processes return to the correct cgroup.
 
 - Recovery rejects invalid Unicode in saved cgroup paths before changing host state.

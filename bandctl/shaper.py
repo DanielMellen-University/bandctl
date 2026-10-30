@@ -864,7 +864,7 @@ class Shaper:
             raise ShaperError(f"pid {pid} is not running") from exc
         except OSError as exc:
             raise ShaperError(f"cannot read cgroup for pid {pid}: {exc}") from exc
-        for line in text.splitlines():
+        for line in text.split("\n"):
             if "::" in line:
                 path = line.split("::", 1)[1] or "/"
                 return path

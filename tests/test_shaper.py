@@ -2072,6 +2072,16 @@ class CleanupTests(unittest.TestCase):
             self.assertEqual(path.read_text(), original)
             self.assertEqual(list(Path(directory).iterdir()), [path])
 
+    def test_original_cgroup_with_unicode_line_separator_is_restored(self):
+        shaper, host = _shaper()
+        host.files["/proc/42/cgroup"] = "0::/user.slice/session\u2028scope\n"
+
+        shaper.apply(42, None, 10, None, 100_000_000)
+        state = json.loads(host.files["/run/bandctl.json"])
+        self.assertEqual(state["pids"]["42"], "/user.slice/session\u2028scope")
+        shaper.remove(42)
+        self.assertEqual(host.files["/sys/fs/cgroup/user.slice/session\u2028scope/cgroup.procs"], "42\n")
+
     def test_original_cgroup_with_trailing_space_is_restored(self):
         shaper, host = _shaper()
         host.files["/proc/42/cgroup"] = "0::/user.slice/session.scope \n"
