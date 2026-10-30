@@ -38,6 +38,13 @@ class SettingsTests(unittest.TestCase):
             with self.subTest(field=field), self.assertRaises(ValueError):
                 loads(json.dumps(changed))
 
+    def test_rejects_unpaired_surrogates_in_rule_and_group_names(self):
+        for collection in ("rules", "groups"):
+            data = json.loads(dumps(self.settings()))
+            data[collection][0]["name"] = "bad\udfffname"
+            with self.subTest(collection=collection), self.assertRaises(ValueError):
+                loads(json.dumps(data))
+
     def test_rejects_bad_budgets_interface_and_pid_identity(self):
         data = json.loads(dumps(self.settings()))
         for field, value in (("interface", "../bad"), ("down_budget_bps", 0), ("up_budget_bps", True)):

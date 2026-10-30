@@ -19,6 +19,8 @@ class AutoRule:
     window: DailyWindow | None = None
 
     def __post_init__(self) -> None:
+        if any(0xD800 <= ord(char) <= 0xDFFF for char in self.name):
+            raise ValueError("process name must be valid Unicode")
         if any(ord(char) < 32 or ord(char) == 127 for char in self.name):
             raise ValueError("process name cannot contain control characters")
         name = self.name.strip()

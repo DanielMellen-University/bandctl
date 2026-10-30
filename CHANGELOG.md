@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Settings reject invalid Unicode in rule and group names before import.
+
 - Documented the limit on matching existing wildcard-bound UDP sockets.
 
 - Socket counts do not double-count duplicated file descriptors.

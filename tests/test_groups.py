@@ -12,7 +12,7 @@ class GroupTests(unittest.TestCase):
         self.assertEqual(group.down_pct, 30)
 
     def test_rejects_invalid_names_and_percentages(self):
-        for name in ("", "  ", "bad\nname", 3):
+        for name in ("", "  ", "bad\nname", "\ud800", 3):
             with self.subTest(name=name), self.assertRaises(ValueError):
                 Group(name, 10, None)
         for down, up in ((None, None), (0, None), (101, None), (True, None), (None, 1.5)):

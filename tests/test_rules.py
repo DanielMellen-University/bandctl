@@ -33,7 +33,7 @@ class RuleTests(unittest.TestCase):
         self.assertEqual(tracker.candidates([proc], [scheduled], set(), 2, time(23)), [(proc, scheduled)])
 
     def test_invalid_rules_are_rejected(self):
-        for name, down, up in ((" ", 10, None), ("x\n", 10, None), ("x", None, None),
+        for name, down, up in ((" ", 10, None), ("x\n", 10, None), ("\ud800", 10, None), ("x", None, None),
                                ("x", 0, None), ("x", None, 101), ("x", True, None)):
             with self.subTest(name=name, down=down, up=up):
                 with self.assertRaises(ValueError):
