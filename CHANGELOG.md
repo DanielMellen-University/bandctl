@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Recovery rejects invalid process start times instead of skipping identity checks.
+
 - A refresh arriving after the TUI screen closes no longer raises an error.
 
 - Remove keeps a share for retry when process liveness cannot be checked.

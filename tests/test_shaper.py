@@ -730,6 +730,26 @@ class ApplyTests(unittest.TestCase):
         self.assertNotIn(original, host.files)
         self.assertFalse(any(note == "restored pid 42" for note in notes))
 
+    def test_recover_rejects_incomplete_or_invalid_start_times(self):
+        for starts in ([], {}, {"42": "100"}, {"42": True}):
+            with self.subTest(start_ticks=starts):
+                shaper, host = _shaper()
+                state = json.dumps({"iface": "eth0", "pids": {"42": "/original"},
+                                    "start_ticks": starts})
+                host.files["/run/bandctl.json"] = state
+                host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42\n"
+                host.files["/proc/42/stat"] = "42 (other) S " + "0 " * 18 + "200"
+                host.files["/sys/fs/cgroup/bandctl/bandctl-42/cgroup.procs"] = "42\n"
+
+                notes = shaper.recover()
+
+                self.assertTrue(any("start_ticks" in note for note in notes))
+                self.assertIsNotNone(shaper.recovery_error)
+                self.assertEqual(host.files["/run/bandctl.json"], state)
+                self.assertNotIn("/sys/fs/cgroup/original/cgroup.procs", host.files)
+                self.assertNotIn("/sys/fs/cgroup/cgroup.procs", host.files)
+                self.assertEqual(host.commands, [])
+
     def test_recover_checks_start_time_even_if_reused_pid_is_in_leaf(self):
         shaper, host = _shaper()
         host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"

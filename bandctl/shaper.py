@@ -627,6 +627,15 @@ class Shaper:
                 self._torn = True
                 self.recovery_error = "invalid recovery state: pids must be an object"
                 return [self.recovery_error]
+            if state and "start_ticks" in state:
+                starts = state["start_ticks"]
+                pids = state.get("pids", {})
+                if (not isinstance(starts, dict) or not pids.keys() <= starts.keys()
+                        or any(value is not None and (type(value) is not int or value < 0)
+                               for value in starts.values())):
+                    self._torn = True
+                    self.recovery_error = "invalid recovery state: invalid start_ticks"
+                    return [self.recovery_error]
             pending_pids: set[int] = set()
             pending_error: str | None = None
             if state and state.get("iface"):
