@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reject limits when an IPv4 socket table is missing on the first scan.
+
 - Keep socket filters when a socket table is malformed or truncated.
 
 - Decode socket addresses using the host byte order so filters match on big-endian Linux.

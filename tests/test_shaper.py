@@ -30,7 +30,10 @@ from bandctl.shaper import (
 class FakeHost:
     def __init__(self):
         self.commands: list[tuple[list[str], str | None]] = []
-        self.files: dict[str, str] = {}
+        self.files: dict[str, str] = {
+            "/proc/net/tcp": "sl local_address rem_address inode\n",
+            "/proc/net/udp": "sl local_address rem_address inode\n",
+        }
         self.dirs: set[str] = {"/sys/fs/cgroup"}
         self.links: dict[str, str] = {}
         self.qdisc = "qdisc fq_codel 0: root refcnt 2 limit 10240p flows 1024\n"
@@ -1746,6 +1749,31 @@ class ApplyTests(unittest.TestCase):
                 shaper.sample()
                 self.assertIsNone(shaper.flow_warning)
                 self.assertEqual(shaper._flows, {})
+
+    def test_first_scan_rejects_missing_ipv4_socket_tables(self):
+        for missing in ("tcp", "udp"):
+            with self.subTest(missing=missing):
+                shaper, host = _shaper()
+                _open_socket(host)
+                host.files["/proc/net/udp"] = "sl local_address rem_address inode\n"
+                del host.files[f"/proc/net/{missing}"]
+                with self.assertRaisesRegex(ShaperError, f"cannot read /proc/net/{missing}"):
+                    shaper.apply(42, None, 10, None, 100_000_000)
+                self.assertNotIn(42, shaper.shares)
+
+    def test_ipv6_socket_tables_may_be_absent_but_not_disappear(self):
+        for filename in ("tcp6", "udp6"):
+            with self.subTest(filename=filename):
+                shaper, host = _shaper()
+                _open_socket(host)
+                host.files[f"/proc/net/{filename}"] = "sl local_address remote_address inode\n"
+                shaper.apply(42, None, 10, None, 100_000_000)
+                existing = dict(shaper._flows)
+                self.assertTrue(existing)
+                del host.files[f"/proc/net/{filename}"]
+                shaper.sample()
+                self.assertIn(f"/proc/net/{filename}", shaper.flow_warning)
+                self.assertEqual(shaper._flows, existing)
 
     def test_sample_retries_failed_flower_deletion(self):
         shaper, host = _shaper()

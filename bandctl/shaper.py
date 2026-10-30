@@ -1446,7 +1446,8 @@ class Shaper:
             try:
                 text = self.host.read(path)
             except FileNotFoundError as exc:
-                if filename in self._known_net_tables:
+                # IPv6 may not be configured, but IPv4 tables are required.
+                if family == "ip" or filename in self._known_net_tables:
                     raise ShaperError(f"cannot read {path}: {exc}") from exc
                 continue
             except OSError as exc:
