@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Failed flower filter deletions stay tracked and are retried, with a warning.
+
 - Recovery rejects invalid saved qdiscs before changing network state.
 
 - Recovery rejects invalid PID entries and cgroup paths before changing host state.

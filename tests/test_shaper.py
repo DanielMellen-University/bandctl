@@ -1109,6 +1109,41 @@ class ApplyTests(unittest.TestCase):
         self.assertEqual(len(deleted), 1)
         self.assertEqual(shaper._flows, {})
 
+    def test_sample_retries_failed_flower_deletion(self):
+        shaper, host = _shaper()
+        _open_socket(host)
+        shaper.apply(42, None, 10, None, 100_000_000)
+        host.links.clear()
+        host.fail_substr = "tc filter del dev eth0 parent 1: protocol ip prio 2"
+
+        shaper.sample()
+
+        self.assertIn("forced failure", shaper.flow_warning)
+        self.assertEqual(len(shaper._flows), 1)
+        host.fail_substr = None
+        shaper.sample()
+        self.assertIsNone(shaper.flow_warning)
+        self.assertEqual(shaper._flows, {})
+        deletes = [cmd for cmd in _joined(host) if "filter del" in cmd and "flower" in cmd]
+        self.assertEqual(len(deletes), 2)
+
+    def test_sample_accepts_a_flower_filter_already_removed(self):
+        shaper, host = _shaper()
+        _open_socket(host)
+        shaper.apply(42, None, 10, None, 100_000_000)
+        host.links.clear()
+        run = host.run
+
+        def missing_filter(args, input_text=None):
+            if args[:3] == ["tc", "filter", "del"] and args[-1] == "flower":
+                raise ShaperError("RTNETLINK answers: No such file or directory", args)
+            return run(args, input_text)
+
+        with patch.object(host, "run", side_effect=missing_filter):
+            shaper.sample()
+        self.assertIsNone(shaper.flow_warning)
+        self.assertEqual(shaper._flows, {})
+
     def test_removing_one_pid_drops_only_its_flower(self):
         shaper, host = _shaper()
         host.files["/proc/net/tcp"] = (

@@ -1348,8 +1348,9 @@ class Shaper:
                     "handle", str(rec.handle), "flower",
                 ]
             )
-        except ShaperError:
-            pass
+        except ShaperError as exc:
+            if not any(text in exc.detail.lower() for text in ("no such file", "cannot find specified filter")):
+                raise
         self._flows.pop(key, None)
 
     def _forget_flows(self, dev: str, parent: str) -> None:
