@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Display process, rule, and group names as text instead of terminal markup.
+
 - Preserve and quote startup options in the non-root restart command.
 
 - Refuse oversized settings exports before replacing the destination file.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
@@ -86,7 +87,7 @@ class RulesScreen(ModalScreen[list[AutoRule]]):
         table.clear()
         for rule in self.rules:
             window = "-" if rule.window is None else f"{rule.window.start:%H:%M}-{rule.window.end:%H:%M}"
-            table.add_row(rule.name, str(rule.down_pct or "-"), str(rule.up_pct or "-"), window)
+            table.add_row(Text(rule.name), str(rule.down_pct or "-"), str(rule.up_pct or "-"), window)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         # Enter in any rule field adds the rule, like Enter in a percent field
@@ -97,7 +98,7 @@ class RulesScreen(ModalScreen[list[AutoRule]]):
     def _status(self, text: str, *, bad: bool = False) -> None:
         status = self.query_one("#rule-status", Static)
         status.set_class(bad, "-error")
-        status.update(text)
+        status.update(Text(text))
 
     def _add_rule(self) -> None:
         try:

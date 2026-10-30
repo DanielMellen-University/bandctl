@@ -100,6 +100,26 @@ def _app(fake, *, root=True, link_bps=100_000_000, rates=None):
 
 
 class AppTests(unittest.IsolatedAsyncioTestCase):
+    async def test_process_and_rule_names_display_markup_literally(self):
+        from bandctl.rules import AutoRule
+
+        proc = ProcessInfo(42, "[red]curl[/red]", "[red]curl[/red]", "[red]user[/red]", 2, 42)
+        app = BandctlApp(iface="[red]e[/red]", shaper=FakeShaper(), processes=lambda: [proc],
+                         link_bps=100_000_000, is_root=True, rates=_rates)
+        app._rules = [AutoRule("[red]curl[/red]", 10, None)]
+        async with app.run_test(size=(160, 32)) as pilot:
+            await pilot.pause()
+            cell = app.query_one("#procs", DataTable).get_cell("42", "command")
+            self.assertIsInstance(cell, Text)
+            self.assertEqual(cell.plain, "[red]curl[/red]")
+            self.assertEqual(app.query_one("#procs", DataTable).get_cell("42", "user").plain, "[red]user[/red]")
+            self.assertIn("[red]curl[/red]", str(app.query_one("#detail-title", Static).render()))
+            self.assertIn("[red]e[/red]", str(app.query_one("#titlebar", Static).render()))
+            await pilot.press("t")
+            cell = app.screen.query_one("#rule-table", DataTable).get_row_at(0)[0]
+            self.assertIsInstance(cell, Text)
+            self.assertEqual(cell.plain, "[red]curl[/red]")
+
     async def test_sudo_command_preserves_and_quotes_startup_options(self):
         app = BandctlApp(iface="eth;test", startup_settings="saved settings;test.json", match_wildcard=True)
         options = ["--iface=eth;test", "--match-wildcard", "--config=saved settings;test.json"]

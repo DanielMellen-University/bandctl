@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
@@ -48,7 +49,7 @@ class GroupsScreen(ModalScreen[bool]):
         table = self.query_one("#group-table", DataTable)
         table.clear()
         for group in active_groups(self.shaper.shares):
-            table.add_row(group.name, str(group.down_pct or "-"), str(group.up_pct or "-"),
+            table.add_row(Text(group.name), str(group.down_pct or "-"), str(group.up_pct or "-"),
                           ", ".join(str(pid) for pid in group.members))
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
@@ -65,7 +66,7 @@ class GroupsScreen(ModalScreen[bool]):
     def _status(self, message: str, bad: bool = False) -> None:
         status = self.query_one("#group-status", Static)
         status.set_class(bad, "-error")
-        status.update(message)
+        status.update(Text(message))
 
     def _pids(self) -> tuple[int, ...]:
         raw = self.query_one("#group-pids", Input).value

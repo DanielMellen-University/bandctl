@@ -1,6 +1,7 @@
 """Group editor through a fake host and the Textual pilot."""
 import unittest
 
+from rich.text import Text
 from textual.widgets import DataTable, Input, Static
 
 from bandctl.app import BandctlApp
@@ -21,6 +22,21 @@ def group_app():
 
 
 class GroupScreenTests(unittest.IsolatedAsyncioTestCase):
+    async def test_group_name_displays_markup_literally(self):
+        app, shaper, _host = group_app()
+        async with app.run_test(size=(100, 32)) as pilot:
+            await pilot.press("g")
+            app.screen.query_one("#group-name", Input).value = "[red]work[/red]"
+            app.screen.query_one("#group-pids", Input).value = "42"
+            app.screen.query_one("#group-down", Input).value = "30"
+            await pilot.click("#group-create")
+            self.assertEqual(shaper.shares[42].group, "[red]work[/red]")
+            cell = app.screen.query_one("#group-table", DataTable).get_row_at(0)[0]
+            self.assertIsInstance(cell, Text)
+            self.assertEqual(cell.plain, "[red]work[/red]")
+            await pilot.press("escape")
+            self.assertIn("[red]work[/red]", str(app.query_one("#detail-title", Static).render()))
+
     async def test_create_update_and_add_member(self):
         app, shaper, host = group_app()
         async with app.run_test(size=(80, 24)) as pilot:

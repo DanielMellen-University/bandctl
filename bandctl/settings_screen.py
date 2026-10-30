@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
@@ -36,7 +37,7 @@ class SettingsScreen(ModalScreen):
     def _status(self, message: str, bad: bool = False) -> None:
         status = self.query_one("#settings-status", Static)
         status.set_class(bad, "-error")
-        status.update(message)
+        status.update(Text(message))
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         action = event.button.id

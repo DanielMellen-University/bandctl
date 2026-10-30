@@ -710,7 +710,7 @@ class BandctlApp(App):
             )
             if not self._show_all:
                 text += "  above 1%"
-        self.query_one("#titlebar", Static).update(text)
+        self.query_one("#titlebar", Static).update(Text(text))
         down_cap, up_cap = self._effective_caps()
         down_label = _cap_label("down", down_cap, self._down_budget, self.unit)
         up_label = _cap_label("up", up_cap, self._up_budget, self.unit)
@@ -820,6 +820,8 @@ class BandctlApp(App):
         # that green is hard to read, so only the other limited rows use it.
         if limited and proc.pid != self._selected:
             return Text(str(text), style="#f0a35e")
+        if key in ("command", "user"):
+            return Text(text)
         return text
 
     def _fill_inputs(self, pid: int) -> None:
@@ -850,7 +852,7 @@ class BandctlApp(App):
             share = self.shaper.shares.get(proc.pid) if self.shaper else None
             group = f"  group {share.group}" if share and share.group else ""
             title = f"{proc.comm}  pid {proc.pid}{group}  TCP total {data}"
-        self.query_one("#detail-title", Static).update(title)
+        self.query_one("#detail-title", Static).update(Text(title))
         share = self.shaper.shares.get(self._selected) if self.shaper and self._selected else None
         usage = self._usage.get(self._selected, (0.0, 0.0)) if self._selected else (0.0, 0.0)
         down_cap, up_cap = self._effective_caps()
