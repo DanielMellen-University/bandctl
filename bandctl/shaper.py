@@ -425,8 +425,9 @@ class Shaper:
             try:
                 self._require_caps()
                 for pid in sorted(changes.remove):
-                    removed.append(old[pid])
-                    self._restore_share(old[pid])
+                    removed.append((old[pid], True))
+                    restored = self._restore_share(old[pid])
+                    removed[-1] = (old[pid], restored)
                 for pid in sorted(changes.add):
                     share = replacement[pid]
                     attempted.append(share)
@@ -444,7 +445,7 @@ class Shaper:
                         problems.append(str(restore_error))
                     else:
                         self._rmdir_leaf(share.pid)
-                for share in removed:
+                for share, restored in removed:
                     status = self._process_status(share)
                     if status == "changed":
                         try:
@@ -454,11 +455,15 @@ class Shaper:
                             continue
                     if status in ("gone", "changed"):
                         self._shares.pop(share.pid, None)
+                    elif not restored:
+                        continue
                     elif status != "same":
                         problems.append(f"cannot verify pid {share.pid} during rollback")
                     else:
                         try:
-                            self._move_to_leaf(share)
+                            cgroup = self._read_cgroup(share.pid)
+                            if cgroup == share.original_cgroup:
+                                self._move_to_leaf(share)
                         except (OSError, ShaperError) as move_error:
                             problems.append(f"cannot restore group for pid {share.pid}: {move_error}")
                 if any(share.pid in self._shares for share in attempted):
@@ -668,6 +673,14 @@ class Shaper:
             return False
         if share.start_ticks is not None and status == "unknown":
             raise ShaperError(f"cannot verify pid {share.pid}")
+        try:
+            cgroup = self._read_cgroup(share.pid)
+        except ShaperError as exc:
+            if isinstance(exc.__cause__, FileNotFoundError):
+                return False
+            raise
+        if cgroup != f"/bandctl/bandctl-{share.pid}":
+            return False
         self._restore_pid(share.pid, share.original_cgroup)
         return True
 

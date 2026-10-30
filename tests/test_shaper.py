@@ -72,6 +72,13 @@ class FakeHost:
 
     def write(self, path: str, data: str) -> None:
         self.files[path] = data
+        prefix = "/sys/fs/cgroup"
+        if path.startswith(prefix + "/") and path.endswith("/cgroup.procs"):
+            pid = data.strip()
+            current = f"/proc/{pid}/cgroup"
+            if current in self.files:
+                cgroup = path[len(prefix):-len("/cgroup.procs")] or "/"
+                self.files[current] = f"0::{cgroup}\n"
 
     def write_state(self, path: str, data: str) -> None:
         self.write(path, data)
@@ -398,6 +405,36 @@ class ImportGroupTests(unittest.TestCase):
         self.assertEqual((shaper.shares[42].down_pct, shaper.shares[43].up_pct), (30, 10))
         self.assertNotIn("/sys/fs/cgroup/bandctl/bandctl-44", host.dirs)
         self.assertEqual(host.files["/sys/fs/cgroup/user.slice/session.scope/cgroup.procs"], "44\n")
+
+    def test_failed_import_does_not_move_a_member_that_left_its_leaf(self):
+        shaper, host = self.setup_shaper()
+        shaper.apply_group(Group("old", 20, None, (42,)), {42: 100}, 100_000_000, None)
+        host.files["/proc/42/cgroup"] = "0::/new.slice\n"
+        with patch.object(shaper, "_sync", side_effect=[ShaperError("sync failed"), None]):
+            with self.assertRaisesRegex(ShaperError, "sync failed"):
+                shaper.replace_groups(self.settings([]), 100_000_000, None)
+        self.assertEqual(host.files["/proc/42/cgroup"], "0::/new.slice\n")
+        self.assertIn(42, shaper.shares)
+
+    def test_import_rollback_does_not_move_a_member_after_a_failed_cgroup_read(self):
+        shaper, host = self.setup_shaper()
+        shaper.apply_group(Group("old", 20, None, (42,)), {42: 100}, 100_000_000, None)
+        host.files["/proc/42/cgroup"] = "0::/new.slice\n"
+        read = host.read
+        failed = False
+
+        def fail_once(path):
+            nonlocal failed
+            if path == "/proc/42/cgroup" and not failed:
+                failed = True
+                raise PermissionError("cgroup read denied")
+            return read(path)
+
+        with patch.object(host, "read", side_effect=fail_once):
+            with self.assertRaisesRegex(ShaperError, "cgroup read denied"):
+                shaper.replace_groups(self.settings([]), 100_000_000, None)
+        self.assertEqual(host.files["/proc/42/cgroup"], "0::/new.slice\n")
+        self.assertIn(42, shaper.shares)
 
     def test_preflight_rejects_reused_pid_and_individual_limits(self):
         shaper, host = self.setup_shaper()
@@ -760,6 +797,7 @@ class ApplyTests(unittest.TestCase):
         host.files[stat] = "42 (steam) S " + "0 " * 18 + "100"
         shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
         host.files[stat] = "42 (other) S " + "0 " * 18 + "200"
+        host.files["/proc/42/cgroup"] = "0::/other.slice\n"
         with patch.object(shaper, "_sync", side_effect=ShaperError("sync failed")):
             with patch.object(host, "write", wraps=host.write) as write:
                 with self.assertRaises(ShaperError):
@@ -841,6 +879,7 @@ class ApplyTests(unittest.TestCase):
         host.files[stat] = "42 (steam) S " + "0 " * 18 + "100"
         shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
         host.files[stat] = "42 (other) S " + "0 " * 18 + "200"
+        host.files["/proc/42/cgroup"] = "0::/other.slice\n"
         original = "/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs"
         self.assertNotIn(original, host.files)
         shaper.sample()
@@ -2391,6 +2430,46 @@ class CleanupTests(unittest.TestCase):
         host.write = original_write  # type: ignore[method-assign]
         self.assertIn("removed", shaper.remove(42))
         self.assertEqual(shaper.shares, {})
+
+    def test_remove_does_not_move_a_process_that_left_its_leaf(self):
+        shaper, host = _shaper()
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+        host.files["/proc/42/cgroup"] = "0::/new.slice\n"
+
+        shaper.remove(42)
+
+        original = "/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs"
+        self.assertNotIn(original, host.files)
+        self.assertFalse(shaper.shares)
+
+    def test_teardown_does_not_move_a_process_that_left_its_leaf(self):
+        shaper, host = _shaper()
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+        host.files["/proc/42/cgroup"] = "0::/new.slice\n"
+
+        self.assertEqual(shaper.teardown(), [])
+
+        original = "/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs"
+        self.assertNotIn(original, host.files)
+        self.assertEqual(host.files["/proc/42/cgroup"], "0::/new.slice\n")
+
+    def test_remove_keeps_a_share_when_its_cgroup_cannot_be_read(self):
+        shaper, host = _shaper()
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+        read = host.read
+
+        def inaccessible(path):
+            if path == "/proc/42/cgroup":
+                raise PermissionError("cgroup read denied")
+            return read(path)
+
+        with patch.object(host, "read", side_effect=inaccessible):
+            with self.assertRaisesRegex(ShaperError, "cgroup read denied"):
+                shaper.remove(42)
+        self.assertIn(42, shaper.shares)
 
     def test_remove_keeps_share_when_process_liveness_is_unreadable(self):
         shaper, host = _shaper()

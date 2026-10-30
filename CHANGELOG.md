@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Removal and exit leave a process alone if it has moved out of its bandctl cgroup.
+
 - Recovery rejects named pipes instead of waiting indefinitely for a writer.
 
 - Non-UTF-8 cgroup paths are rejected instead of being changed to a different path during restoration.
