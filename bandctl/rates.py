@@ -140,6 +140,9 @@ def htb_plan(ceil_bps: list[int], parent_bps: int) -> tuple[list[int], list[int]
     if parent_bps <= 0:
         raise RateError("capacity must be greater than zero")
     parent = max((parent_bps + 999) // 1000, 2)
+    if (any(ceil < 1000 for ceil in ceil_bps)
+            or (ceil_bps and len(ceil_bps) + 1 > parent_bps // 1000)):
+        raise RateError("capacity is too small for these HTB classes; increase the budget or share")
     ceils = [min(max((c + 999) // 1000, 1), parent) if c > 0 else 0 for c in ceil_bps]
     budget = parent - 1
     total = sum(ceils)

@@ -88,6 +88,14 @@ class ConversionTests(unittest.TestCase):
 
 
 class PlanTests(unittest.TestCase):
+    def test_rejects_rates_too_small_for_htb_classes(self):
+        for ceils, parent in (([0], 1), ([999], 10_000), ([1000, 1000], 2000),
+                              ([1000, 1000], 2999)):
+            with self.subTest(ceils=ceils, parent=parent):
+                with self.assertRaisesRegex(RateError, "too small"):
+                    htb_plan(ceils, parent)
+        self.assertEqual(htb_plan([1000, 1000], 3000), ([1, 1], [1, 1], 1))
+
     def test_single_share_keeps_its_ceil(self):
         rates, ceils, default = htb_plan([30_000_000], 100_000_000)
         self.assertEqual(ceils, [30000])

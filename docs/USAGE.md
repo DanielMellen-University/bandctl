@@ -107,6 +107,8 @@ Rules apply to matching processes already running and to new matches found in la
 
 A budget must be a finite number that represents at least 1 bit/s and fits in a finite floating-point value in bits per second. Imported budgets follow the same limit.
 
+HTB rates use whole kilobits per second. A limit needs a ceiling of at least 1 kbit/s, and the capacity needs at least 1 kbit/s for each limited class plus 1 kbit/s for unmarked traffic. bandctl rejects a limit or budget update that cannot fit those rates. Capacities and ceilings are rounded up to whole kbit/s, and guaranteed rates may be scaled down.
+
 Example. The link is unknown. You are in Mbit/s and type `100` as the download budget. A 30% download share then ceilings at 30 Mbit/s. Press `b` and the same budget reads `12.5`, which is 100 Mbit/s expressed in MB/s.
 
 ## While it is running

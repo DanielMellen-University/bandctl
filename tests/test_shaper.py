@@ -492,6 +492,23 @@ class ImportGroupTests(unittest.TestCase):
 
 
 class ApplyTests(unittest.TestCase):
+    def test_unrepresentable_share_is_rejected_and_restored(self):
+        shaper, host = _shaper()
+        with self.assertRaisesRegex(ShaperError, "too small"):
+            shaper.apply(42, None, 10, None, 1)
+        self.assertFalse(shaper.shares)
+        self.assertNotIn("/sys/fs/cgroup/bandctl/bandctl-42", host.dirs)
+        self.assertFalse(host.commands)
+
+    def test_capacity_update_rejects_too_few_class_rates(self):
+        shaper, host = _shaper()
+        shaper.apply(42, None, 50, None, 100_000_000)
+        shaper.apply(43, None, 50, None, 100_000_000)
+        with self.assertRaisesRegex(ShaperError, "too small"):
+            shaper.set_capacities(None, 2000)
+        self.assertEqual(shaper._up_cap, 100_000_000)
+        self.assertEqual(set(shaper.shares), {42, 43})
+
     def test_individual_update_reports_failed_synchronization_rollback(self):
         shaper, host = _shaper()
         shaper.apply(42, None, 10, None, 100_000_000)

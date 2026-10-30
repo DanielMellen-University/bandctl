@@ -35,7 +35,7 @@ from typing import Protocol
 
 from bandctl.groups import Group
 from bandctl.procscan import SockFlow, parse_proc_net, parse_start_ticks
-from bandctl.rates import htb_plan, percent_to_bps
+from bandctl.rates import RateError, htb_plan, percent_to_bps
 
 IFB = "ifb-bandctl"
 TABLE = "bandctl"
@@ -934,6 +934,10 @@ class Shaper:
     def _sync(self, *, write_state: bool = True) -> None:
         down_shares = [share for share in self._shares.values() if share.down_pct]
         up_shares = [share for share in self._shares.values() if share.up_pct]
+        if up_shares and self._up_cap:
+            self._plan_direction(self.iface, up_shares, self._up_cap)
+        if down_shares and self._down_cap:
+            self._plan_direction(IFB, down_shares, self._down_cap)
         if self._shares and not self._nft_owned:
             self._run(["nft", "create", "table", "inet", TABLE])
             self._nft_owned = True
@@ -1022,6 +1026,19 @@ class Shaper:
         self._ifb = True
 
     def _sync_direction(self, dev: str, shares: list[Share], capacity: int) -> None:
+        shares, rates, ceils, default = self._plan_direction(dev, shares, capacity)
+        parent = sum(rates) + default
+        self._class(dev, "1:", "1:1", parent, parent)
+        self._class(dev, "1:1", "1:999", default, parent)
+        desired = {share.minor for share in shares}
+        for (have_dev, minor) in list(self._classes):
+            if have_dev == dev and minor not in desired and minor not in (1, 999):
+                self._delete_class(dev, minor)
+        for share, rate, ceil in zip(shares, rates, ceils):
+            self._class(dev, "1:1", f"1:{share.minor}", rate, ceil)
+            self._filter(dev, share.minor)
+
+    def _plan_direction(self, dev: str, shares: list[Share], capacity: int):
         # Members with the same minor share one class and one ceiling.
         unique: dict[int, Share] = {}
         for share in shares:
@@ -1036,17 +1053,11 @@ class Shaper:
             if percent is None:
                 raise ShaperError(f"pid {share.pid} is missing a percent for {dev}")
             ceils_bps.append(percent_to_bps(percent, capacity))
-        rates, ceils, default = htb_plan(ceils_bps, capacity)
-        parent = sum(rates) + default
-        self._class(dev, "1:", "1:1", parent, parent)
-        self._class(dev, "1:1", "1:999", default, parent)
-        desired = {share.minor for share in shares}
-        for (have_dev, minor) in list(self._classes):
-            if have_dev == dev and minor not in desired and minor not in (1, 999):
-                self._delete_class(dev, minor)
-        for share, rate, ceil in zip(shares, rates, ceils):
-            self._class(dev, "1:1", f"1:{share.minor}", rate, ceil)
-            self._filter(dev, share.minor)
+        try:
+            rates, ceils, default = htb_plan(ceils_bps, capacity)
+        except RateError as exc:
+            raise ShaperError(str(exc)) from exc
+        return shares, rates, ceils, default
 
     def _class(self, dev: str, parent: str, classid: str, rate: int, ceil: int) -> None:
         if rate < 1:
