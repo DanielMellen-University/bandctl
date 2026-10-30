@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Recovery rejects named pipes instead of waiting indefinitely for a writer.
+
 - Non-UTF-8 cgroup paths are rejected instead of being changed to a different path during restoration.
 
 - Settings screen paths keep leading and trailing spaces, so export does not replace a different file.

@@ -25,6 +25,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import stat
 import subprocess
 import tempfile
 import threading
@@ -47,6 +48,8 @@ class Host(Protocol):
     def run(self, args: list[str], input_text: str | None = None) -> str: ...
 
     def read(self, path: str) -> str: ...
+
+    def read_state(self, path: str) -> str: ...
 
     def write(self, path: str, data: str) -> None: ...
 
@@ -1352,7 +1355,7 @@ class Shaper:
 
     def _read_state(self) -> dict | None:
         try:
-            raw = self.host.read(self.state_path)
+            raw = self.host.read_state(self.state_path)
         except FileNotFoundError:
             return None
         except OSError as exc:
@@ -1650,6 +1653,13 @@ class LinuxHost:
 
     def read(self, path: str) -> str:
         return Path(path).read_text(encoding="utf-8", errors="surrogateescape")
+
+    def read_state(self, path: str) -> str:
+        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+        with os.fdopen(fd, "r", encoding="utf-8", errors="surrogateescape") as stream:
+            if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                raise OSError("recovery state must be a regular file")
+            return stream.read()
 
     def readlink(self, path: str) -> str:
         return os.readlink(path)

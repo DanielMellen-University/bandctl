@@ -136,6 +136,6 @@ If a PID changes or cannot be verified during removal rollback, bandctl leaves i
 - `/sys/fs/cgroup/bandctl` is removed
 - `/run/bandctl.json` is removed
 
-A crash skips that path. The next start reads `/run/bandctl.json` and finishes it. Reboot also drops the qdisc and the file, because neither is persistent.
+A crash skips that path. The next start reads `/run/bandctl.json` and finishes it. The recovery file must be a regular file. Reboot also drops the qdisc and the file, because neither is persistent.
 
 If restoring a process or the root qdisc, cleaning cgroups, removing the download redirect, or deleting the nftables table fails, bandctl reports the error and keeps the recovery file. It also reports a failure to remove the recovery file itself. The TUI prints cleanup errors after exit and returns a failure status. Remove can retry while the session is open. After exit, the next start retries recovery. If it still fails, the TUI shows the error and disables Apply and Remove, and the CLI session does not start. Removal and recovery also wait if a reused PID is still in the old cgroup. They can finish once that process leaves the cgroup or exits.

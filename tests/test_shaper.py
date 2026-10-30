@@ -67,6 +67,9 @@ class FakeHost:
             raise FileNotFoundError(path)
         return self.files[path]
 
+    def read_state(self, path: str) -> str:
+        return self.read(path)
+
     def write(self, path: str, data: str) -> None:
         self.files[path] = data
 
@@ -1185,6 +1188,30 @@ class ApplyTests(unittest.TestCase):
         self.assertIsNotNone(shaper.recovery_error)
         self.assertEqual(host.files["/run/bandctl.json"], state)
         self.assertEqual(host.commands, [])
+
+    def test_recovery_rejects_a_fifo_without_waiting_for_a_writer(self):
+        import os
+        import subprocess
+        import sys
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "state.fifo"
+            os.mkfifo(path)
+            code = (
+                "from bandctl.shaper import LinuxHost, Shaper, ShaperError\n"
+                "import sys\n"
+                "try:\n"
+                "    Shaper('eth0', host=LinuxHost(), state_path=sys.argv[1])._read_state()\n"
+                "except ShaperError as exc:\n"
+                "    print(exc)\n"
+            )
+            try:
+                result = subprocess.run([sys.executable, "-c", code, str(path)],
+                                        capture_output=True, text=True, timeout=2, check=True)
+            except subprocess.TimeoutExpired:
+                self.fail("recovery waited for a FIFO writer")
+            self.assertIn("regular file", result.stdout)
+            self.assertTrue(path.exists())
 
     def test_recover_rejects_invalid_pid_mapping_and_keeps_state(self):
         shaper, host = _shaper()
