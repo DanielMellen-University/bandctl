@@ -65,7 +65,7 @@ The window needs at least 60 columns and 18 rows. At 108 columns or more the met
 2. Type a whole number from 1 to 100 in `down %`, `up %`, or both. A blank field means that direction is not capped.
 3. Press Enter in either percent field, press `a`, or click Apply.
 
-Apply requires a readable process start time. bandctl checks it again before changing the limit. If the process has exited or its PID was reused, rescan and select the intended process.
+Apply requires a readable process start time and an original cgroup path that can be restored. bandctl checks the start time again before changing the limit. If the process has exited or its PID was reused, rescan and select the intended process.
 
 The status line and the log confirm the share, for example `pid 4242 download 30%, upload 10%`. Limited rows are orange. The selected row stays green. The bars show measured class throughput against the ceiling and turn orange at the cap. `u` or Remove clears the share and puts the process back in its old cgroup. If that write fails while the process is still running, the share stays in place and the log shows the error. If the process has exited, the share is dropped.
 

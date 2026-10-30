@@ -710,9 +710,7 @@ class Shaper:
                 return [self.recovery_error]
             if state and any(
                 not re.fullmatch(r"[1-9][0-9]{0,9}", pid) or int(pid) > 2_147_483_647
-                or not isinstance(original, str) or not original.startswith("/")
-                or "\x00" in original or ".." in original.split("/")
-                or any(0xD800 <= ord(char) <= 0xDFFF for char in original)
+                or not _valid_cgroup_path(original)
                 for pid, original in state.get("pids", {}).items()
             ):
                 self._torn = True
@@ -866,7 +864,9 @@ class Shaper:
             raise ShaperError(f"cannot read cgroup for pid {pid}: {exc}") from exc
         for line in text.split("\n"):
             if line.startswith("0::"):
-                path = line[3:] or "/"
+                path = line[3:]
+                if not _valid_cgroup_path(path):
+                    raise ShaperError(f"invalid cgroup path for pid {pid}")
                 return path
         raise ShaperError(f"pid {pid} has no cgroup v2 path")
 
@@ -1559,6 +1559,12 @@ def flower_command(
         "action", "mirred", "egress", "redirect", "dev", IFB,
     ]
     return command
+
+
+def _valid_cgroup_path(path) -> bool:
+    return (isinstance(path, str) and path.startswith("/") and "\x00" not in path
+            and ".." not in path.split("/")
+            and not any(0xD800 <= ord(char) <= 0xDFFF for char in path))
 
 
 def leaf_name(pid: int) -> str:

@@ -2072,6 +2072,18 @@ class CleanupTests(unittest.TestCase):
             self.assertEqual(path.read_text(), original)
             self.assertEqual(list(Path(directory).iterdir()), [path])
 
+    def test_unrestorable_original_cgroup_is_rejected_before_move(self):
+        for original in ("", "/../other", "/a/../other", "relative", "/bad\x00path", "/bad\ud800path"):
+            with self.subTest(original=original):
+                shaper, host = _shaper()
+                host.files["/proc/42/cgroup"] = f"0::{original}\n"
+                with self.assertRaisesRegex(ShaperError, "invalid cgroup"):
+                    shaper.apply(42, None, 10, None, 100_000_000)
+                self.assertEqual(shaper.shares, {})
+                self.assertNotIn("/run/bandctl.json", host.files)
+                self.assertFalse(any(path.startswith("/sys/fs/cgroup/bandctl") for path in host.files))
+                self.assertEqual(host.commands, [])
+
     def test_original_cgroup_ignores_colons_in_legacy_controller_path(self):
         shaper, host = _shaper()
         host.files["/proc/42/cgroup"] = "4:cpu:/legacy::name\n0::/user.slice/session.scope\n"

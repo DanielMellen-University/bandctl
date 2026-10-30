@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Limits reject unrestorable original cgroup paths before moving processes.
+
 - Large CLI export responses fit even when the request is near its size limit.
 
 - Long CLI cleanup errors are truncated so the client can report them.
