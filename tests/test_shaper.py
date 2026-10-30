@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import stat
 import tempfile
-import time
 import threading
 import unittest
 from pathlib import Path
@@ -365,8 +364,7 @@ class SharedClassTests(unittest.TestCase):
         shaper._egress = True
         with patch.object(shaper, "_sync_flows"), patch.object(shaper, "_class_bytes", return_value={10: 1000}), \
              patch("bandctl.shaper.time.monotonic", return_value=2.0):
-            shaper._sample_at = 1.0
-            shaper._bytes[("up", 10)] = 500
+            shaper._bytes[("up", 10)] = (500, 1.0)
             self.assertEqual(shaper.sample(), {42: (0.0, 4000.0), 43: (0.0, 4000.0)})
 
 
@@ -533,8 +531,8 @@ class ApplyTests(unittest.TestCase):
         shaper._classes.add(("eth0", 11))
         shaper._filters.add(("eth0", 12, "ip"))
         shaper._flows[("stale",)] = InstalledFlow(1, 13, "eth0", "1:", "ip", 2)
-        shaper._bytes[("up", 14)] = 9000
-        shaper._bytes[("down", 14)] = 8000
+        shaper._bytes[("up", 14)] = (9000, 1.0)
+        shaper._bytes[("down", 14)] = (8000, 1.0)
         shaper._next_minor = 10_000
         shaper.apply(43, None, 10, None, 100_000_000)
         self.assertEqual(shaper.shares[42].minor, 10)
@@ -979,11 +977,40 @@ class ApplyTests(unittest.TestCase):
         shaper, host = _shaper()
         shaper.apply(42, None, 50, None, 100_000_000)
         host.class_show["eth0"] = "class htb 1:10 parent 1:1\n Sent 0 bytes 0 pkt\n"
-        self.assertEqual(shaper.sample()[42][1], 0.0)
-        host.class_show["eth0"] = "class htb 1:10 parent 1:1\n Sent 1000000 bytes 8 pkt\n"
-        shaper._sample_at = time.monotonic() - 1
-        _down, up = shaper.sample()[42]
-        self.assertAlmostEqual(up, 8_000_000, delta=80_000)
+        with patch("bandctl.shaper.time.monotonic", side_effect=[1.0, 2.0]):
+            self.assertEqual(shaper.sample()[42][1], 0.0)
+            host.class_show["eth0"] = "class htb 1:10 parent 1:1\n Sent 1000000 bytes 8 pkt\n"
+            _down, up = shaper.sample()[42]
+        self.assertEqual(up, 8_000_000)
+
+    def test_class_counter_gap_uses_time_since_its_last_sample(self):
+        shaper, host = _shaper()
+        shaper.apply(42, None, 50, None, 100_000_000)
+        with patch.object(shaper, "_sync_flows"), \
+             patch.object(shaper, "_class_bytes", side_effect=[{10: 100}, {}, {10: 300}]), \
+             patch("bandctl.shaper.time.monotonic", side_effect=[1.0, 2.0, 3.0]):
+            self.assertEqual(shaper.sample()[42][1], 0.0)
+            self.assertEqual(shaper.sample()[42][1], 0.0)
+            self.assertEqual(shaper.sample()[42][1], 800.0)
+
+    def test_class_counter_reset_and_non_increasing_time(self):
+        shaper, host = _shaper()
+        self.assertEqual(shaper._delta_bps("up", 10, 100, 1.0), 0.0)
+        self.assertEqual(shaper._delta_bps("up", 10, 200, 1.0), 0.0)
+        self.assertEqual(shaper._delta_bps("up", 10, 200, 2.0), 800.0)
+        self.assertEqual(shaper._delta_bps("up", 10, 50, 3.0), 0.0)
+        self.assertEqual(shaper._delta_bps("up", 10, 60, 4.0), 80.0)
+
+    def test_recreated_class_starts_with_a_fresh_counter_baseline(self):
+        shaper, host = _shaper()
+        shaper.apply(42, None, 10, 100_000_000, 100_000_000)
+        with patch("bandctl.shaper.time.monotonic", side_effect=[1.0, 2.0]):
+            host.class_show["eth0"] = "class htb 1:10 parent 1:1\n Sent 100 bytes 1 pkt\n"
+            self.assertEqual(shaper.sample()[42][1], 0.0)
+            shaper.apply(42, 10, None, 100_000_000, 100_000_000)
+            shaper.apply(42, 10, 10, 100_000_000, 100_000_000)
+            host.class_show["eth0"] = "class htb 1:10 parent 1:1\n Sent 200 bytes 1 pkt\n"
+            self.assertEqual(shaper.sample()[42][1], 0.0)
 
     def test_teardown_is_idempotent(self):
         shaper, host = _shaper()

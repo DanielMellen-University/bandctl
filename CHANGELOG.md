@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Class rates use the full interval after a missed sample and start fresh when a class is recreated.
+
 - Failed socket scans keep existing filters and report a warning until the scan succeeds.
 
 - Long sessions reuse free HTB class IDs before the kernel limit is reached.

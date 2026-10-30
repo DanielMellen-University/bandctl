@@ -134,8 +134,7 @@ class Shaper:
     _saved_qdisc: str | None = None
     _classes: set[tuple[str, int]] = field(default_factory=set)
     _filters: set[tuple[str, int, str]] = field(default_factory=set)
-    _bytes: dict[tuple[str, int], int] = field(default_factory=dict)
-    _sample_at: float = 0.0
+    _bytes: dict[tuple[str, int], tuple[int, float]] = field(default_factory=dict)
     _torn: bool = False
     _flows: dict[tuple, InstalledFlow] = field(default_factory=dict)
     _known_net_tables: set[str] = field(default_factory=set)
@@ -603,7 +602,6 @@ class Shaper:
             else:
                 self.flow_warning = None
             now = time.monotonic()
-            dt = now - self._sample_at if self._sample_at else 0.0
             down = self._class_bytes(IFB) if self._ifb else {}
             up = self._class_bytes(self.iface) if self._egress else {}
             result: dict[int, tuple[float, float]] = {}
@@ -611,11 +609,10 @@ class Shaper:
             for pid, share in self._shares.items():
                 if share.minor not in by_minor:
                     by_minor[share.minor] = (
-                        self._delta_bps("down", share.minor, down.get(share.minor), dt),
-                        self._delta_bps("up", share.minor, up.get(share.minor), dt),
+                        self._delta_bps("down", share.minor, down.get(share.minor), now),
+                        self._delta_bps("up", share.minor, up.get(share.minor), now),
                     )
                 result[pid] = by_minor[share.minor]
-            self._sample_at = now
             return result
 
     def _process_status(self, share: Share) -> str:
@@ -1141,6 +1138,7 @@ class Shaper:
             if "no such file" not in exc.detail.lower():
                 raise
         self._classes.discard((dev, minor))
+        self._bytes.pop(("down" if dev == IFB else "up", minor), None)
 
     def _restore_root_qdisc(self, iface: str | None = None) -> None:
         iface = self.iface if iface is None else iface
@@ -1207,6 +1205,8 @@ class Shaper:
     def _drop_dev(self, dev: str) -> None:
         self._classes = {item for item in self._classes if item[0] != dev}
         self._filters = {item for item in self._filters if item[0] != dev}
+        direction = "down" if dev == IFB else "up"
+        self._bytes = {key: value for key, value in self._bytes.items() if key[0] != direction}
 
     def _delete_nft(self, *, strict: bool) -> None:
         try:
@@ -1287,15 +1287,17 @@ class Shaper:
             return {}
         return parse_class_bytes(text)
 
-    def _delta_bps(self, kind: str, minor: int, total: int | None, dt: float) -> float:
+    def _delta_bps(self, kind: str, minor: int, total: int | None, now: float) -> float:
         key = (kind, minor)
         if total is None:
             return 0.0
         previous = self._bytes.get(key)
-        self._bytes[key] = total
-        if previous is None or dt <= 0 or total < previous:
+        if previous is not None and now <= previous[1]:
             return 0.0
-        return (total - previous) * 8 / dt
+        self._bytes[key] = (total, now)
+        if previous is None or total < previous[0]:
+            return 0.0
+        return (total - previous[0]) * 8 / (now - previous[1])
 
     def _run(self, args: list[str], input_text: str | None = None) -> str:
         try:
