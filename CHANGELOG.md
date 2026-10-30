@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- CLI sessions retry failed capacity updates even if the detected speed returns to its prior value.
+
 - Failed TUI budget updates keep the previous budget and show the error instead of reporting success.
 
 - Failed capacity updates restore earlier class rates where possible and report incomplete rollback.

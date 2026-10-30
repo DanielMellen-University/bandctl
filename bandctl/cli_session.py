@@ -24,6 +24,7 @@ class CliSession:
         self.detected_bps = detected_bps
         self.processes = processes
         self.speed_source = speed_source
+        self._capacity_retry = False
         self.down_budget: int | None = None
         self.up_budget: int | None = None
         self.rules = []
@@ -72,14 +73,17 @@ class CliSession:
         messages = []
         if self.speed_source is not None:
             detected = self.speed_source()
-            if detected != self.detected_bps:
+            if detected != self.detected_bps or self._capacity_retry:
                 previous = self.detected_bps
                 self.detected_bps = detected
                 try:
                     self.shaper.set_capacities(*self.capacities())
                 except (ShaperError, OSError) as exc:
                     self.detected_bps = previous
+                    self._capacity_retry = True
                     messages.append(f"capacity update: {exc}")
+                else:
+                    self._capacity_retry = False
         self.shaper.sample()
         if self.shaper.flow_warning:
             messages.append(f"flow refresh: {self.shaper.flow_warning}")

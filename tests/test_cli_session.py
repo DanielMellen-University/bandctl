@@ -57,6 +57,26 @@ class CliSessionTests(unittest.TestCase):
         self.assertEqual(self.session.detected_bps, 50_000_000)
         self.assertEqual(self.shaper._down_cap, 50_000_000)
 
+    def test_refresh_retries_capacity_after_speed_returns_to_old_value(self):
+        from datetime import time
+        from unittest.mock import patch
+
+        self.session.limit("42", "30", None)
+        speed = [200_000_000]
+        self.session.speed_source = lambda: speed[0]
+        set_capacities = self.shaper.set_capacities
+        with patch.object(self.shaper, "set_capacities", side_effect=ShaperError("rollback incomplete")):
+            messages = self.session.refresh(now=1, current=time(10))
+        self.assertTrue(any("rollback incomplete" in message for message in messages))
+        self.assertEqual(self.session.detected_bps, 100_000_000)
+        speed[0] = 100_000_000
+        with patch.object(self.shaper, "set_capacities", wraps=set_capacities) as update:
+            self.session.refresh(now=2, current=time(10))
+            update.assert_called_once_with(100_000_000, 100_000_000)
+        with patch.object(self.shaper, "set_capacities", wraps=set_capacities) as update:
+            self.session.refresh(now=3, current=time(10))
+            update.assert_not_called()
+
     def test_refresh_reports_socket_filter_failures(self):
         from datetime import time
         from unittest.mock import patch
