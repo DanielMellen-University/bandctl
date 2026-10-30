@@ -612,7 +612,7 @@ class Shaper:
                     except ShaperError as exc:
                         notes.append(str(exc))
                 self._saved_qdisc = qdisc
-                notes.extend(self._scrub(iface, restore_qdisc=True))
+                notes.extend(self._scrub(iface, restore_qdisc=state.get("root_replaced", True)))
             else:
                 notes.extend(self._scrub(self.iface, restore_qdisc=False))
             self._shares.clear()
@@ -782,6 +782,8 @@ class Shaper:
             )
         if self._saved_qdisc is None:
             self._saved_qdisc = current if current in SAFE_QDISCS else "fq_codel"
+        # Recovery must know the original qdisc before it may be replaced.
+        self._write_state(root_replaced=True)
         self._run(
             ["tc", "qdisc", "replace", "dev", self.iface, "root", "handle", "1:", "htb", "default", "999"]
         )
@@ -899,24 +901,26 @@ class Shaper:
             pass
         self._classes.discard((dev, minor))
 
-    def _restore_root_qdisc(self) -> None:
+    def _restore_root_qdisc(self, iface: str | None = None) -> None:
+        iface = self.iface if iface is None else iface
         kind = self._saved_qdisc or "fq_codel"
         try:
-            self._run(["tc", "qdisc", "del", "dev", self.iface, "root"])
+            self._run(["tc", "qdisc", "del", "dev", iface, "root"])
         except ShaperError:
             pass
         try:
-            self._run(["tc", "qdisc", "add", "dev", self.iface, "root", kind])
+            self._run(["tc", "qdisc", "add", "dev", iface, "root", kind])
         except ShaperError:
             pass
         self._egress = False
-        self._drop_dev(self.iface)
+        self._drop_dev(iface)
         # The root qdisc took the upload flower filters with it.
-        self._forget_flows(self.iface, "1:")
+        self._forget_flows(iface, "1:")
 
-    def _destroy_ifb(self) -> None:
+    def _destroy_ifb(self, iface: str | None = None) -> None:
+        iface = self.iface if iface is None else iface
         try:
-            self._run(["tc", "qdisc", "del", "dev", self.iface, "ingress"])
+            self._run(["tc", "qdisc", "del", "dev", iface, "ingress"])
         except ShaperError:
             pass
         try:
@@ -930,7 +934,7 @@ class Shaper:
         self._ifb = False
         self._drop_dev(IFB)
         # Ingress lived on the real device. Deleting it drops download flowers.
-        self._forget_flows(self.iface, "ffff:")
+        self._forget_flows(iface, "ffff:")
 
     def _drop_dev(self, dev: str) -> None:
         self._classes = {item for item in self._classes if item[0] != dev}
@@ -951,12 +955,12 @@ class Shaper:
         self._delete_nft(strict=False)
         try:
             self._run(["ip", "link", "show", IFB])
-            self._destroy_ifb()
+            self._destroy_ifb(iface)
             notes.append(f"removed {IFB}")
         except ShaperError:
             pass
         if restore_qdisc:
-            self._restore_root_qdisc()
+            self._restore_root_qdisc(iface)
             notes.append(f"restored root qdisc on {iface}")
         self._remove_tree()
         return notes
@@ -996,13 +1000,14 @@ class Shaper:
         except OSError as exc:
             raise ShaperError(str(exc), args) from exc
 
-    def _write_state(self) -> None:
+    def _write_state(self, *, root_replaced: bool | None = None) -> None:
         if not self._shares and not self._egress and not self._ifb:
             self._unlink_state()
             return
         payload = {
             "iface": self.iface,
             "qdisc": self._saved_qdisc or "fq_codel",
+            "root_replaced": self._egress if root_replaced is None else root_replaced,
             "pids": {str(share.pid): share.original_cgroup for share in self._shares.values()},
         }
         try:

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Crash recovery cleans the interface saved by the previous session, even when the new session uses another interface. Download-only recovery leaves the root qdisc alone.
+
 - A failed new limit keeps its process tracked if restoring its cgroup also fails, so Remove can retry.
 
 - An apply waiting for teardown no longer installs a limit after shutdown.

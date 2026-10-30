@@ -114,7 +114,7 @@ Members of one group use the same minor, so their leaf rules and flower filters 
 
 `remove` writes the pid back to its old cgroup before it forgets the share. If that write fails and the pid still exists, the share is kept and the error is raised, so a later Remove or the exit cleanup can try again. If the pid is gone, the share is dropped.
 
-`teardown` is idempotent (`_torn`). It restores every pid, syncs to an empty share map (which restores the root qdisc and deletes IFB and nft), removes the cgroup directories, and deletes the state file. If that sync fails, it falls back to a scrub that deletes what bandctl may have created. The scrub restores the root qdisc only when this run had replaced it. `recover` does the same from the state file on the next start. SIGTERM and `atexit` call teardown as well as the Textual unmount hook. The second call returns immediately.
+`teardown` is idempotent (`_torn`). It restores every pid, syncs to an empty share map (which restores the root qdisc and deletes IFB and nft), removes the cgroup directories, and deletes the state file. If that sync fails, it falls back to a scrub that deletes what bandctl may have created. The scrub restores the root qdisc only when this run had replaced it. `recover` uses the interface and root qdisc status recorded in the state file, even when the new session uses another interface. Older state files lack that status, so recovery restores their root qdisc. SIGTERM and `atexit` call teardown as well as the Textual unmount hook. The second call returns immediately.
 
 ## UI
 

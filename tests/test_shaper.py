@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 import threading
 import unittest
@@ -656,6 +657,52 @@ class ApplyTests(unittest.TestCase):
         self.assertTrue(any("restored pid 42" in note for note in notes))
         self.assertTrue(any("qdisc add dev eth0 root fq_codel" in cmd for cmd in _joined(host)))
         self.assertNotIn("/run/bandctl.json", host.files)
+
+    def test_recover_cleans_the_saved_interface_not_the_new_one(self):
+        shaper, host = _shaper()
+        shaper.apply(42, 10, 10, 100_000_000, 100_000_000)
+        host.commands.clear()
+        again = Shaper(iface="wlan0", host=host, state_path="/run/bandctl.json")
+        again.recover()
+        commands = _joined(host)
+        self.assertIn("tc qdisc del dev eth0 ingress", commands)
+        self.assertIn("tc qdisc del dev eth0 root", commands)
+        self.assertIn("tc qdisc add dev eth0 root fq_codel", commands)
+        self.assertFalse(any("dev wlan0" in command for command in commands))
+
+    def test_recover_download_only_leaves_root_qdisc_alone(self):
+        shaper, host = _shaper()
+        shaper.apply(42, 10, None, 100_000_000, None)
+        host.commands.clear()
+        again = Shaper(iface="wlan0", host=host, state_path="/run/bandctl.json")
+        again.recover()
+        commands = _joined(host)
+        self.assertIn("tc qdisc del dev eth0 ingress", commands)
+        self.assertFalse(any("dev eth0 root" in command for command in commands))
+        self.assertFalse(any("dev wlan0" in command for command in commands))
+
+    def test_records_root_replacement_before_changing_qdisc(self):
+        shaper, host = _shaper()
+        shaper.apply(42, 10, None, 100_000_000, None)
+        original_run = host.run
+        recorded = []
+
+        def inspect_state(args, input_text=None):
+            if args[:4] == ["tc", "qdisc", "replace", "dev"] and args[4] == "eth0":
+                recorded.append(json.loads(host.files["/run/bandctl.json"]))
+            return original_run(args, input_text)
+
+        host.run = inspect_state
+        shaper.apply(42, 10, 10, 100_000_000, 100_000_000)
+        self.assertEqual(len(recorded), 1)
+        self.assertTrue(recorded[0]["root_replaced"])
+        self.assertEqual(recorded[0]["qdisc"], "fq_codel")
+
+    def test_recover_older_state_restores_saved_root_qdisc(self):
+        shaper, host = _shaper()
+        host.files["/run/bandctl.json"] = json.dumps({"iface": "eth0", "qdisc": "fq", "pids": {}})
+        shaper.recover()
+        self.assertIn("tc qdisc add dev eth0 root fq", _joined(host))
 
     def test_restore_reports_a_cgroup_write_error(self):
         shaper, host = _shaper()
