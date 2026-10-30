@@ -71,7 +71,7 @@ tc filter add dev IFACE parent ffff: protocol ip prio 1 handle <n> flower \
     action mirred egress redirect dev ifb-bandctl
 ```
 
-Upload filters send the packet straight to the class. Download filters run before the matchall rule, stamp the mark, and redirect. The matchall rule is still what shapes a socket created after the move, once nft has stored the connmark. Listeners are skipped. Unconnected UDP is matched on the local port only. The set is rebuilt on apply and on each rate sample, about once a second. A socket that closes loses its filter. If deletion fails, the filter stays tracked and the next sample retries it.
+Upload filters send the packet straight to the class. Download filters run before the matchall rule, stamp the mark, and redirect. The matchall rule is still what shapes a socket created after the move, once nft has stored the connmark. Listeners are skipped. Unconnected UDP is matched on the local address and port. A wildcard local address does not match the actual packet address, so an existing wildcard-bound UDP socket is not reliably shaped. The set is rebuilt on apply and on each rate sample, about once a second. A socket that closes loses its filter. If deletion fails, the filter stays tracked and the next sample retries it.
 
 Upload: the output hook runs before the device qdisc, so `meta mark` is visible to `tc filter ... fw` on the real interface.
 

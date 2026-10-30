@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Documented the limit on matching existing wildcard-bound UDP sockets.
+
 - Socket counts do not double-count duplicated file descriptors.
 
 - Socket scans recheck process identities before changing filters.

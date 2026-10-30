@@ -69,7 +69,7 @@ Apply requires a readable process start time and an original cgroup path that ca
 
 The status line and the log confirm the share, for example `pid 4242 download 30%, upload 10%`. Limited rows are orange. The selected row stays green. The bars show measured class throughput against the ceiling and turn orange at the cap. `u` or Remove clears the share and puts the process back in its old cgroup. If that write fails while the process is still running, the share stays in place and the log shows the error. If the process has exited, the share is dropped.
 
-A transfer that is already running is included. The kernel does not move an existing socket into the new cgroup, so bandctl also matches the process's open connections by address and port. A connection opened later is marked by the cgroup rule as soon as it exists, and the address list catches up within about a second.
+The kernel does not move an existing socket into the new cgroup, so bandctl also matches the process's open connections by address and port. An existing UDP socket bound to a wildcard address is not reliably matched by this filter. A socket opened later is marked by the cgroup rule as soon as it exists, and the address list catches up within about a second.
 
 If bandctl cannot scan socket tables or process descriptors, it reports a warning and keeps the existing filters until a scan succeeds. New or closed connections may not be reflected until then.
 

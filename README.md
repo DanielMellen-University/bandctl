@@ -171,7 +171,7 @@ While an upload share is active, bandctl replaces the root qdisc on the chosen i
 
 bandctl creates its own nftables table named `inet bandctl`. It refuses to apply limits if that table already exists.
 
-Connections that are already open are shaped too. Moving a process does not move sockets it created earlier, so those are matched by address and port. The list is refreshed about once a second.
+Existing connections are matched by address and port because moving a process does not move its existing sockets. The list is refreshed about once a second. An existing UDP socket bound to a wildcard address is not reliably matched by this filter.
 
 ## Docs
 
