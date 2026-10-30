@@ -500,6 +500,28 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(fake.torn)
 
+    async def test_ss_failure_at_start_keeps_root_controls_enabled(self):
+        fake = FakeShaper()
+        app = BandctlApp(iface="eth0", shaper=fake, processes=lambda: list(PROCS),
+                         link_bps=100_000_000, is_root=True)
+        snapshot = [None]
+        with patch("bandctl.app.read_ss", side_effect=lambda: snapshot[0]):
+            async with app.run_test(size=(100, 32)):
+                self.assertFalse(app.query_one("#apply", Button).disabled)
+                self.assertFalse(app.query_one("#remove", Button).disabled)
+                self.assertNotIn("-show", app.query_one("#banner").classes)
+                self.assertIn("could not read traffic", app._status_text)
+                snapshot[0] = ""
+                await app._refresh()
+                self.assertEqual(app._status_text, "ready")
+                snapshot[0] = None
+                await app._refresh()
+                self.assertIn("could not read traffic", app._status_text)
+                app._selected = 42
+                app.query_one("#down-pct", Input).value = "10"
+                app.action_apply_limit()
+                self.assertEqual(fake.expected_starts, [42])
+
     async def test_read_only_without_root(self):
         fake = FakeShaper()
         app = _app(fake, root=False)

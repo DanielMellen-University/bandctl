@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A startup `ss` failure no longer disables root controls or shows a not-root banner. The warning clears when sampling recovers.
+
 - Failed `ss` commands no longer use partial output as a traffic sample.
 
 - TCP rate sampling no longer uses an expired baseline when an absent socket reappears.

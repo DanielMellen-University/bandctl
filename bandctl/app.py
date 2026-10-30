@@ -209,8 +209,9 @@ class BandctlApp(App):
             self.query_one("#apply", Button).disabled = True
             self.query_one("#remove", Button).disabled = True
             self._note(recovery_error, bad=True)
-        elif self.is_root and not self._ss_warned:
-            self._note("ready")
+        elif self.is_root:
+            if not self._ss_warned:
+                self._note("ready")
         else:
             self.query_one("#apply", Button).disabled = True
             self.query_one("#remove", Button).disabled = True
@@ -480,6 +481,10 @@ class BandctlApp(App):
             if self._ss_failed and not self._ss_warned:
                 self._ss_warned = True
                 self._note("could not read traffic with ss. Press n to list every process.", bad=True)
+            elif not self._ss_failed and self._ss_warned:
+                self._ss_warned = False
+                if self._status_text.startswith("could not read traffic with ss."):
+                    self._note("ready")
             # sample() also refreshes flower filters. The table uses _load_usage.
             if self.shaper is not None:
                 await asyncio.to_thread(self.shaper.sample)
