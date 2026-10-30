@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from bandctl.cli_transport import request, serve
+from bandctl.cli_transport import _read_line, request, serve
 
 
 def wait_ready(path):
@@ -60,13 +60,25 @@ class TransportTests(unittest.TestCase):
             try:
                 with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
                     client.connect(path)
-                    client.sendall(b"not json\\n")
+                    client.sendall(b"not json\n")
                     response = json.loads(client.recv(4096))
                     self.assertFalse(response["ok"])
+                    self.assertIn("Expecting value", response["error"])
                 self.assertTrue(request(path, {"command": "stop"})["ok"])
             finally:
                 thread.join(timeout=3)
             self.assertFalse(thread.is_alive())
+
+    def test_multiple_requests_in_one_read_are_rejected(self):
+        connection = Mock()
+        connection.recv.return_value = b'{"command":"stop"}\n{"command":"stop"}\n'
+        with self.assertRaisesRegex(ValueError, "invalid request framing"):
+            _read_line(connection)
+
+    def test_fragmented_request_is_reassembled(self):
+        connection = Mock()
+        connection.recv.side_effect = [b'{"command":', b'"ping"}\n']
+        self.assertEqual(_read_line(connection), b'{"command":"ping"}')
 
     def test_session_warnings_are_returned_to_the_client(self):
         with tempfile.TemporaryDirectory() as directory:
