@@ -1559,6 +1559,7 @@ class ApplyTests(unittest.TestCase):
             shaper._restore_pid(42, "/user.slice/session-1.scope")
         self.assertIn("could not restore pid 42", str(caught.exception))
 
+    @patch("sys.byteorder", "little")
     def test_apply_shapes_sockets_already_open(self):
         shaper, host = _shaper()
         _open_socket(host)
@@ -1619,6 +1620,7 @@ class ApplyTests(unittest.TestCase):
         shaper.sample()
         self.assertEqual(len([args for args, _ in host.commands if "flower" in args and "add" in args]), 1)
 
+    @patch("sys.byteorder", "little")
     def test_specific_udp_filters_take_precedence_over_wildcard_filters(self):
         for order in ((42, 43), (43, 42)):
             with self.subTest(order=order):
@@ -1655,6 +1657,7 @@ class ApplyTests(unittest.TestCase):
         self.assertFalse(any(cmd.startswith("modprobe ifb") for cmd in commands))
         self.assertTrue(any("modprobe cls_flower" in cmd for cmd in commands))
 
+    @patch("sys.byteorder", "little")
     def test_sample_adds_and_drops_flower_filters(self):
         shaper, host = _shaper()
         shaper.apply(42, None, 10, None, 100_000_000)

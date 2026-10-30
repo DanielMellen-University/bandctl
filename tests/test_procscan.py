@@ -35,6 +35,7 @@ class ParseTests(unittest.TestCase):
     def test_inodes(self):
         self.assertEqual(parse_socket_inodes(TCP), {"555", "777"})
 
+    @patch("sys.byteorder", "little")
     def test_tcp_flows_skip_listeners(self):
         text = (
             "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"
@@ -49,6 +50,7 @@ class ParseTests(unittest.TestCase):
         self.assertEqual((flow.local_ip, flow.local_port), ("10.0.0.8", 40000))
         self.assertEqual((flow.remote_ip, flow.remote_port), ("1.2.3.4", 443))
 
+    @patch("sys.byteorder", "little")
     def test_unconnected_udp_has_no_remote(self):
         text = (
             "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"
@@ -71,6 +73,7 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(set(parse_proc_net(header + rows, "tcp", "ip")), {"14"})
         self.assertEqual(set(parse_proc_net(header + rows, "udp", "ip")), {"14"})
 
+    @patch("sys.byteorder", "little")
     def test_ipv6_and_v4_mapped(self):
         # ::1 port 80 to ::1 port 443. Each 32-bit word is little-endian in the file.
         text = (
@@ -90,6 +93,20 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(mapped.local_port, 40000)
         self.assertEqual(mapped.remote_ip, "127.0.0.1")
         self.assertEqual(mapped.remote_port, 443)
+
+    def test_proc_addresses_follow_host_byte_order(self):
+        cases = (
+            ("little", "ip", "0800000A", "04030201", "10.0.0.8", "1.2.3.4", "ip"),
+            ("big", "ip", "0A000008", "01020304", "10.0.0.8", "1.2.3.4", "ip"),
+            ("little", "ipv6", "B80D0120000000000000000001000000", "B80D0120000000000000000002000000", "2001:db8::1", "2001:db8::2", "ipv6"),
+            ("big", "ipv6", "20010DB8000000000000000000000001", "20010DB8000000000000000000000002", "2001:db8::1", "2001:db8::2", "ipv6"),
+            ("big", "ipv6", "00000000000000000000FFFF0A000008", "00000000000000000000FFFF01020304", "10.0.0.8", "1.2.3.4", "ip"),
+        )
+        for order, family, local, remote, local_ip, remote_ip, expected_family in cases:
+            with self.subTest(order=order, family=family, local=local), patch("sys.byteorder", order):
+                text = f"header\n0: {local}:0050 {remote}:01BB 01 0 0 0 0 0 99\n"
+                flow = parse_proc_net(text, "tcp", family)["99"]
+                self.assertEqual((flow.local_ip, flow.remote_ip, flow.family), (local_ip, remote_ip, expected_family))
 
     def test_cmdline(self):
         self.assertEqual(format_cmdline(b"curl\0https://example\0", "curl"), "curl https://example")

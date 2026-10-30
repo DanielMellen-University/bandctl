@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Decode socket addresses using the host byte order so filters match on big-endian Linux.
+
 - Keep socket baselines through long gaps in counters while the socket remains visible.
 
 - Keep each direction's socket baseline when only one byte counter is reported.

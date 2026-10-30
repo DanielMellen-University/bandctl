@@ -10,6 +10,7 @@ import ipaddress
 import os
 import pwd
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -115,10 +116,13 @@ def _decode_endpoint(field: str, family: str) -> tuple[str, int, str]:
         raw = bytes.fromhex(ip_hex)
         if len(raw) != 4:
             raise ValueError(ip_hex)
-        return ".".join(str(byte) for byte in raw[::-1]), port, "ip"
+        address = raw[::-1] if sys.byteorder == "little" else raw
+        return ".".join(str(byte) for byte in address), port, "ip"
     if len(ip_hex) != 32:
         raise ValueError(ip_hex)
-    words = [bytes.fromhex(ip_hex[index : index + 8])[::-1] for index in range(0, 32, 8)]
+    words = [bytes.fromhex(ip_hex[index : index + 8]) for index in range(0, 32, 8)]
+    if sys.byteorder == "little":
+        words = [word[::-1] for word in words]
     addr = ipaddress.IPv6Address(b"".join(words))
     mapped = addr.ipv4_mapped
     if mapped is not None:
