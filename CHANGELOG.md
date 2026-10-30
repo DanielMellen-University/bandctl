@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Recovery rejects invalid saved qdiscs before changing network state.
+
 - Recovery rejects invalid PID entries and cgroup paths before changing host state.
 
 - Recovery keeps a leaf when a reused PID is still inside it, instead of moving the replacement.
