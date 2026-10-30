@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- CLI responses keep recent warnings within the message limit when many errors occur.
+
 - TCP sampling excludes IPv4-mapped loopback addresses written in hexadecimal.
 
 - Process identities are rechecked immediately before cgroup moves, including group and import operations.

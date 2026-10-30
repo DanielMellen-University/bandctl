@@ -121,6 +121,7 @@ class CliSession:
         """Keep background errors for a minute so a later command can still report them."""
         for message in messages:
             if message.startswith(WARNING_PREFIXES):
+                self._warning_times.pop(message, None)
                 self._warning_times[message] = now
         self._warning_times = {m: t for m, t in self._warning_times.items() if now - t <= WARNING_SECONDS}
         self.warnings = list(self._warning_times)

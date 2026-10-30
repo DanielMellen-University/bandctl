@@ -95,6 +95,14 @@ class CliSessionTests(unittest.TestCase):
         self.session.refresh(now=70, current=time(10))
         self.assertEqual(self.session.warnings, [])
 
+    def test_repeated_warning_moves_to_most_recent_position(self):
+        first = "flow refresh: first"
+        second = "capacity update: second"
+        self.session._remember_warnings([first], 1)
+        self.session._remember_warnings([second], 2)
+        self.session._remember_warnings([first], 3)
+        self.assertEqual(self.session.warnings, [second, first])
+
     def test_refresh_applies_and_expires_scheduled_rules(self):
         from datetime import time
         from bandctl.schedule import DailyWindow

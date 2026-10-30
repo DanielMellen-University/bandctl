@@ -97,6 +97,25 @@ class TransportTests(unittest.TestCase):
                 thread.join(timeout=3)
             self.assertFalse(thread.is_alive())
 
+    def test_many_background_warnings_do_not_break_session_requests(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "session.sock")
+            session = Mock()
+            session.iface = "eth0"
+            session.warnings = [f"auto rule for pid {pid}: " + "x" * 200 for pid in range(200)]
+            thread = threading.Thread(target=serve, args=(session, path), daemon=True)
+            thread.start()
+            wait_ready(path)
+            try:
+                response = request(path, {"command": "ping"})
+                self.assertTrue(response["ok"])
+                self.assertIn(session.warnings[-1], response["warnings"])
+                self.assertIn("Some background warnings omitted", response["warnings"])
+                self.assertTrue(request(path, {"command": "stop"})["ok"])
+            finally:
+                thread.join(timeout=3)
+            self.assertFalse(thread.is_alive())
+
     def test_deeply_nested_request_does_not_stop_server(self):
         with tempfile.TemporaryDirectory() as directory:
             path = str(Path(directory) / "session.sock")

@@ -48,6 +48,29 @@ def request(path: str, payload: dict, *, timeout: float = 3.0) -> dict:
     return response
 
 
+def _encode_response(response: dict) -> bytes:
+    """Keep recent warnings within the client's response limit."""
+    def encode(value):
+        return json.dumps(value, allow_nan=False).encode("utf-8") + b"\n"
+
+    encoded = encode(response)
+    warnings = response.get("warnings")
+    if len(encoded) <= _MAX_MESSAGE or not isinstance(warnings, list) or not warnings:
+        return encoded
+    marker = "Some background warnings omitted"
+    limited = dict(response, warnings=[marker])
+    size = len(encode(limited))
+    retained = []
+    for warning in reversed(warnings):
+        item_size = len(json.dumps(warning, allow_nan=False).encode("utf-8")) + 2
+        if size + item_size > _MAX_MESSAGE:
+            break
+        retained.append(warning)
+        size += item_size
+    limited["warnings"] = [marker, *reversed(retained)]
+    return encode(limited)
+
+
 def serve(session, path: str, *, interval: float = 1.0, on_stop=None) -> None:
     """Serve requests until stop; the caller owns the session lock and teardown."""
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
@@ -91,7 +114,7 @@ def serve(session, path: str, *, interval: float = 1.0, on_stop=None) -> None:
                         except (ValueError, UnicodeDecodeError, OSError) as exc:
                             response = {"ok": False, "error": str(exc)}
                         try:
-                            connection.sendall(json.dumps(response, allow_nan=False).encode("utf-8") + b"\n")
+                            connection.sendall(_encode_response(response))
                         except OSError:
                             pass
                 if not stopping and time.monotonic() >= next_refresh:
