@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.0 (2026-10-30)
+
 - Refuse non-regular files as session locks.
 
 - Keep socket filters when a socket table reports a zero local port.
