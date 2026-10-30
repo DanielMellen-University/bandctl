@@ -712,6 +712,7 @@ class Shaper:
                 not re.fullmatch(r"[1-9][0-9]{0,9}", pid) or int(pid) > 2_147_483_647
                 or not isinstance(original, str) or not original.startswith("/")
                 or "\x00" in original or ".." in original.split("/")
+                or any(0xD800 <= ord(char) <= 0xDFFF for char in original)
                 for pid, original in state.get("pids", {}).items()
             ):
                 self._torn = True

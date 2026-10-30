@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Recovery rejects invalid Unicode in saved cgroup paths before changing host state.
+
 - CLI responses keep recent warnings within the message limit when many errors occur.
 
 - TCP sampling excludes IPv4-mapped loopback addresses written in hexadecimal.
