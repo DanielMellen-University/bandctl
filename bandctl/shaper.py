@@ -130,6 +130,7 @@ class Shaper:
     _ingress_owned: bool = False
     _ifb_cleanup_error: str | None = None
     _nft_cleanup_error: str | None = None
+    _nft_owned: bool = False
     _saved_qdisc: str | None = None
     _classes: set[tuple[str, int]] = field(default_factory=set)
     _filters: set[tuple[str, int, str]] = field(default_factory=set)
@@ -644,10 +645,12 @@ class Shaper:
                 self._egress = restore_root
                 ifb_owned = state.get("ifb_owned") if "ifb_owned" in state else None
                 ingress_owned = state.get("ingress_owned") if "ingress_owned" in state else None
+                nft_owned = bool(state.get("nft_owned", True))
                 notes.extend(self._scrub(iface, restore_qdisc=restore_root,
-                                         ifb_owned=ifb_owned, ingress_owned=ingress_owned))
+                                         ifb_owned=ifb_owned, ingress_owned=ingress_owned, nft_owned=nft_owned))
             else:
-                notes.extend(self._scrub(self.iface, restore_qdisc=False, ifb_owned=False, ingress_owned=False))
+                notes.extend(self._scrub(self.iface, restore_qdisc=False, ifb_owned=False,
+                                         ingress_owned=False, nft_owned=False))
             self._shares.clear()
             self._classes.clear()
             self._filters.clear()
@@ -678,7 +681,8 @@ class Shaper:
             except ShaperError as exc:
                 notes.append(str(exc))
                 notes.extend(self._scrub(self.iface, restore_qdisc=self._egress,
-                                         ifb_owned=self._ifb_owned, ingress_owned=self._ingress_owned))
+                                         ifb_owned=self._ifb_owned, ingress_owned=self._ingress_owned,
+                                         nft_owned=self._nft_owned))
             self._remove_tree()
             if not self._egress and not self._ifb_owned and not self._ingress_owned and not self._nft_cleanup_error:
                 self._unlink_state()
@@ -786,6 +790,10 @@ class Shaper:
     def _sync(self) -> None:
         down_shares = [share for share in self._shares.values() if share.down_pct]
         up_shares = [share for share in self._shares.values() if share.up_pct]
+        if self._shares and not self._nft_owned:
+            self._run(["nft", "create", "table", "inet", TABLE])
+            self._nft_owned = True
+            self._write_state(required=True)
         if up_shares:
             self._ensure_egress()
         elif self._egress:
@@ -796,7 +804,7 @@ class Shaper:
             self._destroy_ifb(remove_ingress=self._ingress_owned, remove_ifb=self._ifb_owned)
         if self._shares:
             self._run(["nft", "-f", "-"], nft_script(list(self._shares.values())))
-        else:
+        elif self._nft_owned:
             self._delete_nft(strict=True)
         if self._egress and self._up_cap:
             self._sync_direction(self.iface, up_shares, self._up_cap)
@@ -1012,21 +1020,26 @@ class Shaper:
         except ShaperError as exc:
             text = str(exc).lower()
             if "no such file" in text or "does not exist" in text or "not found" in text:
-                self._nft_cleanup_error = None
+                pass
+            else:
+                self._nft_cleanup_error = str(exc)
+                if strict:
+                    raise
                 return
-            self._nft_cleanup_error = str(exc)
-            if strict:
-                raise
-        else:
-            self._nft_cleanup_error = None
+        self._record_recovery_fields(nft_owned=False)
+        self._nft_owned = False
+        self._nft_cleanup_error = None
 
     def _scrub(self, iface: str, *, restore_qdisc: bool, ifb_owned: bool | None = None,
-               ingress_owned: bool | None = None) -> list[str]:
+               ingress_owned: bool | None = None, nft_owned: bool = True) -> list[str]:
         notes: list[str] = []
-        try:
-            self._delete_nft(strict=True)
-        except ShaperError as exc:
-            notes.append(str(exc))
+        self._nft_owned = nft_owned
+        if nft_owned:
+            try:
+                self._delete_nft(strict=True)
+            except ShaperError as exc:
+                self._nft_cleanup_error = str(exc)
+                notes.append(str(exc))
         if ifb_owned is None or ingress_owned is None:
             try:
                 self._run(["ip", "link", "show", IFB])
@@ -1091,7 +1104,7 @@ class Shaper:
             raise ShaperError(str(exc), args) from exc
 
     def _write_state(self, *, root_replaced: bool | None = None, required: bool = False) -> None:
-        if not self._shares and not self._egress and not self._ifb:
+        if not self._shares and not self._egress and not self._ifb and not self._nft_owned:
             self._unlink_state()
             return
         payload = {
@@ -1100,6 +1113,7 @@ class Shaper:
             "root_replaced": self._egress if root_replaced is None else root_replaced,
             "ifb_owned": self._ifb_owned,
             "ingress_owned": self._ingress_owned,
+            "nft_owned": self._nft_owned,
             "pids": {str(share.pid): share.original_cgroup for share in self._shares.values()},
             "start_ticks": {str(share.pid): share.start_ticks for share in self._shares.values()},
         }
@@ -1304,7 +1318,6 @@ def leaf_name(pid: int) -> str:
 def nft_script(shares: list[Share]) -> str:
     """Full replace of table ``inet bandctl``. Level 2 is the leaf directory name."""
     lines = [
-        "add table inet bandctl",
         "flush table inet bandctl",
         "add chain inet bandctl output { type filter hook output priority mangle; policy accept; }",
         "add chain inet bandctl prerouting { type filter hook prerouting priority mangle; policy accept; }",

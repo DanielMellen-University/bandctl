@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- bandctl refuses an existing `inet bandctl` nftables table and leaves tables it did not create alone.
+
 - Failed nftables cleanup keeps recovery state and blocks new limits until cleanup succeeds.
 
 - Failed download cleanup is reported and keeps recovery state for a retry. The IFB stays in place if ingress removal fails.

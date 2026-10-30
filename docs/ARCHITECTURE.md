@@ -45,6 +45,8 @@ The default class `rate` is the leftover. Its `ceil` is the whole parent, so unm
 
 ## Who owns the packets
 
+bandctl creates `inet bandctl` exclusively before filling its rules. It refuses an existing table. Recovery state records table ownership, so an idle session does not delete someone else's table. Old state files lack that field and retain the earlier cleanup behavior.
+
 The process is moved to `/sys/fs/cgroup/bandctl/bandctl-<pid>`. nft's `socket cgroupv2 level N` matches one path component, not the whole path. Level 2 is the leaf name `bandctl-<pid>`, which is unique under `bandctl/`.
 
 ```

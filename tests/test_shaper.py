@@ -138,6 +138,7 @@ class ParseTests(unittest.TestCase):
 
     def test_nft_matches_leaf_name(self):
         script = nft_script([Share(42, 30, None, 10, "/user.slice", "curl")])
+        self.assertNotIn("add table inet bandctl", script)
         self.assertIn('socket cgroupv2 level 2 "bandctl-42"', script)
         self.assertIn("ct mark set 10 meta mark set 10", script)
         self.assertIn("hook output", script)
@@ -847,6 +848,64 @@ class ApplyTests(unittest.TestCase):
 class CleanupTests(unittest.TestCase):
     """Fixes for teardown, remove, and failed apply."""
 
+    def test_idle_session_does_not_delete_existing_nft_table(self):
+        shaper, host = _shaper()
+        shaper.recover()
+        shaper.teardown()
+        self.assertNotIn("nft delete table inet bandctl", _joined(host))
+
+    def test_apply_refuses_existing_nft_table_without_flushing_or_deleting_it(self):
+        shaper, host = _shaper()
+        original_run = host.run
+
+        def existing_table(args, input_text=None):
+            if args == ["nft", "create", "table", "inet", "bandctl"]:
+                host.commands.append((list(args), input_text))
+                raise ShaperError("File exists", args)
+            return original_run(args, input_text)
+
+        host.run = existing_table
+        with self.assertRaisesRegex(ShaperError, "File exists"):
+            shaper.apply(42, None, 10, None, 100_000_000)
+        commands = _joined(host)
+        self.assertNotIn("nft -f -", commands)
+        self.assertNotIn("nft delete table inet bandctl", commands)
+        self.assertFalse(any("qdisc replace dev eth0 root" in cmd for cmd in commands))
+
+    def test_recovery_with_unowned_nft_table_leaves_it_alone(self):
+        shaper, host = _shaper()
+        host.files["/run/bandctl.json"] = json.dumps({
+            "iface": "eth0", "root_replaced": False, "ifb_owned": False,
+            "ingress_owned": False, "nft_owned": False, "pids": {},
+        })
+        shaper.recover()
+        self.assertNotIn("nft delete table inet bandctl", _joined(host))
+
+    def test_nft_ownership_is_recorded_before_populating_table(self):
+        shaper, host = _shaper()
+        original_run = host.run
+        recorded = []
+
+        def inspect_state(args, input_text=None):
+            if args == ["nft", "-f", "-"]:
+                recorded.append(json.loads(host.files["/run/bandctl.json"]))
+            return original_run(args, input_text)
+
+        host.run = inspect_state
+        shaper.apply(42, None, 10, None, 100_000_000)
+        shaper.apply(42, None, 20, None, 100_000_000)
+        self.assertEqual(len(recorded), 2)
+        self.assertTrue(all(state["nft_owned"] for state in recorded))
+        self.assertEqual(_joined(host).count("nft create table inet bandctl"), 1)
+        shaper.remove(42)
+        self.assertEqual(_joined(host).count("nft delete table inet bandctl"), 1)
+
+    def test_recovery_of_old_state_cleans_nft_table(self):
+        shaper, host = _shaper()
+        host.files["/run/bandctl.json"] = json.dumps({"iface": "eth0", "pids": {}})
+        shaper.recover()
+        self.assertIn("nft delete table inet bandctl", _joined(host))
+
     def test_failed_nft_cleanup_keeps_state_and_blocks_recovery_until_retry(self):
         shaper, host = _shaper()
         shaper.apply(42, 10, None, 100_000_000, None)
@@ -1189,6 +1248,7 @@ class CleanupTests(unittest.TestCase):
     def test_teardown_leaves_an_untouched_qdisc_alone(self):
         shaper, host = _shaper()
         host.qdisc = "qdisc cake 8001: root refcnt 2 bandwidth unlimited\n"
+        shaper.apply(42, 10, None, 100_000_000, None)
         host.fail_substr = "nft delete table"
 
         def no_permission(args, input_text=None):

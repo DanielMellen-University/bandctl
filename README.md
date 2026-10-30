@@ -169,6 +169,8 @@ Rules exist only while bandctl is running. Exit restores each process to the cgr
 
 While an upload share is active, bandctl replaces the root qdisc on the chosen interface with HTB. Unmarked traffic can still use the full link. Do not point bandctl at an interface that already has an `htb` qdisc. It will refuse. A download share also requires that the interface has no existing ingress qdisc and that `ifb-bandctl` does not already exist.
 
+bandctl creates its own nftables table named `inet bandctl`. It refuses to apply limits if that table already exists.
+
 Connections that are already open are shaped too. Moving a process does not move sockets it created earlier, so those are matched by address and port. The list is refreshed about once a second.
 
 ## Docs
