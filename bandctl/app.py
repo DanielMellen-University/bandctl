@@ -115,6 +115,7 @@ class BandctlApp(App):
         self._link_bps_arg = link_bps
         self.is_root = os.geteuid() == 0 if is_root is None else is_root
         self.iface = iface or ""
+        self._iface_error: str | None = None
         self.shaper = shaper
         self.cleanup_errors: list[str] = []
         self.unit = Unit.MBIT
@@ -210,7 +211,11 @@ class BandctlApp(App):
             self.query_one("#remove", Button).disabled = True
             self._note(recovery_error, bad=True)
         elif self.is_root:
-            if not self._ss_warned:
+            if self.shaper is None:
+                self.query_one("#apply", Button).disabled = True
+                self.query_one("#remove", Button).disabled = True
+                self._note(self._iface_error or "no interface to shape", bad=True)
+            elif not self._ss_warned:
                 self._note("ready")
         else:
             self.query_one("#apply", Button).disabled = True
@@ -599,7 +604,8 @@ class BandctlApp(App):
                 self.iface = default_iface()
             except IfaceError as exc:
                 self.iface = ""
-                self._note(str(exc), bad=True)
+                self._iface_error = str(exc)
+                self._note(self._iface_error, bad=True)
         if self._link_bps_arg is _MISSING:
             self._detected_bps = link_speed_bps(self.iface) if self.iface else None
         else:

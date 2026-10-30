@@ -99,6 +99,18 @@ def _app(fake, *, root=True, link_bps=100_000_000, rates=None):
 
 
 class AppTests(unittest.IsolatedAsyncioTestCase):
+    async def test_root_without_default_route_shows_error_and_disables_controls(self):
+        from bandctl.iface import IfaceError
+
+        app = BandctlApp(processes=lambda: list(PROCS), link_bps=100_000_000,
+                         is_root=True, rates=_rates)
+        with patch("bandctl.app.default_iface", side_effect=IfaceError("no default route; pass --iface")):
+            async with app.run_test(size=(80, 24)):
+                self.assertIn("no default route", app._status_text)
+                self.assertTrue(app.query_one("#apply", Button).disabled)
+                self.assertTrue(app.query_one("#remove", Button).disabled)
+                self.assertIsNone(app.shaper)
+
     async def test_failed_recovery_is_shown_and_apply_is_disabled(self):
         from bandctl.shaper import Shaper
         from test_shaper import _shaper

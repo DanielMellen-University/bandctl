@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A root TUI with no default route keeps the interface error visible and disables shaping controls.
+
 - A startup `ss` failure no longer disables root controls or shows a not-root banner. The warning clears when sampling recovers.
 
 - Failed `ss` commands no longer use partial output as a traffic sample.

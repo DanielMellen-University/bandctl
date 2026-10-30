@@ -33,7 +33,7 @@ sudo .venv/bin/python -m bandctl
 
 `sudo python -m bandctl` often fails because `sudo` resets `PATH` and picks a Python that does not have Textual. The installed `bandctl` command does not have that problem. A checkout has to name the venv interpreter.
 
-`--iface` is the device whose root qdisc will be replaced while an upload share exists, and whose ingress is redirected while a download share exists. The default is the device on the IPv4 default route. The name has to match a device in `/sys/class/net`. If it does not, bandctl exits before the UI opens and lists the devices it found, for example `no network interface named 'eth9'. Interfaces here: eth0, lo, wlan0.`
+`--iface` is the device whose root qdisc will be replaced while an upload share exists, and whose ingress is redirected while a download share exists. The default is the device on the IPv4 default route. If no default route is found, the TUI shows an error and disables Apply and Remove. Restart with `--iface` to select a device. The name has to match a device in `/sys/class/net`. If it does not, bandctl exits before the UI opens and lists the devices it found, for example `no network interface named 'eth9'. Interfaces here: eth0, lo, wlan0.`
 
 ## Command line
 
