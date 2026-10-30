@@ -1240,6 +1240,51 @@ class CleanupTests(unittest.TestCase):
         shaper.remove(42)
         self.assertEqual(shaper.shares, {})
 
+    def test_leaf_cleanup_ignores_cgroup_control_files(self):
+        shaper, host = _shaper()
+        shaper.apply(42, None, 10, None, 100_000_000)
+        control = "/sys/fs/cgroup/bandctl/cgroup.procs"
+        host.files[control] = ""
+        rmdir = host.rmdir
+
+        def remove_directory(path):
+            if path == control:
+                raise NotADirectoryError(path)
+            rmdir(path)
+
+        with patch.object(host, "rmdir", side_effect=remove_directory):
+            notes = shaper.teardown()
+        self.assertEqual(notes, [])
+        self.assertNotIn("/run/bandctl.json", host.files)
+
+    def test_failed_leaf_cleanup_keeps_state_and_retries(self):
+        shaper, host = _shaper()
+        shaper.apply(42, None, 10, None, 100_000_000)
+        leaf = "/sys/fs/cgroup/bandctl/bandctl-42/cgroup.procs"
+        host.files[leaf] = "43\n"  # A child inherited the leaf cgroup.
+        root = "/sys/fs/cgroup/cgroup.procs"
+        write = host.write
+
+        def fail_root(path, data):
+            if path == root:
+                raise OSError("root move denied")
+            write(path, data)
+
+        with patch.object(host, "write", side_effect=fail_root):
+            notes = shaper.teardown()
+            self.assertTrue(any("root move denied" in note for note in notes))
+            self.assertIn("/run/bandctl.json", host.files)
+            retry = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+            retry.recover()
+            self.assertIn("root move denied", retry.recovery_error)
+            self.assertIn("/run/bandctl.json", host.files)
+
+        retry = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+        retry.recover()
+        self.assertIsNone(retry.recovery_error)
+        self.assertEqual(host.files[root], "43\n")
+        self.assertNotIn("/run/bandctl.json", host.files)
+
     def test_failed_process_restore_keeps_original_cgroup_for_recovery(self):
         shaper, host = _shaper()
         host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"

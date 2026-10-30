@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Failed cgroup leaf cleanup is reported and retried on the next start.
+
 - A failed process cgroup lookup no longer changes capacity for existing limits.
 
 - Recovery rejects invalid ownership flags before changing network state.

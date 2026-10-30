@@ -692,17 +692,18 @@ class Shaper:
                 ingress_owned = state.get("ingress_owned") if "ingress_owned" in state else None
                 nft_owned = bool(state.get("nft_owned", True))
                 notes.extend(self._scrub(iface, restore_qdisc=restore_root,
-                                         ifb_owned=ifb_owned, ingress_owned=ingress_owned, nft_owned=nft_owned,
-                                         protected_pids=pending_pids))
+                                         ifb_owned=ifb_owned, ingress_owned=ingress_owned, nft_owned=nft_owned))
             else:
                 notes.extend(self._scrub(self.iface, restore_qdisc=False, ifb_owned=False,
                                          ingress_owned=False, nft_owned=False))
+            tree_errors = self._remove_tree(protected_pids=pending_pids)
+            notes.extend(tree_errors)
             self._shares.clear()
             self._classes.clear()
             self._filters.clear()
-            if pending_pids or self._egress or self._ifb_owned or self._ingress_owned or self._nft_cleanup_error:
+            if pending_pids or tree_errors or self._egress or self._ifb_owned or self._ingress_owned or self._nft_cleanup_error:
                 self._torn = True
-                self.recovery_error = f"recovery failed: {self._ifb_cleanup_error or self._nft_cleanup_error or pending_error or notes[-1]}"
+                self.recovery_error = f"recovery failed: {self._ifb_cleanup_error or self._nft_cleanup_error or pending_error or (tree_errors[0] if tree_errors else notes[-1])}"
             else:
                 self._unlink_state()
         return notes
@@ -725,14 +726,15 @@ class Shaper:
             # Only put a root qdisc back if this run replaced it. Otherwise a
             # failed cleanup would swap out a qdisc bandctl never touched.
             try:
-                self._sync(write_state=not pending_pids)
+                self._sync(write_state=False)
             except ShaperError as exc:
                 notes.append(str(exc))
                 notes.extend(self._scrub(self.iface, restore_qdisc=self._egress,
                                          ifb_owned=self._ifb_owned, ingress_owned=self._ingress_owned,
-                                         nft_owned=self._nft_owned, protected_pids=pending_pids))
-            self._remove_tree(protected_pids=pending_pids)
-            if not pending_pids and not self._egress and not self._ifb_owned and not self._ingress_owned and not self._nft_cleanup_error:
+                                         nft_owned=self._nft_owned))
+            tree_errors = self._remove_tree(protected_pids=pending_pids)
+            notes.extend(tree_errors)
+            if not pending_pids and not tree_errors and not self._egress and not self._ifb_owned and not self._ingress_owned and not self._nft_cleanup_error:
                 self._unlink_state()
         return notes
 
@@ -816,31 +818,51 @@ class Shaper:
         except OSError:
             return
 
-    def _remove_tree(self, *, protected_pids: set[int] | None = None) -> None:
+    def _remove_tree(self, *, protected_pids: set[int] | None = None) -> list[str]:
+        errors: list[str] = []
         try:
             names = self.host.listdir(CGROUP_PARENT)
-        except OSError:
-            return
+        except FileNotFoundError:
+            return errors
+        except OSError as exc:
+            return [f"cannot list bandctl cgroups: {exc}"]
+        protected = {f"bandctl-{pid}" for pid in (protected_pids or ())}
         for name in names:
-            if protected_pids and name in {f"bandctl-{pid}" for pid in protected_pids}:
+            if not name.startswith("bandctl-") or not name[8:].isdigit():
                 continue
+            if name in protected:
+                continue
+            leaf = f"{CGROUP_PARENT}/{name}"
             try:
-                procs = self.host.read(f"{CGROUP_PARENT}/{name}/cgroup.procs")
-            except OSError:
+                procs = self.host.read(f"{leaf}/cgroup.procs")
+            except FileNotFoundError:
                 procs = ""
+            except OSError as exc:
+                errors.append(f"cannot read {leaf}/cgroup.procs: {exc}")
+                continue
+            failed = False
             for pid_text in procs.split():
                 try:
                     self._restore_pid(int(pid_text), "/")
-                except (ShaperError, ValueError):
-                    pass
+                except (ShaperError, ValueError) as exc:
+                    errors.append(f"cannot clean {leaf}: {exc}")
+                    failed = True
+            if failed:
+                continue
             try:
-                self.host.rmdir(f"{CGROUP_PARENT}/{name}")
-            except OSError:
+                self.host.rmdir(leaf)
+            except FileNotFoundError:
                 pass
-        try:
-            self.host.rmdir(CGROUP_PARENT)
-        except OSError:
-            pass
+            except OSError as exc:
+                errors.append(f"cannot remove {leaf}: {exc}")
+        if not errors and not protected:
+            try:
+                self.host.rmdir(CGROUP_PARENT)
+            except FileNotFoundError:
+                pass
+            except OSError as exc:
+                errors.append(f"cannot remove {CGROUP_PARENT}: {exc}")
+        return errors
 
     def _sync(self, *, write_state: bool = True) -> None:
         down_shares = [share for share in self._shares.values() if share.down_pct]
@@ -1087,8 +1109,7 @@ class Shaper:
         self._nft_cleanup_error = None
 
     def _scrub(self, iface: str, *, restore_qdisc: bool, ifb_owned: bool | None = None,
-               ingress_owned: bool | None = None, nft_owned: bool = True,
-               protected_pids: set[int] | None = None) -> list[str]:
+               ingress_owned: bool | None = None, nft_owned: bool = True) -> list[str]:
         notes: list[str] = []
         self._nft_owned = nft_owned
         if nft_owned:
@@ -1122,7 +1143,6 @@ class Shaper:
                 notes.append(str(exc))
             else:
                 notes.append(f"restored root qdisc on {iface}")
-        self._remove_tree(protected_pids=protected_pids)
         return notes
 
     def _root_kind(self, iface: str) -> str:

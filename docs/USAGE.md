@@ -130,4 +130,4 @@ A failed new share is rolled back, and its empty cgroup is removed. If the proce
 
 A crash skips that path. The next start reads `/run/bandctl.json` and finishes it. Reboot also drops the qdisc and the file, because neither is persistent.
 
-If restoring a process or the root qdisc, removing the download redirect, or deleting the nftables table fails, bandctl reports the error and keeps the recovery file. Remove can retry while the session is open. After exit, the next start retries recovery. If it still fails, the TUI shows the error and disables Apply and Remove, and the CLI session does not start.
+If restoring a process or the root qdisc, cleaning cgroups, removing the download redirect, or deleting the nftables table fails, bandctl reports the error and keeps the recovery file. Remove can retry while the session is open. After exit, the next start retries recovery. If it still fails, the TUI shows the error and disables Apply and Remove, and the CLI session does not start.
