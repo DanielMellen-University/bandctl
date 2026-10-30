@@ -800,9 +800,9 @@ class BandctlApp(App):
         if key == "pid":
             text = str(proc.pid)
         elif key == "command":
-            text = _clip(proc.cmdline, self._command_width)
+            text = _clip(_display_process(proc.cmdline), self._command_width)
         elif key == "user":
-            text = proc.user
+            text = _display_process(proc.user)
         elif key == "sockets":
             text = str(proc.sockets)
         elif key == "down_pct":
@@ -851,7 +851,7 @@ class BandctlApp(App):
             data = format_bytes(sum(total)) if total is not None else "--"
             share = self.shaper.shares.get(proc.pid) if self.shaper else None
             group = f"  group {share.group}" if share and share.group else ""
-            title = f"{proc.comm}  pid {proc.pid}{group}  TCP total {data}"
+            title = f"{_display_process(proc.comm)}  pid {proc.pid}{group}  TCP total {data}"
         self.query_one("#detail-title", Static).update(Text(title))
         share = self.shaper.shares.get(self._selected) if self.shaper and self._selected else None
         usage = self._usage.get(self._selected, (0.0, 0.0)) if self._selected else (0.0, 0.0)
@@ -961,6 +961,11 @@ def fit_columns(table_width: int) -> list[tuple[str, str, int]]:
         if key == "pid":
             fitted.append(("command", "Command", command_width))
     return fitted
+
+
+def _display_process(text: str) -> str:
+    """Keep process data on one line without terminal control characters."""
+    return "".join("?" if ord(char) < 32 or 127 <= ord(char) <= 159 else char for char in text)
 
 
 def _clip(text: str, width: int) -> str:

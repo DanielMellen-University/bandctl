@@ -100,6 +100,19 @@ def _app(fake, *, root=True, link_bps=100_000_000, rates=None):
 
 
 class AppTests(unittest.IsolatedAsyncioTestCase):
+    async def test_process_control_characters_do_not_break_table_or_detail(self):
+        proc = ProcessInfo(42, "curl\nworker", "curl\n--output\tfile\x9b", "user\rname", 2, 42)
+        app = BandctlApp(iface="eth0", shaper=FakeShaper(), processes=lambda: [proc],
+                         link_bps=100_000_000, is_root=True, rates=_rates)
+        async with app.run_test(size=(160, 32)) as pilot:
+            await pilot.pause()
+            table = app.query_one("#procs", DataTable)
+            self.assertEqual(table.get_cell("42", "command").plain, "curl?--output?file?")
+            self.assertEqual(table.get_cell("42", "user").plain, "user?name")
+            title = str(app.query_one("#detail-title", Static).render())
+            self.assertIn("curl?worker  pid 42", title)
+            self.assertNotIn("\n", title)
+
     async def test_process_and_rule_names_display_markup_literally(self):
         from bandctl.rules import AutoRule
 

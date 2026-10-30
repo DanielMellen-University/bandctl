@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep control characters in process data from breaking TUI rows and details.
+
 - Display process, rule, and group names as text instead of terminal markup.
 
 - Preserve and quote startup options in the non-root restart command.
