@@ -509,6 +509,17 @@ class ApplyTests(unittest.TestCase):
         self.assertEqual(shaper._up_cap, 100_000_000)
         self.assertEqual(set(shaper.shares), {42, 43})
 
+    def test_invalid_capacity_update_does_not_resync_existing_classes(self):
+        shaper, host = _shaper()
+        shaper.apply(42, None, 10, None, 100_000_000)
+        with patch.object(host, "run", side_effect=ShaperError("unexpected sync")) as run:
+            with self.assertRaisesRegex(ShaperError, "too small") as error:
+                shaper.set_capacities(None, 1)
+        self.assertNotIn("rollback incomplete", str(error.exception))
+        run.assert_not_called()
+        self.assertEqual(shaper._up_cap, 100_000_000)
+        self.assertEqual(shaper.shares[42].up_pct, 10)
+
     def test_individual_update_reports_failed_synchronization_rollback(self):
         shaper, host = _shaper()
         shaper.apply(42, None, 10, None, 100_000_000)

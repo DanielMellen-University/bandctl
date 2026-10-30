@@ -554,6 +554,7 @@ class Shaper:
                 self._down_cap = down_cap
                 self._up_cap = up_cap
                 return
+            self._validate_rate_plans(list(self._shares.values()), down_cap, up_cap)
             old = (self._down_cap, self._up_cap)
             self._down_cap = down_cap
             self._up_cap = up_cap
@@ -934,10 +935,7 @@ class Shaper:
     def _sync(self, *, write_state: bool = True) -> None:
         down_shares = [share for share in self._shares.values() if share.down_pct]
         up_shares = [share for share in self._shares.values() if share.up_pct]
-        if up_shares and self._up_cap:
-            self._plan_direction(self.iface, up_shares, self._up_cap)
-        if down_shares and self._down_cap:
-            self._plan_direction(IFB, down_shares, self._down_cap)
+        self._validate_rate_plans(list(self._shares.values()), self._down_cap, self._up_cap)
         if self._shares and not self._nft_owned:
             self._run(["nft", "create", "table", "inet", TABLE])
             self._nft_owned = True
@@ -1024,6 +1022,14 @@ class Shaper:
             self._destroy_ifb(remove_ingress=added_ingress, remove_ifb=created_ifb)
             raise
         self._ifb = True
+
+    def _validate_rate_plans(self, shares: list[Share], down_cap: int | None, up_cap: int | None) -> None:
+        down_shares = [share for share in shares if share.down_pct]
+        up_shares = [share for share in shares if share.up_pct]
+        if up_shares and up_cap:
+            self._plan_direction(self.iface, up_shares, up_cap)
+        if down_shares and down_cap:
+            self._plan_direction(IFB, down_shares, down_cap)
 
     def _sync_direction(self, dev: str, shares: list[Share], capacity: int) -> None:
         shares, rates, ceils, default = self._plan_direction(dev, shares, capacity)
