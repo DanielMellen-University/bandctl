@@ -442,6 +442,24 @@ class ImportGroupTests(unittest.TestCase):
                 shaper.replace_groups(settings, 100_000_000, None)
         self.assertEqual(shaper.shares[42].group, "new")
 
+    def test_import_rollback_keeps_reused_pid_in_old_leaf(self):
+        shaper, host = self.setup_shaper()
+        shaper.apply_group(Group("old", 20, None, (42, 43)), {42: 100, 43: 100}, 100_000_000, None)
+        host.files["/proc/42/stat"] = "42 (other) S " + "0 " * 18 + "200"
+        host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42\n"
+        host.files["/sys/fs/cgroup/bandctl/bandctl-42/cgroup.procs"] = "42\n"
+
+        with self.assertRaisesRegex(ShaperError, "cannot verify pid 42"):
+            shaper.replace_groups(self.settings([Group("new", 30, None, (43,))]), 100_000_000, None)
+
+        self.assertIn(42, shaper.shares)
+        self.assertIn("42", json.loads(host.files["/run/bandctl.json"])["pids"])
+        with patch.object(host, "write", wraps=host.write) as write:
+            notes = shaper.teardown()
+        self.assertTrue(any("cannot verify pid 42" in note for note in notes))
+        self.assertFalse(any(call.args[1] == "42\n" for call in write.call_args_list))
+        self.assertIn("/run/bandctl.json", host.files)
+
 
 class ApplyTests(unittest.TestCase):
     def test_individual_update_reports_failed_synchronization_rollback(self):

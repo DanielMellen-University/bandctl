@@ -433,6 +433,12 @@ class Shaper:
                         self._rmdir_leaf(share.pid)
                 for share in removed:
                     status = self._process_status(share)
+                    if status == "changed":
+                        try:
+                            self._check_reused_leaf(share)
+                        except ShaperError as identity_error:
+                            problems.append(str(identity_error))
+                            continue
                     if status in ("gone", "changed"):
                         self._shares.pop(share.pid, None)
                     elif status != "same":
