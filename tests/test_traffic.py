@@ -27,6 +27,21 @@ ESTAB 0 0 192.168.1.97:10 9.9.9.9:443 users:(("old",pid=4,fd=1))
 
 
 class ParseTests(unittest.TestCase):
+    def test_process_name_does_not_supply_socket_identity(self):
+        text = (
+            'ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 users:(("sk:bad",pid=5,fd=1)) ino:42 sk:a\n'
+            '\t bytes_received:100 bytes_acked:20\n'
+            'ESTAB 0 0 10.0.0.2:2 1.1.1.1:443 users:(("sk:bad",pid=5,fd=2)) ino:43 sk:b\n'
+            '\t bytes_received:200 bytes_acked:30\n'
+        )
+        self.assertEqual(parse_ss_sockets(text), {
+            (5, "sk:a"): (100, 20), (5, "sk:b"): (200, 30),
+        })
+        inode_only = ('ESTAB 0 0 10.0.0.2:3 1.1.1.1:443 '
+                      'users:(("ino:99",pid=5,fd=3)) ino:44\n'
+                      '\t bytes_received:50\n')
+        self.assertEqual(parse_ss_sockets(inode_only), {(5, "ino:44"): (50, 0)})
+
     def test_process_name_does_not_add_socket_owners(self):
         text = ('ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 '
                 'users:(("worker,pid=99,fd=2",pid=5,fd=1)) sk:a\n'

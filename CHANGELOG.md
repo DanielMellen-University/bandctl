@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- TCP sampling ignores socket identifiers embedded in process names.
+
 - TCP sampling no longer treats PID-like text in process names as another socket owner.
 
 - Group import rollback restores old capacities when all newly added members were restored.

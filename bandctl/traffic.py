@@ -13,6 +13,7 @@ import re
 import subprocess
 
 _PID_RE = re.compile(r'\("(?:\\.|[^"\\])*",pid=(\d+)(?=,|\))')
+_QUOTED_RE = re.compile(r'"(?:\\.|[^"\\])*"')
 _SOCKET_COOKIE_RE = re.compile(r"\bsk:([0-9a-fA-F]+)\b")
 _SOCKET_INODE_RE = re.compile(r"\bino:(\d+)\b")
 _FIELD_RE = {
@@ -75,8 +76,9 @@ def parse_ss_sockets(text: str) -> dict[tuple[int, str], tuple[int, int]]:
             continue
         if not raw[0].isspace():
             pids = _socket_pids(raw)
-            cookie = _SOCKET_COOKIE_RE.search(raw)
-            inode = _SOCKET_INODE_RE.search(raw)
+            metadata = _QUOTED_RE.sub('""', raw)
+            cookie = _SOCKET_COOKIE_RE.search(metadata)
+            inode = _SOCKET_INODE_RE.search(metadata)
             local, peer = _endpoints(raw)
             if cookie:
                 identity = "sk:" + cookie.group(1).lower()
