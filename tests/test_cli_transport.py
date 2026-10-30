@@ -7,7 +7,7 @@ import threading
 import time
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from bandctl.cli_transport import request, serve
 
@@ -24,6 +24,13 @@ def wait_ready(path):
 
 
 class TransportTests(unittest.TestCase):
+    def test_deeply_nested_response_is_invalid(self):
+        with patch("bandctl.cli_transport.socket.socket"), patch(
+            "bandctl.cli_transport._read_line", return_value=b"[" * 2000 + b"]" * 2000
+        ):
+            with self.assertRaisesRegex(ValueError, "invalid session response"):
+                request("unused", {"command": "ping"})
+
     def test_request_dispatch_and_stop_remove_private_socket(self):
         with tempfile.TemporaryDirectory() as directory:
             path = str(Path(directory) / "session.sock")
@@ -75,6 +82,28 @@ class TransportTests(unittest.TestCase):
                 self.assertEqual(response["warnings"], ["capacity update: failed"])
                 request(path, {"command": "stop"})
             finally:
+                thread.join(timeout=3)
+            self.assertFalse(thread.is_alive())
+
+    def test_deeply_nested_request_does_not_stop_server(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "session.sock")
+            session = Mock()
+            session.iface = "eth0"
+            thread = threading.Thread(target=serve, args=(session, path), daemon=True)
+            thread.start()
+            wait_ready(path)
+            try:
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                    client.settimeout(2)
+                    client.connect(path)
+                    client.sendall(b"[" * 2000 + b"]" * 2000 + b"\n")
+                    response = json.loads(client.recv(4096))
+                    self.assertFalse(response["ok"])
+                self.assertTrue(request(path, {"command": "ping"})["ok"])
+            finally:
+                if thread.is_alive():
+                    request(path, {"command": "stop"})
                 thread.join(timeout=3)
             self.assertFalse(thread.is_alive())
 

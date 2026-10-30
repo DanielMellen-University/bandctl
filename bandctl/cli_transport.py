@@ -41,7 +41,7 @@ def request(path: str, payload: dict, *, timeout: float = 3.0) -> dict:
         data = _read_line(connection)
     try:
         response = json.loads(data.decode("utf-8"))
-    except (ValueError, UnicodeDecodeError) as exc:
+    except (ValueError, UnicodeDecodeError, RecursionError) as exc:
         raise ValueError("invalid session response") from exc
     if not isinstance(response, dict) or type(response.get("ok")) is not bool:
         raise ValueError("invalid session response")
@@ -73,7 +73,10 @@ def serve(session, path: str, *, interval: float = 1.0, on_stop=None) -> None:
                     with connection:
                         connection.settimeout(0.5)
                         try:
-                            payload = json.loads(_read_line(connection).decode("utf-8"))
+                            try:
+                                payload = json.loads(_read_line(connection).decode("utf-8"))
+                            except RecursionError as exc:
+                                raise ValueError("request is nested too deeply") from exc
                             response, stopping = dispatch(session, payload)
                             warnings = getattr(session, "warnings", None)
                             if isinstance(warnings, list) and warnings:
