@@ -43,8 +43,8 @@ class SettingsScreen(ModalScreen):
         if action == "settings-close":
             self.action_close()
             return
-        path = self.query_one("#settings-path", Input).value.strip()
-        if not path:
+        path = self.query_one("#settings-path", Input).value
+        if not path.strip():
             self._status("Enter a file path", bad=True)
             return
         try:

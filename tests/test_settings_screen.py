@@ -2,8 +2,9 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from textual.widgets import Input, Static
+from textual.widgets import Button, Input, Static
 
 from bandctl.rules import AutoRule
 from bandctl.settings_screen import SettingsScreen
@@ -11,6 +12,41 @@ from test_group_screen import group_app
 
 
 class SettingsScreenTests(unittest.IsolatedAsyncioTestCase):
+    async def test_export_preserves_leading_spaces_and_rejects_blank_path(self):
+        app, shaper, host = group_app()
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.press("x")
+            path = app.screen.query_one("#settings-path", Input)
+            with patch("bandctl.settings_screen.export_session") as export:
+                path.value = "  settings.json"
+                await pilot.click("#settings-export")
+                self.assertEqual(export.call_args.args[0], "  settings.json")
+                path.value = "   "
+                app.screen.on_button_pressed(Button.Pressed(app.screen.query_one("#settings-export", Button)))
+                export.assert_called_once()
+                self.assertIn("Enter a file path", str(app.screen.query_one("#settings-status", Static).render()))
+
+    async def test_import_and_export_preserve_spaces_in_file_path(self):
+        app, shaper, host = group_app()
+        app._rules = [AutoRule("work", 20, None)]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json "
+            other = Path(directory) / "settings.json"
+            other.write_text("keep this file")
+            async with app.run_test(size=(80, 24)) as pilot:
+                await pilot.press("x")
+                app.screen.query_one("#settings-path", Input).value = str(path)
+                await pilot.click("#settings-export")
+                self.assertEqual(other.read_text(), "keep this file")
+                self.assertTrue(path.is_file())
+                await pilot.press("escape")
+                app._rules = []
+                await pilot.press("x")
+                app.screen.query_one("#settings-path", Input).value = str(path)
+                await pilot.click("#settings-import")
+                await pilot.pause()
+                self.assertEqual(app._rules, [AutoRule("work", 20, None)])
+
     async def test_export_then_import_rules_and_budget(self):
         app, shaper, host = group_app()
         app._rules = [AutoRule("work", 20, None)]
