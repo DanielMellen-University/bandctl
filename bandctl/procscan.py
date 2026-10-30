@@ -185,7 +185,7 @@ def _collect_inodes(root: Path) -> set[str]:
 def _one(entry: Path, inodes: set[str]) -> ProcessInfo | None:
     try:
         start_ticks = _start_ticks(entry)
-        comm = (entry / "comm").read_text(encoding="utf-8", errors="replace").strip() or "?"
+        comm = (entry / "comm").read_text(encoding="utf-8", errors="replace").removesuffix("\n") or "?"
         cmdline = format_cmdline((entry / "cmdline").read_bytes(), comm)
         status = (entry / "status").read_text(encoding="utf-8", errors="replace")
         uid = entry.stat().st_uid

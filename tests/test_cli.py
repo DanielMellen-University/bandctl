@@ -56,6 +56,13 @@ class LimitInputTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "no process"):
             resolve_process("fox", [first, second])
 
+    def test_exact_name_preserves_spaces_before_trying_trimmed_name(self):
+        from bandctl.cli import resolve_process
+        padded = ProcessInfo(42, " worker ", "", "user", 0, 100)
+        plain = ProcessInfo(43, "worker", "", "user", 0, 101)
+        self.assertEqual(resolve_process(" worker ", [padded, plain]), padded)
+        self.assertEqual(resolve_process(" worker ", [plain]), plain)
+
     def test_refuses_ambiguous_or_unverified_processes(self):
         from bandctl.cli import resolve_process
         processes = [ProcessInfo(42, "firefox", "", "user", 0, 100),

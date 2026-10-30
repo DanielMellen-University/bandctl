@@ -124,6 +124,14 @@ class ScanTests(unittest.TestCase):
         self.assertEqual(found[7].start_ticks, 12345)
         self.assertEqual(found[8].sockets, 0)
 
+    def test_scan_preserves_spaces_in_process_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._pid(root, 7, " worker ", b"", "Uid:\t1000\t1000\t1000\t1000\n", None)
+            found = scan_processes(root, skip_pid=0)
+        self.assertEqual(found[0].comm, " worker ")
+        self.assertEqual(found[0].cmdline, " worker ")
+
     def test_scan_survives_user_database_failure(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

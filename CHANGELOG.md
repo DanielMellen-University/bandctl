@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Process scans and CLI name matching preserve spaces in process names.
+
 - Limits reject unrestorable original cgroup paths before moving processes.
 
 - Large CLI export responses fit even when the request is near its size limit.

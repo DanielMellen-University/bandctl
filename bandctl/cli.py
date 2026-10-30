@@ -25,13 +25,16 @@ def list_processes(*, json_output: bool = False, processes=None) -> str:
 
 def resolve_process(target: str, processes):
     """Resolve one PID or exact process name, refusing ambiguity and stale identities."""
+    exact_target = target
     target = target.strip()
     if not target:
         raise ValueError("enter a PID or process name")
     if target.isascii() and target.isdigit():
         matches = [proc for proc in processes if proc.pid == int(target)]
     else:
-        matches = [proc for proc in processes if proc.comm.casefold() == target.casefold()]
+        matches = [proc for proc in processes if proc.comm.casefold() == exact_target.casefold()]
+        if not matches and target != exact_target:
+            matches = [proc for proc in processes if proc.comm.casefold() == target.casefold()]
     if not matches:
         raise ValueError(f"no process matches {target!r}")
     if len(matches) != 1:
