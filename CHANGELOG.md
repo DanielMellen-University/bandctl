@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Settings import rejects budgets too large for rate calculations before changing the session.
+
 - Unit toggles preserve budget values down to the bit when they are submitted again.
 
 - Invalid Unicode digits and very long percentages show a validation error instead of crashing the main screen.

@@ -5,6 +5,7 @@ from __future__ import annotations
 import unittest
 
 from bandctl.rates import (
+    MAX_BUDGET_BPS,
     RateError,
     Unit,
     format_budget_input,
@@ -55,7 +56,7 @@ class BudgetTests(unittest.TestCase):
 
     def test_rejects_non_finite_and_sub_bit_budgets(self):
         for unit in Unit:
-            for text in ("nan", "inf", "-inf", "1e308", "1e-100"):
+            for text in ("nan", "inf", "-inf", "1e308", "1e-100", "1e999999999999999999999"):
                 with self.subTest(unit=unit, text=text):
                     with self.assertRaises(RateError):
                         parse_budget(text, unit)
@@ -80,7 +81,7 @@ class ConversionTests(unittest.TestCase):
         self.assertEqual(format_budget_input(100_000_000, Unit.MB), "12.5")
 
     def test_budget_input_round_trips_exact_bits(self):
-        for bps in (1, 101, 1_234_567, 100_000_001):
+        for bps in (1, 101, 1_234_567, 100_000_001, MAX_BUDGET_BPS):
             for unit in Unit:
                 with self.subTest(bps=bps, unit=unit):
                     self.assertEqual(parse_budget(format_budget_input(bps, unit), unit), bps)

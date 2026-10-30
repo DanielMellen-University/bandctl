@@ -7,6 +7,7 @@ from uuid import UUID
 from dataclasses import dataclass
 
 from bandctl.groups import Group, active_groups, validate_groups
+from bandctl.rates import MAX_BUDGET_BPS
 from bandctl.rules import AutoRule
 from bandctl.schedule import DailyWindow, parse_time
 
@@ -36,8 +37,8 @@ class Settings:
                 or any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in self.iface)):
             raise ValueError("invalid interface name")
         for budget in (self.down_budget, self.up_budget):
-            if budget is not None and (type(budget) is not int or budget < 1):
-                raise ValueError("budgets must be positive whole numbers of bits per second")
+            if budget is not None and (type(budget) is not int or not 1 <= budget <= MAX_BUDGET_BPS):
+                raise ValueError("budgets must be finite positive whole numbers of bits per second")
         validate_groups([item.group for item in self.groups])
         if self.groups and self.boot_id is None:
             raise ValueError("groups need a boot ID to verify process identities")

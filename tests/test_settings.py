@@ -4,6 +4,7 @@ import unittest
 from datetime import time
 
 from bandctl.groups import Group
+from bandctl.rates import MAX_BUDGET_BPS
 from bandctl.rules import AutoRule
 from bandctl.schedule import DailyWindow
 from bandctl.settings import GroupSettings, Settings, dumps, loads
@@ -47,6 +48,16 @@ class SettingsTests(unittest.TestCase):
         data["groups"][0]["members"][0]["start_ticks"] = None
         with self.assertRaises(ValueError):
             loads(json.dumps(data))
+
+    def test_rejects_budgets_too_large_for_rate_calculations(self):
+        data = json.loads(dumps(self.settings()))
+        for field in ("down_budget_bps", "up_budget_bps"):
+            data[field] = 10 ** 400
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "budget"):
+                loads(json.dumps(data))
+            data[field] = None
+        data["down_budget_bps"] = MAX_BUDGET_BPS
+        self.assertEqual(loads(json.dumps(data)).down_budget, MAX_BUDGET_BPS)
 
     def test_groups_require_a_valid_boot_identity(self):
         data = json.loads(dumps(self.settings()))

@@ -51,6 +51,21 @@ class SettingsScreenTests(unittest.IsolatedAsyncioTestCase):
 
 
 class StartupSettingsTests(unittest.IsolatedAsyncioTestCase):
+    async def test_oversized_startup_budget_is_rejected_without_changing_state(self):
+        import json
+        from bandctl.settings import Settings, dumps
+
+        app, shaper, host = group_app()
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            data = json.loads(dumps(Settings("eth0", None, None, (), ())))
+            data["down_budget_bps"] = 10 ** 400
+            path.write_text(json.dumps(data))
+            app._startup_settings = str(path)
+            async with app.run_test(size=(80, 24)):
+                self.assertIsNone(app._down_budget)
+                self.assertIn("budget", str(app.query_one("#status", Static).render()))
+
     async def test_explicit_startup_import_sets_rules_and_budgets(self):
         from bandctl.settings import Settings, write_settings
         app, shaper, host = group_app()

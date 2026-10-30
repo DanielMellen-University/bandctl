@@ -7,9 +7,11 @@ link speed or a budget the user typed. 1 Mbit/s is 1_000_000 bit/s, and
 
 from __future__ import annotations
 
-from decimal import Decimal, localcontext
+from decimal import Decimal, InvalidOperation, localcontext
 from enum import Enum
-import math
+import sys
+
+MAX_BUDGET_BPS = int(sys.float_info.max)
 
 
 class Unit(Enum):
@@ -47,17 +49,16 @@ def parse_budget(text: str, unit: Unit) -> int | None:
     if not raw:
         return None
     try:
-        value = float(raw)
-    except ValueError as exc:
+        decimal_value = Decimal(raw)
+    except InvalidOperation as exc:
         raise RateError("budget must be a number, in the unit shown in the header") from exc
-    bps = value * (1_000_000 if unit is Unit.MBIT else 8_000_000)
-    if not math.isfinite(bps) or bps < 1:
+    if (not decimal_value.is_finite() or decimal_value <= 0
+            or decimal_value.adjusted() > 308 or decimal_value.adjusted() < -8):
         raise RateError("budget must be finite and at least 1 bit/s")
-    decimal_value = Decimal(raw)
     with localcontext() as context:
         context.prec = max(28, len(decimal_value.as_tuple().digits) + 8)
         exact_bps = decimal_value * (1_000_000 if unit is Unit.MBIT else 8_000_000)
-    if exact_bps < 1:
+    if exact_bps < 1 or exact_bps > MAX_BUDGET_BPS:
         raise RateError("budget must be finite and at least 1 bit/s")
     return int(exact_bps)
 

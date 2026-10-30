@@ -105,7 +105,7 @@ For a daily schedule, enter both start and end in 24-hour `HH:MM` local time. Th
 
 Rules apply to matching processes already running and to new matches found in later scans. A process that already has a limit is left alone. Removing its limit manually prevents automatic reapplication to that instance. A rule needs a known process start time so bandctl can check that the PID still refers to the scanned process. A failed application appears in the log and is retried after 15 seconds. Rules use the detected link speed or the last submitted budgets. Process scans pause while the editor is open.
 
-A budget must be a finite number that represents at least 1 bit/s.
+A budget must be a finite number that represents at least 1 bit/s and fits in a finite floating-point value in bits per second. Imported budgets follow the same limit.
 
 Example. The link is unknown. You are in Mbit/s and type `100` as the download budget. A 30% download share then ceilings at 30 Mbit/s. Press `b` and the same budget reads `12.5`, which is 100 Mbit/s expressed in MB/s.
 
