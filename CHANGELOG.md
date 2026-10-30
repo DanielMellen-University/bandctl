@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Match connected UDP sockets before unconnected sockets on the same address and port.
+
 - Keep terminal control characters out of plain CLI output.
 
 - Keep control characters in process data from breaking TUI rows and details.

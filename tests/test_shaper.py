@@ -1645,6 +1645,38 @@ class ApplyTests(unittest.TestCase):
         self.assertEqual(len([args for args, _ in host.commands if "flower" in args and "add" in args]), 1)
 
     @patch("sys.byteorder", "little")
+    def test_connected_udp_precedes_unconnected_socket_on_same_port(self):
+        for order in ((42, 43), (43, 42)):
+            with self.subTest(order=order):
+                shaper, host = _shaper()
+                host.files["/proc/net/udp"] = (
+                    "sl local_address rem_address st tx_queue rx_queue tr tm retrnsmt uid timeout inode\n"
+                    "0: 0800000A:14E9 00000000:0000 07 0 0 0 0 0 99\n"
+                    "1: 0800000A:14E9 04030201:01BB 01 0 0 0 0 0 100\n"
+                )
+                host.links["/proc/42/fd/3"] = "socket:[99]"
+                host.links["/proc/43/fd/3"] = "socket:[100]"
+                for pid in order:
+                    shaper.apply(pid, 30, 10, 100_000_000, 100_000_000)
+                filters = [args for args, _ in host.commands if "flower" in args and "add" in args]
+                for parent in ("1:", "ffff:"):
+                    direction = [args for args in filters if args[args.index("parent") + 1] == parent]
+                    connected = next(args for args in direction if "1.2.3.4" in args)
+                    unconnected = next(args for args in direction if "1.2.3.4" not in args)
+                    self.assertLess(int(connected[connected.index("prio") + 1]),
+                                    int(unconnected[unconnected.index("prio") + 1]))
+                    if parent == "1:":
+                        self.assertEqual(connected[connected.index("classid") + 1], f"1:{shaper.shares[43].minor}")
+                        self.assertEqual(unconnected[unconnected.index("classid") + 1], f"1:{shaper.shares[42].minor}")
+                    else:
+                        self.assertEqual(connected[connected.index("mark") + 1], str(shaper.shares[43].minor))
+                        self.assertEqual(unconnected[unconnected.index("mark") + 1], str(shaper.shares[42].minor))
+                shaper.remove(42)
+                deleted = [args for args, _ in host.commands if "flower" in args and "del" in args]
+                self.assertEqual({(args[args.index("parent") + 1], args[args.index("prio") + 1])
+                                  for args in deleted}, {("1:", "3"), ("ffff:", "2")})
+
+    @patch("sys.byteorder", "little")
     def test_specific_udp_filters_take_precedence_over_wildcard_filters(self):
         for order in ((42, 43), (43, 42)):
             with self.subTest(order=order):
@@ -1669,7 +1701,7 @@ class ApplyTests(unittest.TestCase):
                 shaper.remove(42)
                 deleted = [args for args, _ in host.commands if "flower" in args and "del" in args]
                 self.assertEqual({(args[args.index("parent") + 1], args[args.index("prio") + 1])
-                                  for args in deleted}, {("1:", "3"), ("ffff:", "2")})
+                                  for args in deleted}, {("1:", "4"), ("ffff:", "3")})
 
     def test_upload_flower_does_not_touch_ingress(self):
         shaper, host = _shaper()

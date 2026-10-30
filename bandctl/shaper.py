@@ -1515,7 +1515,10 @@ class Shaper:
         else:
             dev, parent, prio = self.iface, "ffff:", 1
         if self.match_wildcard and _wildcard_udp(flow):
-            # Keep address-specific flows ahead of the broader port match.
+            # Wildcard port matches are broader than all address-specific flows.
+            prio += 2
+        elif flow.proto == "udp" and not flow.remote_port:
+            # A connected socket must win over an unconnected socket on its port.
             prio += 1
         handle = self._next_flow_handle
         self._run(
