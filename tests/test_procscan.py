@@ -161,6 +161,23 @@ class ScanTests(unittest.TestCase):
         self.assertEqual(found[0].comm, " worker ")
         self.assertEqual(found[0].cmdline, " worker ")
 
+    def test_scan_skips_process_if_identity_changes_or_disappears(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._pid(root, 7, "curl", b"curl\0", "Uid:\t1000\n", None)
+            for final_start in (54321, None):
+                with self.subTest(final_start=final_start), \
+                     patch("bandctl.procscan._start_ticks", side_effect=[12345, final_start]):
+                    self.assertEqual(scan_processes(root, skip_pid=0), [])
+
+    def test_scan_lists_an_unverifiable_process_without_an_identity(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._pid(root, 7, "curl", b"curl\0", "Uid:\t1000\n", None)
+            with patch("bandctl.procscan._start_ticks", return_value=None):
+                found = scan_processes(root, skip_pid=0)
+        self.assertEqual([(proc.pid, proc.start_ticks) for proc in found], [(7, None)])
+
     def test_scan_survives_user_database_failure(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
