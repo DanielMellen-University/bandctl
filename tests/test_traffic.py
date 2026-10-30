@@ -50,6 +50,20 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(parse_ss(text), {5: (100, 20)})
         self.assertEqual(parse_ss_sockets(text), {(5, "sk:a"): (100, 20)})
 
+    def test_unicode_line_separator_in_process_name_keeps_socket_owner(self):
+        for separator in ("\u0085", "\u2028", "\u2029"):
+            text = ('ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 '
+                    f'users:(("worker{separator}helper",pid=5,fd=1)) sk:a\n'
+                    '\t bytes_received:100 bytes_acked:20\n')
+            with self.subTest(separator=repr(separator)):
+                self.assertEqual(parse_ss(text), {5: (100, 20)})
+                self.assertEqual(parse_ss_sockets(text), {(5, "sk:a"): (100, 20)})
+                sampler = TrafficSampler()
+                sampler.rates(text, 1)
+                later = text.replace("received:100", "received:110")
+                self.assertEqual(sampler.rates(later, 2)[5], (80.0, 0.0))
+                self.assertEqual(sampler.totals[5], (10, 0))
+
     def test_read_ss_requests_socket_identity(self):
         with patch("bandctl.traffic.subprocess.run", return_value=SimpleNamespace(returncode=0, stdout="")) as run:
             self.assertEqual(read_ss(), "")

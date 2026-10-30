@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep TCP socket owners whose process names contain Unicode line separators.
+
 - Bound the total time spent reading a CLI request so slow clients cannot delay refreshes indefinitely.
 
 ## 0.2.0 (2026-10-30)

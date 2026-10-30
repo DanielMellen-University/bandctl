@@ -46,7 +46,7 @@ def parse_ss(text: str) -> dict[int, tuple[int, int]]:
     """
     totals: dict[int, list[int]] = {}
     pids: list[int] = []
-    for raw in text.splitlines():
+    for raw in text.split("\n"):
         if not raw.strip():
             continue
         if raw[0].isspace():
@@ -77,7 +77,7 @@ def parse_ss_sockets(text: str, *, omit_unreported: bool = False) -> dict[tuple[
 def _parse_ss_socket_counters(text: str) -> dict[tuple[int, str], tuple[int | None, int | None]]:
     found: dict[tuple[int, str], tuple[int | None, int | None]] = {}
     keys: list[tuple[int, str]] = []
-    for raw in text.splitlines():
+    for raw in text.split("\n"):
         if not raw.strip():
             continue
         if not raw[0].isspace():
