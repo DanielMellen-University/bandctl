@@ -202,24 +202,31 @@ class Shaper:
             try:
                 self._require_caps()
                 if created:
-                    self._move_to_leaf(share)
                     self._shares[pid] = share
+                    self._move_to_leaf(share)
                 self._sync()
-            except Exception:
+            except Exception as exc:
+                attempted_move = created and pid in self._shares
                 self._shares = old_shares
-                self._down_cap, self._up_cap = old_caps
-                if created:
+                rollback_error = None
+                if attempted_move:
                     try:
-                        self._restore_pid(pid, share.original_cgroup)
-                    except ShaperError:
-                        pass
+                        self._restore_share(share)
+                    except ShaperError as restore_exc:
+                        rollback_error = restore_exc
+                        self._shares[pid] = share
                     else:
                         # The leaf was made for this apply. Do not leave it behind.
                         self._rmdir_leaf(pid)
+                if rollback_error is None:
+                    self._down_cap, self._up_cap = old_caps
                 try:
                     self._sync()
                 except ShaperError:
                     pass
+                if rollback_error is not None:
+                    self._write_state()
+                    raise ShaperError(f"{exc}; rollback incomplete: {rollback_error}") from exc
                 raise
         return _applied_text(share)
 

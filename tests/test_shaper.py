@@ -739,6 +739,27 @@ class ApplyTests(unittest.TestCase):
 class CleanupTests(unittest.TestCase):
     """Fixes for teardown, remove, and failed apply."""
 
+    def test_failed_apply_keeps_process_tracked_when_restore_fails(self):
+        shaper, host = _shaper()
+        host.fail_substr = "nft -f"
+        original_write = host.write
+
+        def fail_restore(path, data):
+            if path.endswith("session-1.scope/cgroup.procs"):
+                raise OSError("restore failed")
+            original_write(path, data)
+
+        host.write = fail_restore
+        with self.assertRaisesRegex(ShaperError, "rollback incomplete.*could not restore pid 42"):
+            shaper.apply(42, None, 10, None, 100_000_000)
+        self.assertIn(42, shaper.shares)
+        self.assertIn('"42"', host.files["/run/bandctl.json"])
+        host.write = original_write
+        host.fail_substr = None
+        shaper.remove(42)
+        self.assertEqual(shaper.shares, {})
+        self.assertEqual(host.files["/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs"], "42\n")
+
     def test_failed_apply_removes_the_leaf_it_made(self):
         shaper, host = _shaper()
         host.fail_substr = "nft -f"

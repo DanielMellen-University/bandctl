@@ -113,7 +113,7 @@ Unmarked traffic is not capped. It uses a default HTB class whose ceil is the wh
 
 If download shares (or upload shares) add up to more than 100%, each process still cannot cross its own percent. The rates HTB guarantees are scaled so they fit in the parent class. The status line reports the total.
 
-A failed apply does not leave a half-moved process, and a new share that fails also removes the cgroup it created. The error text from `tc`, `nft`, or the cgroup write is in the log. If the interface already has an HTB root qdisc, bandctl refuses to replace it.
+A failed new share is rolled back, and its empty cgroup is removed. If the process cannot be restored, the error reports an incomplete rollback and the share stays listed so you can try Remove. Its ceiling may not be active. The error text from `tc`, `nft`, or the cgroup write is in the log. If the interface already has an HTB root qdisc, bandctl refuses to replace it.
 
 ## Exit
 

@@ -110,7 +110,7 @@ Members of one group use the same minor, so their leaf rules and flower filters 
 
 ## Failure and exit
 
-`apply` copies the previous share map. On any error it restores that map, writes the pid back to its old cgroup if this call had moved it, removes the leaf cgroup it made, and runs sync again so the qdisc matches the restored map. A partial IFB setup is deleted before the error is raised.
+`apply` copies the previous share map. On error it restores the prior shares, writes the pid back to its old cgroup if a move was attempted, removes the leaf cgroup it made, and runs sync again. If the restore fails, it retains the new share and its original cgroup for a later cleanup and reports an incomplete rollback. Its ceiling may not be active. A partial IFB setup is deleted before the error is raised.
 
 `remove` writes the pid back to its old cgroup before it forgets the share. If that write fails and the pid still exists, the share is kept and the error is raised, so a later Remove or the exit cleanup can try again. If the pid is gone, the share is dropped.
 

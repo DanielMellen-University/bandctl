@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A failed new limit keeps its process tracked if restoring its cgroup also fails, so Remove can retry.
+
 - An apply waiting for teardown no longer installs a limit after shutdown.
 
 - Deeply nested settings files are rejected without stopping the session.
