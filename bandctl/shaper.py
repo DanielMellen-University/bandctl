@@ -641,6 +641,12 @@ class Shaper:
                 if state is not None:
                     if not isinstance(state.get("iface"), str) or not state["iface"]:
                         raise ShaperError("invalid recovery state: missing interface")
+                    iface = state["iface"]
+                    if (iface in (".", "..") or "/" in iface
+                            or len(iface.encode("utf-8", errors="surrogatepass")) > 15
+                            or any(char.isspace() or ord(char) < 32 or ord(char) == 127
+                                   or 0xD800 <= ord(char) <= 0xDFFF for char in iface)):
+                        raise ShaperError("invalid recovery state: invalid interface")
                     if "qdisc" in state and (not isinstance(state["qdisc"], str) or state["qdisc"] not in SAFE_QDISCS):
                         raise ShaperError("invalid recovery state: invalid qdisc")
                     for field in ("root_replaced", "ifb_owned", "ingress_owned", "nft_owned"):
