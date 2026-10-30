@@ -75,7 +75,7 @@ def loads(text: str) -> Settings:
     """Parse and validate every setting before returning any of them."""
     try:
         raw = json.loads(text, object_pairs_hook=_unique_pairs)
-    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+    except (json.JSONDecodeError, UnicodeDecodeError, RecursionError) as exc:
         raise ValueError("invalid settings JSON") from exc
     obj = _object(raw, {"version", "interface", "down_budget_bps", "up_budget_bps", "rules", "groups", "boot_id"}, "settings")
     if type(obj["version"]) is not int or obj["version"] != 1:

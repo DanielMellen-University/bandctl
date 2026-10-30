@@ -62,3 +62,13 @@ class SettingsSessionTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "failed"):
                     import_session(path, self.shaper, "eth0", 100_000_000, self.procs)
             self.assertEqual(read_settings(path).rules[0].name, "work")
+
+    def test_deeply_nested_settings_are_rejected_without_changing_limits(self):
+        self.shaper.apply_group(Group("work", 30, None, (42,)), {42: 100}, 100_000_000, None)
+        previous = self.shaper.shares
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            path.write_text("[" * 2000 + "]" * 2000)
+            with self.assertRaisesRegex(ValueError, "invalid settings JSON"):
+                import_session(path, self.shaper, "eth0", 100_000_000, self.procs)
+        self.assertEqual(self.shaper.shares, previous)

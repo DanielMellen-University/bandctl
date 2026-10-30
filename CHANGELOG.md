@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Deeply nested settings files are rejected without stopping the session.
+
 - A deeply nested CLI socket request no longer stops the background session.
 
 - Process names with non-UTF-8 bytes no longer break TCP rate sampling.
