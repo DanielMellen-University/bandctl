@@ -108,6 +108,27 @@ class ParseTests(unittest.TestCase):
         sampler.forget_total(5)
         self.assertNotIn(5, sampler.totals)
 
+    def test_expired_socket_baseline_is_not_reused_on_reappearance(self):
+        socket = ('ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 users:(("x",pid=5,fd=1)) sk:a\n'
+                  '\t bytes_received:100 bytes_acked:20\n')
+        later = socket.replace("received:100", "received:120").replace("acked:20", "acked:30")
+        sampler = TrafficSampler()
+        sampler.rates(socket, 1)
+        sampler.rates("", 61)
+
+        self.assertEqual(sampler.rates(later, 62)[5], (960.0, 240.0))
+        self.assertEqual(sampler.totals[5], (120, 30))
+
+    def test_long_sampling_gap_keeps_a_seen_socket_baseline(self):
+        socket = ('ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 users:(("x",pid=5,fd=1)) sk:a\n'
+                  '\t bytes_received:100 bytes_acked:20\n')
+        later = socket.replace("received:100", "received:161").replace("acked:20", "acked:81")
+        sampler = TrafficSampler()
+        sampler.rates(socket, 1)
+
+        self.assertEqual(sampler.rates(later, 62)[5], (8.0, 8.0))
+        self.assertEqual(sampler.totals[5], (61, 61))
+
     def test_non_increasing_clock_does_not_consume_a_sample(self):
         sampler = TrafficSampler()
         sampler.rates(_SS, 10)

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- TCP rate sampling no longer uses an expired baseline when an absent socket reappears.
+
 - Process scans show a numeric UID if user lookup fails.
 
 - Recovery state stays until exit cleanup, even after the last share is removed.

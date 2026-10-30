@@ -149,6 +149,8 @@ class TrafficSampler:
         rates: dict[int, list[float]] = {}
         for (pid, socket), (received, acked) in current.items():
             old = prev.get((pid, socket))
+            if old is not None and old[2] < prev_at and now - old[2] > 60:
+                old = None
             elapsed = now - old[2] if old is not None else dt
             down = max(0, received - old[0]) if old is not None else received
             up = max(0, acked - old[1]) if old is not None else acked
