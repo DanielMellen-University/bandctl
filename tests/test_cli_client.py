@@ -1,5 +1,7 @@
 """CLI session discovery and startup without launching a real worker."""
+import errno
 import io
+import socket
 import subprocess
 import unittest
 from unittest.mock import Mock, patch
@@ -9,6 +11,30 @@ from bandctl.session_lock import SessionLockError
 
 
 class ClientTests(unittest.TestCase):
+    def test_only_missing_or_stale_socket_allows_a_new_session(self):
+        for error in (FileNotFoundError(errno.ENOENT, "missing"),
+                      ConnectionRefusedError(errno.ECONNREFUSED, "stale")):
+            with self.subTest(error=error), patch("bandctl.cli_client.request", side_effect=error):
+                self.assertIsNone(_ping("socket"))
+
+        for error in (PermissionError(errno.EACCES, "denied"), socket.timeout("timed out")):
+            with self.subTest(error=error), \
+                 patch("bandctl.cli_client.request", side_effect=error), \
+                 patch("bandctl.cli_client.subprocess.Popen") as start:
+                with self.assertRaises(type(error)):
+                    ensure_session("eth0", start=True)
+                start.assert_not_called()
+
+    def test_invalid_ping_response_does_not_start_another_session(self):
+        for response in ({"ok": False}, {"ok": True, "result": None},
+                         {"ok": True, "result": {"iface": None}}):
+            with self.subTest(response=response), \
+                 patch("bandctl.cli_client.request", return_value=response), \
+                 patch("bandctl.cli_client.subprocess.Popen") as start:
+                with self.assertRaisesRegex(ValueError, "invalid session"):
+                    ensure_session("eth0", start=True)
+                start.assert_not_called()
+
     def test_explicit_wildcard_option_requires_an_enabled_session(self):
         with patch("bandctl.cli_client.request", return_value={"ok": True, "result": {"iface": "eth0", "match_wildcard": False}}):
             self.assertEqual(_ping("socket"), "eth0")
