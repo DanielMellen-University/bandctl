@@ -13,7 +13,7 @@ from bandctl.iface import check_iface, default_iface
 from bandctl.session_lock import SessionLock, SessionLockError
 
 
-def _ping(path: str):
+def _ping(path: str, *, match_wildcard: bool = False):
     try:
         response = request(path, {"command": "ping"}, timeout=1.0)
     except OSError as exc:
@@ -25,12 +25,15 @@ def _ping(path: str):
     iface = response["result"].get("iface")
     if not isinstance(iface, str):
         raise ValueError("invalid session interface")
+    if match_wildcard and response["result"].get("match_wildcard") is not True:
+        raise ValueError("active session did not enable --match-wildcard; stop it and start a new session")
     return iface
 
 
-def ensure_session(iface: str | None, *, start: bool, socket_path: str = SOCKET_PATH) -> str:
+def ensure_session(iface: str | None, *, start: bool, socket_path: str = SOCKET_PATH,
+                   match_wildcard: bool = False) -> str:
     """Find the existing session, or start one for a limit or import request."""
-    active = _ping(socket_path)
+    active = _ping(socket_path, match_wildcard=match_wildcard)
     if active is not None:
         if iface is not None and iface != active:
             raise ValueError(f"active session uses interface {active}")
@@ -38,14 +41,17 @@ def ensure_session(iface: str | None, *, start: bool, socket_path: str = SOCKET_
     if not start:
         raise ValueError("no active CLI session")
     chosen = check_iface(iface or default_iface())
-    worker = subprocess.Popen([sys.executable, "-m", "bandctl.cli_worker", "--iface", chosen],
+    command = [sys.executable, "-m", "bandctl.cli_worker", "--iface", chosen]
+    if match_wildcard:
+        command.append("--match-wildcard")
+    worker = subprocess.Popen(command,
                               stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
                               start_new_session=True, close_fds=True)
     deadline = time.monotonic() + 5.0
     ready = False
     try:
         while time.monotonic() < deadline:
-            active = _ping(socket_path)
+            active = _ping(socket_path, match_wildcard=match_wildcard)
             if active is not None:
                 if active != chosen:
                     raise ValueError(f"active session uses interface {active}")

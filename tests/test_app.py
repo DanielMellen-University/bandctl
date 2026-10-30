@@ -99,6 +99,17 @@ def _app(fake, *, root=True, link_bps=100_000_000, rates=None):
 
 
 class AppTests(unittest.IsolatedAsyncioTestCase):
+    async def test_wildcard_option_reaches_tui_shaper(self):
+        from test_shaper import _shaper
+
+        shaper, host = _shaper()
+        app = BandctlApp(iface="eth0", processes=lambda: list(PROCS), link_bps=100_000_000,
+                         is_root=True, rates=_rates, match_wildcard=True)
+        with patch("bandctl.app.Shaper", return_value=shaper) as factory:
+            async with app.run_test(size=(80, 24)):
+                factory.assert_called_once_with("eth0", match_wildcard=True)
+        self.assertIn("--match-wildcard", app.sudo_command())
+
     async def test_initial_refresh_failure_stays_visible_until_recovery(self):
         fail = [True]
 

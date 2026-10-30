@@ -104,10 +104,12 @@ class BandctlApp(App):
         rates=None,
         clock=None,
         startup_settings: str | None = None,
+        match_wildcard: bool = False,
     ) -> None:
         super().__init__()
         self._iface_arg = iface
         self._startup_settings = startup_settings
+        self._match_wildcard = match_wildcard
         self._shaper_arg = shaper
         self._process_source = processes
         self._rates_source = rates
@@ -201,7 +203,7 @@ class BandctlApp(App):
         if self._shaper_arg is not None:
             self.shaper = self._shaper_arg
         elif self.is_root and self.iface:
-            self.shaper = Shaper(self.iface)
+            self.shaper = Shaper(self.iface, match_wildcard=self._match_wildcard)
             for note in self.shaper.recover():
                 self._log(note)
         await self._refresh()
@@ -250,6 +252,8 @@ class BandctlApp(App):
 
     def sudo_command(self) -> str:
         extra = f" --iface {self._iface_arg}" if self._iface_arg else ""
+        if self._match_wildcard:
+            extra += " --match-wildcard"
         # The installed command's argv is `bandctl`. A checkout is `python -m`.
         if Path(sys.argv[0]).name == "bandctl":
             return f"sudo bandctl{extra}"

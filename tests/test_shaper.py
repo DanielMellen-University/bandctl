@@ -146,6 +146,32 @@ class ParseTests(unittest.TestCase):
         self.assertNotIn("dst_ip", command)
         self.assertNotIn("dst_port", command)
 
+    def test_wildcard_udp_port_matching_is_opt_in_and_family_specific(self):
+        for family, address in (("ip", "0.0.0.0"), ("ipv6", "::")):
+            for direction in ("up", "down"):
+                flow = SockFlow("udp", family, address, 5353, "1.2.3.4" if family == "ip" else "2001:db8::1", 9999)
+                arguments = dict(dev="eth0", parent="1:", prio=1, handle=1,
+                                 flow=flow, minor=10, direction=direction)
+                with self.subTest(family=family, direction=direction):
+                    default = flower_command(**arguments)
+                    self.assertIn(address, default)
+                    self.assertIn("9999", default)
+                    enabled = flower_command(**arguments, match_wildcard=True)
+                    self.assertIn(family, enabled)
+                    self.assertIn("src_port" if direction == "up" else "dst_port", enabled)
+                    self.assertIn("5353", enabled)
+                    self.assertNotIn("src_ip", enabled)
+                    self.assertNotIn("dst_ip", enabled)
+                    self.assertNotIn("9999", enabled)
+
+    def test_wildcard_option_does_not_change_tcp_or_specific_udp(self):
+        for flow in (SockFlow("tcp", "ip", "0.0.0.0", 1, "1.2.3.4", 2),
+                     SockFlow("udp", "ip", "10.0.0.8", 1, "1.2.3.4", 2)):
+            for direction in ("up", "down"):
+                args = dict(dev="eth0", parent="1:", prio=1, handle=1, flow=flow, minor=10, direction=direction)
+                with self.subTest(flow=flow, direction=direction):
+                    self.assertEqual(flower_command(**args), flower_command(**args, match_wildcard=True))
+
     def test_nft_matches_leaf_name(self):
         script = nft_script([Share(42, 30, None, 10, "/user.slice", "curl")])
         self.assertNotIn("add table inet bandctl", script)
@@ -1558,6 +1584,40 @@ class ApplyTests(unittest.TestCase):
             sum(1 for cmd in _joined(host) if "filter add" in cmd and "flower" in cmd),
             added,
         )
+
+    def test_apply_uses_wildcard_option_for_open_udp_sockets(self):
+        for enabled in (False, True):
+            with self.subTest(enabled=enabled):
+                shaper, host = _shaper()
+                shaper.match_wildcard = enabled
+                host.files["/proc/net/udp"] = (
+                    "sl local_address rem_address st tx_queue rx_queue tr tm retrnsmt uid timeout inode\n"
+                    "0: 00000000:14E9 00000000:0000 07 0 0 0 0 0 99\n"
+                )
+                host.links["/proc/42/fd/3"] = "socket:[99]"
+                shaper.apply(42, 30, 10, 100_000_000, 100_000_000)
+                filters = [args for args, _ in host.commands if "flower" in args and "add" in args]
+                self.assertEqual(len(filters), 2)
+                for args in filters:
+                    self.assertEqual("0.0.0.0" in args, not enabled)
+                    self.assertIn("5353", args)
+
+    def test_wildcard_flows_with_one_local_port_share_one_filter(self):
+        shaper, host = _shaper()
+        shaper.match_wildcard = True
+        host.files["/proc/net/udp"] = (
+            "sl local_address rem_address st tx_queue rx_queue tr tm retrnsmt uid timeout inode\n"
+            "0: 00000000:14E9 04030201:01BB 01 0 0 0 0 0 99\n"
+            "1: 00000000:14E9 08080808:0035 01 0 0 0 0 0 100\n"
+        )
+        host.links["/proc/42/fd/3"] = "socket:[99]"
+        host.links["/proc/42/fd/4"] = "socket:[100]"
+        shaper.apply(42, None, 10, None, 100_000_000)
+        filters = [args for args, _ in host.commands if "flower" in args and "add" in args]
+        self.assertEqual(len(filters), 1)
+        self.assertIn("5353", filters[0])
+        shaper.sample()
+        self.assertEqual(len([args for args, _ in host.commands if "flower" in args and "add" in args]), 1)
 
     def test_upload_flower_does_not_touch_ingress(self):
         shaper, host = _shaper()

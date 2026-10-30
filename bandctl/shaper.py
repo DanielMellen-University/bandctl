@@ -120,6 +120,7 @@ class Shaper:
     iface: str
     host: Host | None = None
     state_path: str = "/run/bandctl.json"
+    match_wildcard: bool = False
     _lock: threading.RLock = field(default_factory=threading.RLock)
     _shares: dict[int, Share] = field(default_factory=dict)
     _next_minor: int = 10
@@ -1415,7 +1416,7 @@ class Shaper:
                     raise ShaperError(f"cannot verify pid {pid} for socket scan")
                 verified.append(share)
             for flow in self._pid_flows(pid, net):
-                ident = _flow_id(flow)
+                ident = _flow_id(flow, match_wildcard=self.match_wildcard)
                 if share.up_pct and self._egress:
                     desired[("up", ident)] = (flow, share.minor, "up")
                 if share.down_pct and self._ifb:
@@ -1501,6 +1502,7 @@ class Shaper:
                 flow=flow,
                 minor=minor,
                 direction=direction,
+                match_wildcard=self.match_wildcard,
             )
         )
         self._next_flow_handle = handle + 1
@@ -1542,14 +1544,19 @@ def _applied_text(share: Share) -> str:
     return f"pid {share.pid} download {down}, upload {up}"
 
 
-def _flow_id(flow: SockFlow) -> tuple:
+def _wildcard_udp(flow: SockFlow) -> bool:
+    return flow.proto == "udp" and flow.local_ip in ("0.0.0.0", "::")
+
+
+def _flow_id(flow: SockFlow, *, match_wildcard: bool = False) -> tuple:
+    wildcard = match_wildcard and _wildcard_udp(flow)
     return (
         flow.proto,
         flow.family,
         flow.local_ip,
         flow.local_port,
-        flow.remote_ip,
-        flow.remote_port,
+        "" if wildcard else flow.remote_ip,
+        0 if wildcard else flow.remote_port,
     )
 
 
@@ -1562,27 +1569,34 @@ def flower_command(
     flow: SockFlow,
     minor: int,
     direction: str,
+    match_wildcard: bool = False,
 ) -> list[str]:
     """One ``tc filter add`` for a socket.
 
     Upload matches the local end as the source and lands in the HTB class.
     Download matches the local end as the destination, stamps the mark, and
     redirects onto the IFB device. A remote port of 0 (unconnected UDP) is
-    left out so every packet from that local port is included.
+    left out so every packet from that local port is included. With the
+    opt-in, wildcard-bound UDP matches only its local port and family.
     """
     command = [
         "tc", "filter", "add", "dev", dev, "parent", parent,
         "protocol", flow.family, "prio", str(prio), "handle", str(handle),
         "flower", "ip_proto", flow.proto,
     ]
+    wildcard = match_wildcard and _wildcard_udp(flow)
     if direction == "up":
-        command += ["src_ip", flow.local_ip, "src_port", str(flow.local_port)]
-        if flow.remote_port:
+        if not wildcard:
+            command += ["src_ip", flow.local_ip]
+        command += ["src_port", str(flow.local_port)]
+        if flow.remote_port and not wildcard:
             command += ["dst_ip", flow.remote_ip, "dst_port", str(flow.remote_port)]
         command += ["classid", f"1:{minor}"]
         return command
-    command += ["dst_ip", flow.local_ip, "dst_port", str(flow.local_port)]
-    if flow.remote_port:
+    if not wildcard:
+        command += ["dst_ip", flow.local_ip]
+    command += ["dst_port", str(flow.local_port)]
+    if flow.remote_port and not wildcard:
         command += ["src_ip", flow.remote_ip, "src_port", str(flow.remote_port)]
     command += [
         "action", "skbedit", "mark", str(minor), "pipe",

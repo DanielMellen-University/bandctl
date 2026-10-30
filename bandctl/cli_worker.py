@@ -43,11 +43,11 @@ def _remove_stale_socket(path: str) -> None:
 
 
 def run_worker(iface: str, *, lock_path: str = "/run/bandctl.lock", socket_path: str = SOCKET_PATH,
-               host=None, processes=scan_processes, detected_bps=None) -> None:
+               host=None, processes=scan_processes, detected_bps=None, match_wildcard: bool = False) -> None:
     """Hold the session lock until the socket closes and shaping is removed."""
     with SessionLock(lock_path):
         _remove_stale_socket(socket_path)
-        shaper = Shaper(iface, host=host)
+        shaper = Shaper(iface, host=host, match_wildcard=match_wildcard)
         try:
             shaper.recover()
             if shaper.recovery_error:
@@ -67,6 +67,7 @@ def _stop(signum, _frame) -> None:
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="bandctl session")
     parser.add_argument("--iface", required=True)
+    parser.add_argument("--match-wildcard", action="store_true")
     args = parser.parse_args(argv)
     if os.geteuid() != 0:
         print("bandctl: root is required for limits", file=sys.stderr)
@@ -74,7 +75,7 @@ def main(argv=None) -> int:
     signal.signal(signal.SIGTERM, _stop)
     try:
         check_iface(args.iface)
-        run_worker(args.iface)
+        run_worker(args.iface, match_wildcard=args.match_wildcard)
     except (IfaceError, SessionLockError, ShaperError, OSError, RuntimeError) as exc:
         print(f"bandctl: {exc}", file=sys.stderr)
         return 1

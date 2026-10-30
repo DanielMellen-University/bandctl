@@ -31,6 +31,10 @@ def main(argv: list[str] | None = None) -> int:
         help="Interface to shape. Default: the device on the IPv4 default route.",
     )
     parser.add_argument("--config", help="Import this settings file at startup.")
+    parser.add_argument(
+        "--match-wildcard", action="store_true",
+        help="Match wildcard-bound UDP by port; may also shape other processes sharing that port.",
+    )
     commands = parser.add_subparsers(dest="command")
     list_parser = commands.add_parser("list", help="List running processes.")
     list_parser.add_argument("--json", action="store_true", help="Write JSON output.")
@@ -80,7 +84,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"bandctl: {exc}", file=sys.stderr)
             return 1
     try:
-        app = BandctlApp(iface=args.iface, startup_settings=args.config)
+        app = BandctlApp(iface=args.iface, startup_settings=args.config, match_wildcard=args.match_wildcard)
 
         def _stop(signum, _frame) -> None:
             _cleanup(app)

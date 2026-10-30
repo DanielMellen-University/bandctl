@@ -24,7 +24,8 @@ def dispatch(session, request) -> tuple[dict, bool]:
         if command not in _FIELDS or set(request) != _FIELDS[command]:
             raise ValueError("invalid command fields")
         if command == "ping":
-            return {"ok": True, "result": {"iface": session.iface}}, False
+            return {"ok": True, "result": {"iface": session.iface,
+                                             "match_wildcard": getattr(session, "match_wildcard", False) is True}}, False
         if command in ("limit", "remove"):
             if not isinstance(request["target"], str):
                 raise ValueError("target must be text")

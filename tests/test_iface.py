@@ -100,6 +100,25 @@ class CheckTests(unittest.TestCase):
 
 
 class CommandLineTests(unittest.TestCase):
+    def test_wildcard_option_reaches_tui_and_help_explains_shared_ports(self):
+        import contextlib
+        import io
+        from unittest.mock import patch
+        from bandctl.__main__ import main
+
+        help_text = io.StringIO()
+        with contextlib.redirect_stdout(help_text), self.assertRaises(SystemExit):
+            main(["--help"])
+        self.assertIn("--match-wildcard", help_text.getvalue())
+        self.assertIn("other processes sharing that port", " ".join(help_text.getvalue().split()))
+        with patch("bandctl.__main__.BandctlApp") as app, \
+             patch("bandctl.__main__.signal.signal"), patch("bandctl.__main__.atexit.register"), \
+             patch("os.geteuid", return_value=1000):
+            app.return_value.is_root = False
+            app.return_value.cleanup_errors = []
+            self.assertEqual(main(["--match-wildcard"]), 0)
+        app.assert_called_once_with(iface=None, startup_settings=None, match_wildcard=True)
+
     def test_startup_config_selects_saved_interface(self):
         from unittest.mock import patch
         from bandctl.__main__ import main
@@ -115,7 +134,7 @@ class CommandLineTests(unittest.TestCase):
                 app.return_value.cleanup_errors = []
                 self.assertEqual(main(["--config", str(path)]), 0)
             check.assert_called_once_with("eth0")
-            app.assert_called_once_with(iface="eth0", startup_settings=str(path))
+            app.assert_called_once_with(iface="eth0", startup_settings=str(path), match_wildcard=False)
 
     def test_startup_config_rejects_conflicting_iface(self):
         from bandctl.__main__ import main

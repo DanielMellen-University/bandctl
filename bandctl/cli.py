@@ -85,7 +85,7 @@ def run_command(args) -> int:
             if iface is not None and iface != saved.iface:
                 raise ValueError("--iface differs from the settings file interface")
             iface = saved.iface
-        ensure_session(iface, start=args.command in ("limit", "import"))
+        ensure_session(iface, start=args.command in ("limit", "import"), match_wildcard=args.match_wildcard)
         response = request(SOCKET_PATH, payload, timeout=30.0)
         warnings = response.get("warnings", [])
         if not response["ok"]:

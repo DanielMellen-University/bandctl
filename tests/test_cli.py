@@ -84,6 +84,16 @@ class LimitInputTests(unittest.TestCase):
 
 
 class WarningTests(unittest.TestCase):
+    def test_wildcard_option_reaches_cli_session_start(self):
+        from bandctl.__main__ import main
+        response = {"ok": True, "result": {"pid": 42, "down": 30, "up": None}}
+        with patch("os.geteuid", return_value=0), \
+             patch("bandctl.cli_client.ensure_session") as ensure, \
+             patch("bandctl.cli_transport.request", return_value=response), \
+             contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(main(["--match-wildcard", "limit", "42", "--down", "30"]), 0)
+        ensure.assert_called_once_with(None, start=True, match_wildcard=True)
+
     def test_background_warnings_are_reported_in_text_and_json(self):
         from bandctl.__main__ import main
         response = {"ok": True, "result": {"pid": 42, "down": 30, "up": None}, "warnings": ["filter failed"]}

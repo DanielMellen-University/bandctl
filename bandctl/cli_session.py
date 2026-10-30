@@ -21,6 +21,7 @@ class CliSession:
     def __init__(self, shaper, iface: str, detected_bps: int | None, processes, *, speed_source=None):
         self.shaper = shaper
         self.iface = iface
+        self.match_wildcard = shaper.match_wildcard
         self.detected_bps = detected_bps
         self.processes = processes
         self.speed_source = speed_source

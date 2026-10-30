@@ -4,11 +4,29 @@ import subprocess
 import unittest
 from unittest.mock import Mock, patch
 
-from bandctl.cli_client import ensure_session, wait_for_stop
+from bandctl.cli_client import _ping, ensure_session, wait_for_stop
 from bandctl.session_lock import SessionLockError
 
 
 class ClientTests(unittest.TestCase):
+    def test_explicit_wildcard_option_requires_an_enabled_session(self):
+        with patch("bandctl.cli_client.request", return_value={"ok": True, "result": {"iface": "eth0", "match_wildcard": False}}):
+            self.assertEqual(_ping("socket"), "eth0")
+            with self.assertRaisesRegex(ValueError, "did not enable --match-wildcard"):
+                _ping("socket", match_wildcard=True)
+        with patch("bandctl.cli_client.request", return_value={"ok": True, "result": {"iface": "eth0", "match_wildcard": True}}):
+            self.assertEqual(_ping("socket", match_wildcard=True), "eth0")
+            self.assertEqual(_ping("socket"), "eth0")
+
+    def test_wildcard_option_is_passed_to_new_worker(self):
+        worker = Mock()
+        worker.stderr = io.BytesIO()
+        with patch("bandctl.cli_client._ping", side_effect=[None, "eth0"]), \
+             patch("bandctl.cli_client.check_iface", return_value="eth0"), \
+             patch("bandctl.cli_client.subprocess.Popen", return_value=worker) as start:
+            self.assertEqual(ensure_session("eth0", start=True, match_wildcard=True), "eth0")
+        self.assertIn("--match-wildcard", start.call_args.args[0])
+
     def test_existing_session_checks_requested_interface(self):
         with patch("bandctl.cli_client._ping", return_value="eth0"):
             self.assertEqual(ensure_session(None, start=False), "eth0")

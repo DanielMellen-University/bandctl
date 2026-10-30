@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add opt-in `--match-wildcard` UDP port matching for existing wildcard-bound sockets. It can also shape other processes sharing the port.
+
 - Removal and exit leave a process alone if it has moved out of its bandctl cgroup.
 
 - Recovery rejects named pipes instead of waiting indefinitely for a writer.

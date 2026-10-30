@@ -171,7 +171,7 @@ While an upload share is active, bandctl replaces the root qdisc on the chosen i
 
 bandctl creates its own nftables table named `inet bandctl`. It refuses to apply limits if that table already exists.
 
-Existing connections are matched by address and port because moving a process does not move its existing sockets. The list is refreshed about once a second. An existing UDP socket bound to a wildcard address is not reliably matched by this filter.
+Existing connections are matched by address and port because moving a process does not move its existing sockets. The list is refreshed about once a second. An existing UDP socket bound to a wildcard address is not reliably matched by this filter. Start with `--match-wildcard` to match such UDP sockets by local port within their address family. This can also shape other processes sharing that port. The option is off by default and lasts for the session. For CLI sessions, put it before the first `limit` or `import` command. A running session keeps its setting; stop it to change the setting.
 
 ## Docs
 
