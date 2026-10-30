@@ -124,6 +124,32 @@ class CliSessionTests(unittest.TestCase):
         self.assertTrue(any("schedule ended" in message for message in messages))
         self.assertFalse(self.shaper.shares)
 
+    def test_scheduled_rule_switches_to_fallback_and_respects_manual_override(self):
+        from datetime import time
+        from unittest.mock import patch
+        from bandctl.schedule import DailyWindow
+
+        self.session.rules = [
+            AutoRule("firefox", 20, None, DailyWindow(time(9), time(17))),
+            AutoRule("firefox", None, 10),
+        ]
+        self.session.refresh(now=1, current=time(10))
+        self.assertEqual((self.shaper.shares[42].down_pct, self.shaper.shares[42].up_pct), (20, None))
+        write = self.host.write
+
+        def move_process(path, data):
+            write(path, data)
+            if path == "/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs":
+                self.host.files["/sys/fs/cgroup/bandctl/bandctl-42/cgroup.procs"] = ""
+
+        with patch.object(self.host, "write", side_effect=move_process):
+            self.session.refresh(now=2, current=time(17))
+        self.assertEqual((self.shaper.shares[42].down_pct, self.shaper.shares[42].up_pct), (None, 10))
+
+        self.session.limit("42", "40", None)
+        self.session.refresh(now=3, current=time(10))
+        self.assertEqual((self.shaper.shares[42].down_pct, self.shaper.shares[42].up_pct), (40, None))
+
     def test_manual_remove_prevents_rule_reapplying_to_same_process(self):
         from datetime import time
         self.session.rules = [AutoRule("firefox", 20, None)]
