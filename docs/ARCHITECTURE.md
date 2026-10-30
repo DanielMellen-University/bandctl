@@ -149,6 +149,6 @@ The sampler accumulates observed socket deltas per PID. Live processes keep thei
 
 Byte counts use decimal units such as kB and MB. They remain byte counts when the rate display switches between bits and bytes per second.
 
-`history.py` keeps one sample per second for each listed PID, for the last 60 seconds. A second where `ss` could not be read is left as a gap, and a PID that leaves the list or gets a new start time loses its history. The graph splits the minute into as many columns as fit beside the bar, draws the highest rate in each column, and scales to the highest rate in the window.
+`history.py` keeps one sample per second for each listed PID, for the last 60 seconds. A second where `ss` fails, even with partial output, is left as a gap, and a PID that leaves the list or gets a new start time loses its history. The graph splits the minute into as many columns as fit beside the bar, draws the highest rate in each column, and scales to the highest rate in the window.
 
 The filter box matches a lower-cased substring of the process name, command line, user, and pid. An empty filter shows the rows above the 1% cutoff (or every row after `n`). Any text in the filter searches every scanned process.

@@ -32,6 +32,11 @@ class ParseTests(unittest.TestCase):
             self.assertEqual(read_ss(), "")
         self.assertEqual(run.call_args.args[0], ["ss", "-tinpeH"])
 
+    def test_read_ss_rejects_failed_command_with_partial_output(self):
+        result = SimpleNamespace(returncode=1, stdout=_SS)
+        with patch("bandctl.traffic.subprocess.run", return_value=result):
+            self.assertIsNone(read_ss())
+
     def test_read_ss_handles_non_utf8_process_names(self):
         def run(_args, **kwargs):
             output = b'users:(("bad\xffname",pid=5,fd=1))'

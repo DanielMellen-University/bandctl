@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Failed `ss` commands no longer use partial output as a traffic sample.
+
 - TCP rate sampling no longer uses an expired baseline when an absent socket reappears.
 
 - Process scans show a numeric UID if user lookup fails.

@@ -165,7 +165,7 @@ class TrafficSampler:
 
 
 def read_ss() -> str | None:
-    """Stdout of ``ss -tinpeH``, or None when ``ss`` cannot be run."""
+    """Stdout of ``ss -tinpeH``, or None when the command fails."""
     try:
         result = subprocess.run(
             ["ss", "-tinpeH"],
@@ -178,7 +178,7 @@ def read_ss() -> str | None:
         )
     except (OSError, subprocess.TimeoutExpired):
         return None
-    if result.returncode != 0 and not result.stdout:
+    if result.returncode != 0:
         return None
     return result.stdout
 
