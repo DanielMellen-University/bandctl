@@ -27,6 +27,13 @@ ESTAB 0 0 192.168.1.97:10 9.9.9.9:443 users:(("old",pid=4,fd=1))
 
 
 class ParseTests(unittest.TestCase):
+    def test_process_name_does_not_add_socket_owners(self):
+        text = ('ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 '
+                'users:(("worker,pid=99,fd=2",pid=5,fd=1)) sk:a\n'
+                '\t bytes_received:100 bytes_acked:20\n')
+        self.assertEqual(parse_ss(text), {5: (100, 20)})
+        self.assertEqual(parse_ss_sockets(text), {(5, "sk:a"): (100, 20)})
+
     def test_read_ss_requests_socket_identity(self):
         with patch("bandctl.traffic.subprocess.run", return_value=SimpleNamespace(returncode=0, stdout="")) as run:
             self.assertEqual(read_ss(), "")

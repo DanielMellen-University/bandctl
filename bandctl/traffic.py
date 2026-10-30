@@ -12,7 +12,7 @@ import ipaddress
 import re
 import subprocess
 
-_PID_RE = re.compile(r"pid=(\d+)")
+_PID_RE = re.compile(r'\("(?:\\.|[^"\\])*",pid=(\d+)(?=,|\))')
 _SOCKET_COOKIE_RE = re.compile(r"\bsk:([0-9a-fA-F]+)\b")
 _SOCKET_INODE_RE = re.compile(r"\bino:(\d+)\b")
 _FIELD_RE = {
