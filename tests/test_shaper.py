@@ -1774,6 +1774,38 @@ class ApplyTests(unittest.TestCase):
                 self.assertIsNone(shaper.flow_warning)
                 self.assertEqual(shaper._flows, {})
 
+    def test_later_process_scan_failure_preserves_both_directions_until_retry(self):
+        shaper, host = _shaper()
+        _open_socket(host)
+        host.files["/proc/net/tcp"] += (
+            "2: 0800000A:9C41 04030201:01BB 01 0 0 0 0 0 100\n"
+        )
+        host.links["/proc/43/fd/3"] = "socket:[100]"
+        shaper.apply(42, 30, 10, 100_000_000, 100_000_000)
+        shaper.apply(43, 30, 10, 100_000_000, 100_000_000)
+        existing = dict(shaper._flows)
+        self.assertEqual(len(existing), 4)
+        host.links.pop("/proc/42/fd/3")
+        listdir = host.listdir
+
+        def fail_second_process(path):
+            if path == "/proc/43/fd":
+                raise PermissionError("read denied")
+            return listdir(path)
+
+        host.commands.clear()
+        with patch.object(host, "listdir", side_effect=fail_second_process):
+            shaper.sample()
+        self.assertIn("/proc/43/fd", shaper.flow_warning)
+        self.assertEqual(shaper._flows, existing)
+        self.assertFalse(any("filter del" in command and "flower" in command for command in _joined(host)))
+
+        shaper.sample()
+        self.assertIsNone(shaper.flow_warning)
+        self.assertEqual(len(shaper._flows), 2)
+        deleted = [args for args, _ in host.commands if "flower" in args and "del" in args]
+        self.assertEqual({args[args.index("parent") + 1] for args in deleted}, {"1:", "ffff:"})
+
     def test_first_scan_rejects_missing_ipv4_socket_tables(self):
         for missing in ("tcp", "udp"):
             with self.subTest(missing=missing):
