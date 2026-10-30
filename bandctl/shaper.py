@@ -609,11 +609,26 @@ class Shaper:
             if state and state.get("iface"):
                 iface = str(state["iface"])
                 qdisc = str(state.get("qdisc") or "fq_codel")
+                starts = state.get("start_ticks")
+                if not isinstance(starts, dict):
+                    starts = {}
                 for pid_text, original in (state.get("pids") or {}).items():
                     try:
-                        self._restore_pid(int(pid_text), str(original))
+                        pid = int(pid_text)
+                        if self._read_cgroup(pid) != f"/bandctl/bandctl-{pid}":
+                            continue
+                        start = starts.get(pid_text)
+                        if start is not None:
+                            try:
+                                current = parse_start_ticks(self.host.read(f"/proc/{pid}/stat"))
+                            except OSError:
+                                current = None
+                            if type(start) is not int or current != start:
+                                notes.append(f"cannot verify pid {pid}")
+                                continue
+                        self._restore_pid(pid, str(original))
                         notes.append(f"restored pid {pid_text}")
-                    except ShaperError as exc:
+                    except (ShaperError, ValueError) as exc:
                         notes.append(str(exc))
                 self._saved_qdisc = qdisc
                 notes.extend(self._scrub(iface, restore_qdisc=state.get("root_replaced", True)))
@@ -1013,6 +1028,7 @@ class Shaper:
             "qdisc": self._saved_qdisc or "fq_codel",
             "root_replaced": self._egress if root_replaced is None else root_replaced,
             "pids": {str(share.pid): share.original_cgroup for share in self._shares.values()},
+            "start_ticks": {str(share.pid): share.start_ticks for share in self._shares.values()},
         }
         try:
             self.host.write(self.state_path, json.dumps(payload) + "\n")

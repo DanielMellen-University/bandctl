@@ -653,10 +653,64 @@ class ApplyTests(unittest.TestCase):
         shaper.apply(42, None, 10, None, 100_000_000)
         # A new process, same fake machine, as after a crash.
         again, _same = _shaper(host)
+        host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42\n"
         notes = again.recover()
         self.assertTrue(any("restored pid 42" in note for note in notes))
         self.assertTrue(any("qdisc add dev eth0 root fq_codel" in cmd for cmd in _joined(host)))
         self.assertNotIn("/run/bandctl.json", host.files)
+
+    def test_recover_does_not_restore_a_reused_pid_outside_the_leaf(self):
+        shaper, host = _shaper()
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+        host.files["/proc/42/stat"] = "42 (other) S " + "0 " * 18 + "200"
+        host.files["/proc/42/cgroup"] = "0::/other.slice\n"
+        host.files["/sys/fs/cgroup/bandctl/bandctl-42/cgroup.procs"] = ""
+        again = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+        notes = again.recover()
+        original = "/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs"
+        self.assertNotIn(original, host.files)
+        self.assertFalse(any(note == "restored pid 42" for note in notes))
+
+    def test_recover_checks_start_time_even_if_reused_pid_is_in_leaf(self):
+        shaper, host = _shaper()
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+        host.files["/proc/42/stat"] = "42 (other) S " + "0 " * 18 + "200"
+        host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42\n"
+        again = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+        again.recover()
+        original = "/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs"
+        self.assertNotIn(original, host.files)
+
+    def test_recover_restores_verified_pid_in_its_leaf(self):
+        shaper, host = _shaper()
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+        host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42\n"
+        again = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+        self.assertIn("restored pid 42", again.recover())
+        original = "/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs"
+        self.assertEqual(host.files[original], "42\n")
+
+    def test_recover_old_state_checks_cgroup_before_restoring(self):
+        shaper, host = _shaper()
+        original = "/user.slice/user-1000.slice/session-1.scope"
+        host.files["/run/bandctl.json"] = json.dumps({"iface": "eth0", "pids": {"42": original}})
+        host.files["/proc/42/cgroup"] = "0::/other.slice\n"
+        shaper.recover()
+        self.assertNotIn("/sys/fs/cgroup" + original + "/cgroup.procs", host.files)
+
+    def test_recover_does_not_restore_when_start_time_cannot_be_read(self):
+        shaper, host = _shaper()
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+        host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42\n"
+        del host.files["/proc/42/stat"]
+        again = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+        self.assertIn("cannot verify pid 42", again.recover())
+        original = "/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs"
+        self.assertNotIn(original, host.files)
 
     def test_recover_cleans_the_saved_interface_not_the_new_one(self):
         shaper, host = _shaper()

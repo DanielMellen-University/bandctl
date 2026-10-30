@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Crash recovery checks the saved process identity and cgroup before restoring a PID, so a reused PID is not moved to the old process's cgroup.
+
 - Manual TUI limits verify the selected process start time before changing it, so a reused PID is not mistaken for the old process.
 
 - Crash recovery cleans the interface saved by the previous session, even when the new session uses another interface. Download-only recovery leaves the root qdisc alone.
