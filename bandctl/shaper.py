@@ -620,6 +620,8 @@ class Shaper:
                 self._torn = True
                 self.recovery_error = "invalid recovery state: pids must be an object"
                 return [self.recovery_error]
+            pending_pids: set[int] = set()
+            pending_error: str | None = None
             if state and state.get("iface"):
                 iface = str(state["iface"])
                 qdisc = str(state.get("qdisc") or "fq_codel")
@@ -637,10 +639,20 @@ class Shaper:
                                 current = parse_start_ticks(self.host.read(f"/proc/{pid}/stat"))
                             except OSError:
                                 current = None
-                            if type(start) is not int or current != start:
+                            if type(start) is not int or current is None:
+                                pending_pids.add(pid)
+                                pending_error = f"cannot verify pid {pid}"
+                                notes.append(pending_error)
+                                continue
+                            if current != start:
                                 notes.append(f"cannot verify pid {pid}")
                                 continue
-                        self._restore_pid(pid, str(original))
+                        try:
+                            self._restore_pid(pid, str(original))
+                        except ShaperError as exc:
+                            pending_pids.add(pid)
+                            pending_error = str(exc)
+                            raise
                         notes.append(f"restored pid {pid_text}")
                     except (ShaperError, ValueError) as exc:
                         notes.append(str(exc))
@@ -651,16 +663,17 @@ class Shaper:
                 ingress_owned = state.get("ingress_owned") if "ingress_owned" in state else None
                 nft_owned = bool(state.get("nft_owned", True))
                 notes.extend(self._scrub(iface, restore_qdisc=restore_root,
-                                         ifb_owned=ifb_owned, ingress_owned=ingress_owned, nft_owned=nft_owned))
+                                         ifb_owned=ifb_owned, ingress_owned=ingress_owned, nft_owned=nft_owned,
+                                         protected_pids=pending_pids))
             else:
                 notes.extend(self._scrub(self.iface, restore_qdisc=False, ifb_owned=False,
                                          ingress_owned=False, nft_owned=False))
             self._shares.clear()
             self._classes.clear()
             self._filters.clear()
-            if self._egress or self._ifb_owned or self._ingress_owned or self._nft_cleanup_error:
+            if pending_pids or self._egress or self._ifb_owned or self._ingress_owned or self._nft_cleanup_error:
                 self._torn = True
-                self.recovery_error = f"recovery failed: {self._ifb_cleanup_error or self._nft_cleanup_error or notes[-1]}"
+                self.recovery_error = f"recovery failed: {self._ifb_cleanup_error or self._nft_cleanup_error or pending_error or notes[-1]}"
             else:
                 self._unlink_state()
         return notes
@@ -672,23 +685,25 @@ class Shaper:
             if self._torn:
                 return notes
             self._torn = True
+            pending_pids: set[int] = set()
             for share in list(self._shares.values()):
                 try:
                     self._restore_share(share)
                 except ShaperError as exc:
+                    pending_pids.add(share.pid)
                     notes.append(str(exc))
             self._shares.clear()
             # Only put a root qdisc back if this run replaced it. Otherwise a
             # failed cleanup would swap out a qdisc bandctl never touched.
             try:
-                self._sync()
+                self._sync(write_state=not pending_pids)
             except ShaperError as exc:
                 notes.append(str(exc))
                 notes.extend(self._scrub(self.iface, restore_qdisc=self._egress,
                                          ifb_owned=self._ifb_owned, ingress_owned=self._ingress_owned,
-                                         nft_owned=self._nft_owned))
-            self._remove_tree()
-            if not self._egress and not self._ifb_owned and not self._ingress_owned and not self._nft_cleanup_error:
+                                         nft_owned=self._nft_owned, protected_pids=pending_pids))
+            self._remove_tree(protected_pids=pending_pids)
+            if not pending_pids and not self._egress and not self._ifb_owned and not self._ingress_owned and not self._nft_cleanup_error:
                 self._unlink_state()
         return notes
 
@@ -767,12 +782,14 @@ class Shaper:
         except OSError:
             return
 
-    def _remove_tree(self) -> None:
+    def _remove_tree(self, *, protected_pids: set[int] | None = None) -> None:
         try:
             names = self.host.listdir(CGROUP_PARENT)
         except OSError:
             return
         for name in names:
+            if protected_pids and name in {f"bandctl-{pid}" for pid in protected_pids}:
+                continue
             try:
                 procs = self.host.read(f"{CGROUP_PARENT}/{name}/cgroup.procs")
             except OSError:
@@ -791,7 +808,7 @@ class Shaper:
         except OSError:
             pass
 
-    def _sync(self) -> None:
+    def _sync(self, *, write_state: bool = True) -> None:
         down_shares = [share for share in self._shares.values() if share.down_pct]
         up_shares = [share for share in self._shares.values() if share.up_pct]
         if self._shares and not self._nft_owned:
@@ -815,7 +832,8 @@ class Shaper:
         if self._ifb and self._down_cap:
             self._sync_direction(IFB, down_shares, self._down_cap)
         self._sync_flows()
-        self._write_state()
+        if write_state:
+            self._write_state()
 
     def _ensure_egress(self) -> None:
         if self._root_restore_failed:
@@ -1035,7 +1053,8 @@ class Shaper:
         self._nft_cleanup_error = None
 
     def _scrub(self, iface: str, *, restore_qdisc: bool, ifb_owned: bool | None = None,
-               ingress_owned: bool | None = None, nft_owned: bool = True) -> list[str]:
+               ingress_owned: bool | None = None, nft_owned: bool = True,
+               protected_pids: set[int] | None = None) -> list[str]:
         notes: list[str] = []
         self._nft_owned = nft_owned
         if nft_owned:
@@ -1069,7 +1088,7 @@ class Shaper:
                 notes.append(str(exc))
             else:
                 notes.append(f"restored root qdisc on {iface}")
-        self._remove_tree()
+        self._remove_tree(protected_pids=protected_pids)
         return notes
 
     def _root_kind(self, iface: str) -> str:

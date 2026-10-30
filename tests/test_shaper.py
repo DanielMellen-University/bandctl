@@ -733,6 +733,9 @@ class ApplyTests(unittest.TestCase):
         self.assertIn("cannot verify pid 42", again.recover())
         original = "/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs"
         self.assertNotIn(original, host.files)
+        self.assertIn("cannot verify pid 42", again.recovery_error)
+        self.assertIn("/run/bandctl.json", host.files)
+        self.assertNotIn("/sys/fs/cgroup/cgroup.procs", host.files)
 
     def test_recover_cleans_the_saved_interface_not_the_new_one(self):
         shaper, host = _shaper()
@@ -1106,6 +1109,38 @@ class CleanupTests(unittest.TestCase):
         host.fail_substr = None
         shaper.remove(42)
         self.assertEqual(shaper.shares, {})
+
+    def test_failed_process_restore_keeps_original_cgroup_for_recovery(self):
+        shaper, host = _shaper()
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+        host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42\n"
+        leaf = "/sys/fs/cgroup/bandctl/bandctl-42/cgroup.procs"
+        host.files[leaf] = "42\n"
+        original = "/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs"
+        write = host.write
+
+        def fail_original(path, data):
+            if path == original:
+                raise OSError("restore denied")
+            write(path, data)
+
+        with patch.object(host, "write", side_effect=fail_original):
+            notes = shaper.teardown()
+            self.assertTrue(any("restore denied" in note for note in notes))
+            self.assertIn("/run/bandctl.json", host.files)
+            self.assertNotIn("/sys/fs/cgroup/cgroup.procs", host.files)
+            again = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+            again.recover()
+            self.assertIn("restore denied", again.recovery_error)
+            self.assertIn("/run/bandctl.json", host.files)
+            self.assertNotIn("/sys/fs/cgroup/cgroup.procs", host.files)
+
+        retry = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+        retry.recover()
+        self.assertIsNone(retry.recovery_error)
+        self.assertEqual(host.files[original], "42\n")
+        self.assertNotIn("/run/bandctl.json", host.files)
 
     def test_teardown_reports_failed_qdisc_restore_and_keeps_recovery_state(self):
         shaper, host = _shaper()

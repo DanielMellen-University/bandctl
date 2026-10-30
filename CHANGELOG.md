@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Failed process restoration keeps its original cgroup in recovery state for a later retry.
+
 - Recovery rejects an invalid PID mapping without crashing or discarding the state file.
 
 - bandctl refuses an existing `inet bandctl` nftables table and leaves tables it did not create alone.
