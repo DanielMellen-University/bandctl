@@ -730,6 +730,39 @@ class ApplyTests(unittest.TestCase):
         self.assertNotIn(original, host.files)
         self.assertFalse(any(note == "restored pid 42" for note in notes))
 
+    def test_recover_rejects_invalid_ownership_flags_before_cleanup(self):
+        for field in ("root_replaced", "ifb_owned", "ingress_owned", "nft_owned"):
+            for value in ("false", None, 0):
+                with self.subTest(field=field, value=value):
+                    shaper, host = _shaper()
+                    state = json.dumps({"iface": "eth0", "pids": {}, field: value})
+                    host.files["/run/bandctl.json"] = state
+                    host.ifb_exists = True
+
+                    notes = shaper.recover()
+
+                    self.assertTrue(any(field in note for note in notes))
+                    self.assertIsNotNone(shaper.recovery_error)
+                    self.assertEqual(host.files["/run/bandctl.json"], state)
+                    self.assertTrue(host.ifb_exists)
+                    self.assertEqual(host.commands, [])
+
+    def test_recover_rejects_incomplete_download_ownership(self):
+        for field in ("ifb_owned", "ingress_owned"):
+            with self.subTest(field=field):
+                shaper, host = _shaper()
+                state = json.dumps({"iface": "eth0", "pids": {}, field: False})
+                host.files["/run/bandctl.json"] = state
+                host.ifb_exists = True
+
+                notes = shaper.recover()
+
+                self.assertTrue(any("ownership" in note for note in notes))
+                self.assertIsNotNone(shaper.recovery_error)
+                self.assertEqual(host.files["/run/bandctl.json"], state)
+                self.assertTrue(host.ifb_exists)
+                self.assertEqual(host.commands, [])
+
     def test_recover_rejects_incomplete_or_invalid_start_times(self):
         for starts in ([], {}, {"42": "100"}, {"42": True}):
             with self.subTest(start_ticks=starts):

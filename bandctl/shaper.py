@@ -617,8 +617,14 @@ class Shaper:
         with self._lock:
             try:
                 state = self._read_state()
-                if state is not None and (not isinstance(state.get("iface"), str) or not state["iface"]):
-                    raise ShaperError("invalid recovery state: missing interface")
+                if state is not None:
+                    if not isinstance(state.get("iface"), str) or not state["iface"]:
+                        raise ShaperError("invalid recovery state: missing interface")
+                    for field in ("root_replaced", "ifb_owned", "ingress_owned", "nft_owned"):
+                        if field in state and type(state[field]) is not bool:
+                            raise ShaperError(f"invalid recovery state: {field} must be a boolean")
+                    if ("ifb_owned" in state) != ("ingress_owned" in state):
+                        raise ShaperError("invalid recovery state: incomplete download ownership")
             except ShaperError as exc:
                 self._torn = True
                 self.recovery_error = str(exc)

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Recovery rejects invalid ownership flags before changing network state.
+
 - Recovery rejects invalid process start times instead of skipping identity checks.
 
 - A refresh arriving after the TUI screen closes no longer raises an error.
