@@ -13,10 +13,10 @@ class IfaceError(RuntimeError):
 
 def parse_ip_route(text: str) -> str | None:
     """First ``dev`` on a ``default`` line from ``ip route show default``."""
-    for line in text.splitlines():
+    for line in text.split("\n"):
         if not line.startswith("default "):
             continue
-        match = re.search(r"\bdev\s+(\S+)", line)
+        match = re.search(r"\bdev[ \t]+([^ \t\r\n]+)", line, flags=re.ASCII)
         if match:
             return match.group(1)
     return None
@@ -25,8 +25,8 @@ def parse_ip_route(text: str) -> str | None:
 def parse_proc_route(text: str) -> str | None:
     """Interface on the lowest-metric active IPv4 default route."""
     best: tuple[int, str] | None = None
-    for line in text.splitlines()[1:]:
-        parts = line.split()
+    for line in text.split("\n")[1:]:
+        parts = re.split(r"[ \t]+", line.strip(" \t\r"))
         if len(parts) < 8 or parts[1] != "00000000" or parts[7] != "00000000":
             continue
         try:

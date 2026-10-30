@@ -94,6 +94,18 @@ class LookupTests(unittest.TestCase):
                 with self.subTest(from_ip=bool(route)), self.assertRaisesRegex(IfaceError, "not a valid interface name"):
                     default_iface(run=lambda _args: route, proc_route=path)
 
+    def test_route_does_not_truncate_unicode_whitespace_in_interface_names(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "route"
+            for separator in ("\u0085", "\u00a0", "\u2028"):
+                name = "eth" + separator + "other"
+                path.write_text("Iface Destination Gateway Flags RefCnt Use Metric Mask\n"
+                                f"{name} 00000000 0 0001 0 0 10 00000000\n", encoding="utf-8")
+                for route in (f"default dev {name}\n", ""):
+                    with self.subTest(separator=repr(separator), from_ip=bool(route)), \
+                         self.assertRaisesRegex(IfaceError, "not a valid interface name"):
+                        default_iface(run=lambda _args: route, proc_route=path)
+
     def test_missing(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "route"
