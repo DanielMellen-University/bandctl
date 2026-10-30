@@ -570,6 +570,28 @@ class ApplyTests(unittest.TestCase):
                 write.assert_not_called()
         self.assertIn(42, shaper.shares)
 
+    def test_failed_remove_resynchronizes_the_restored_share(self):
+        shaper, _host = _shaper()
+        shaper.apply(42, None, 10, None, 100_000_000)
+        with patch.object(shaper, "_sync", side_effect=[ShaperError("remove failed"), None]) as sync:
+            with self.assertRaisesRegex(ShaperError, "remove failed"):
+                shaper.remove(42)
+        self.assertEqual(sync.call_count, 2)
+        self.assertIn(42, shaper.shares)
+
+    def test_failed_remove_reports_incomplete_rollback(self):
+        for failure in ("move", "sync"):
+            with self.subTest(failure=failure):
+                shaper, _host = _shaper()
+                shaper.apply(42, None, 10, None, 100_000_000)
+                moves = OSError("move failed") if failure == "move" else None
+                syncs = [ShaperError("remove failed"), ShaperError("sync failed") if failure == "sync" else None]
+                with patch.object(shaper, "_move_to_leaf", side_effect=moves), \
+                     patch.object(shaper, "_sync", side_effect=syncs):
+                    with self.assertRaisesRegex(ShaperError, "remove failed.*rollback incomplete.*" + failure + " failed"):
+                        shaper.remove(42)
+                self.assertIn(42, shaper.shares)
+
     def test_sample_retires_reused_pid_without_moving_replacement(self):
         shaper, host = _shaper()
         stat = "/proc/42/stat"

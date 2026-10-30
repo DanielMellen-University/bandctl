@@ -523,13 +523,20 @@ class Shaper:
             self._shares.pop(pid)
             try:
                 self._sync()
-            except ShaperError:
+            except (OSError, ShaperError) as exc:
                 self._shares[pid] = share
+                problems = []
                 if restored:
                     try:
                         self._move_to_leaf(share)
-                    except ShaperError:
-                        pass
+                    except (OSError, ShaperError) as rollback_exc:
+                        problems.append(str(rollback_exc))
+                try:
+                    self._sync()
+                except (OSError, ShaperError) as rollback_exc:
+                    problems.append(str(rollback_exc))
+                if problems:
+                    raise ShaperError(f"{exc}; rollback incomplete: {'; '.join(problems)}") from exc
                 raise
             self._rmdir_leaf(pid)
         return f"removed limits on pid {pid}"

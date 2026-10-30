@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Failed removals retry synchronization and report incomplete rollback.
+
 - Settings import rejects named pipes instead of waiting indefinitely for a writer.
 
 - Malformed socket rows with invalid ports are skipped before filters are built.
