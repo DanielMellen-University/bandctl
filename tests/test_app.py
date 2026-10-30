@@ -595,6 +595,17 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(app._down_budget, 200_000_000)
             self.assertEqual(app._status_text, "capacity updated")
 
+    async def test_unit_toggle_preserves_budget_when_applying_a_share(self):
+        fake = FakeShaper()
+        app = _app(fake, link_bps=None)
+        async with app.run_test(size=(120, 36)):
+            app._selected = 42
+            app.query_one("#down-budget", Input).value = "1.234567"
+            app.query_one("#down-pct", Input).value = "30"
+            app.action_toggle_unit()
+            app.action_apply_limit()
+            self.assertEqual(fake.applied[-1][:5], (42, 30, None, 1_234_567, None))
+
     async def test_apply_uses_a_budget_that_was_not_submitted(self):
         fake = FakeShaper()
         app = _app(fake, link_bps=None)

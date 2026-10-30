@@ -7,6 +7,7 @@ link speed or a budget the user typed. 1 Mbit/s is 1_000_000 bit/s, and
 
 from __future__ import annotations
 
+from decimal import Decimal, localcontext
 from enum import Enum
 import math
 
@@ -52,7 +53,13 @@ def parse_budget(text: str, unit: Unit) -> int | None:
     bps = value * (1_000_000 if unit is Unit.MBIT else 8_000_000)
     if not math.isfinite(bps) or bps < 1:
         raise RateError("budget must be finite and at least 1 bit/s")
-    return int(bps)
+    decimal_value = Decimal(raw)
+    with localcontext() as context:
+        context.prec = max(28, len(decimal_value.as_tuple().digits) + 8)
+        exact_bps = decimal_value * (1_000_000 if unit is Unit.MBIT else 8_000_000)
+    if exact_bps < 1:
+        raise RateError("budget must be finite and at least 1 bit/s")
+    return int(exact_bps)
 
 
 def percent_to_bps(percent: int, capacity_bps: int) -> int:
@@ -82,11 +89,12 @@ def format_rate(bps: float, unit: Unit) -> str:
 
 def format_budget_input(bps: int, unit: Unit) -> str:
     """Number to put back into a budget field after the unit toggle."""
-    value = bps / 1_000_000 if unit is Unit.MBIT else bps / 8_000_000
-    if abs(value - round(value)) < 1e-6:
-        return str(int(round(value)))
-    text = f"{value:.2f}".rstrip("0").rstrip(".")
-    return text
+    scale = 1_000_000 if unit is Unit.MBIT else 8_000_000
+    whole, remainder = divmod(bps, scale)
+    if not remainder:
+        return str(whole)
+    fractional = remainder * (1_000_000_000 // scale)
+    return f"{whole}.{fractional:09d}".rstrip("0")
 
 
 def format_bytes(count: int) -> str:

@@ -79,6 +79,12 @@ class ConversionTests(unittest.TestCase):
         self.assertEqual(format_budget_input(100_000_000, Unit.MBIT), "100")
         self.assertEqual(format_budget_input(100_000_000, Unit.MB), "12.5")
 
+    def test_budget_input_round_trips_exact_bits(self):
+        for bps in (1, 101, 1_234_567, 100_000_001):
+            for unit in Unit:
+                with self.subTest(bps=bps, unit=unit):
+                    self.assertEqual(parse_budget(format_budget_input(bps, unit), unit), bps)
+
 
 class PlanTests(unittest.TestCase):
     def test_single_share_keeps_its_ceil(self):

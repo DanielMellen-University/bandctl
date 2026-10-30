@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Unit toggles preserve budget values down to the bit when they are submitted again.
+
 - Invalid Unicode digits and very long percentages show a validation error instead of crashing the main screen.
 
 - TCP sampling ignores socket identifiers embedded in process names.
