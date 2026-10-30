@@ -276,6 +276,12 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(BandctlApp, "screen_stack", new_callable=PropertyMock, return_value=[]):
             app.on_data_table_row_highlighted(event)
 
+    async def test_late_refresh_after_screen_closes_is_ignored(self):
+        app = _app(FakeShaper())
+        with patch.object(BandctlApp, "screen_stack", new_callable=PropertyMock, return_value=[]):
+            await app._refresh()
+        self.assertFalse(app._busy)
+
     async def test_auto_rule_applies_to_new_process_and_respects_manual_removal(self):
         from bandctl.rules import AutoRule
 

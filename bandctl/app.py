@@ -470,7 +470,7 @@ class BandctlApp(App):
         self._render()
 
     async def _refresh(self) -> None:
-        if self._busy or isinstance(self.screen, (RootRequired, RulesScreen, GroupsScreen, SettingsScreen)):
+        if self._busy or not self.screen_stack or isinstance(self.screen, (RootRequired, RulesScreen, GroupsScreen, SettingsScreen)):
             return
         self._busy = True
         try:
