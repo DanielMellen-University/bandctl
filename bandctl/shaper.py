@@ -1182,7 +1182,8 @@ class Shaper:
 
     def _write_state(self, *, root_replaced: bool | None = None, required: bool = False) -> None:
         if not self._shares and not self._egress and not self._ifb and not self._nft_owned:
-            self._unlink_state()
+            # Leaves may still contain inherited processes. Teardown removes
+            # recovery state only after it has cleaned the cgroup tree.
             return
         payload = {
             "iface": self.iface,

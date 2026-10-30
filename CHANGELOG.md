@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Recovery state stays until exit cleanup, even after the last share is removed.
+
 - The TUI reports cleanup errors after exit and returns a failure status.
 
 - Failed cgroup leaf cleanup is reported and retried on the next start.

@@ -650,6 +650,8 @@ class ApplyTests(unittest.TestCase):
         self.assertIn("removed", message)
         self.assertFalse(shaper.upload_active)
         self.assertTrue(any("qdisc add dev eth0 root fq_codel" in cmd for cmd in _joined(host)))
+        self.assertIn("/run/bandctl.json", host.files)
+        shaper.teardown()
         self.assertNotIn("/run/bandctl.json", host.files)
 
     def test_sample_bits_per_second(self):
@@ -1256,6 +1258,32 @@ class CleanupTests(unittest.TestCase):
             notes = shaper.teardown()
         self.assertEqual(notes, [])
         self.assertNotIn("/run/bandctl.json", host.files)
+
+    def test_last_remove_keeps_state_for_failed_child_cleanup(self):
+        shaper, host = _shaper()
+        shaper.apply(42, None, 10, None, 100_000_000)
+        leaf = "/sys/fs/cgroup/bandctl/bandctl-42"
+        host.files[leaf + "/cgroup.procs"] = "43\n"
+        rmdir = host.rmdir
+        write = host.write
+
+        def busy_leaf(path):
+            if path == leaf:
+                raise OSError("cgroup is busy")
+            return rmdir(path)
+
+        def fail_child_move(path, data):
+            if path == "/sys/fs/cgroup/cgroup.procs":
+                raise OSError("root move denied")
+            return write(path, data)
+
+        with patch.object(host, "rmdir", side_effect=busy_leaf), \
+             patch.object(host, "write", side_effect=fail_child_move):
+            shaper.remove(42)
+            self.assertIn("/run/bandctl.json", host.files)
+            notes = shaper.teardown()
+            self.assertTrue(any("root move denied" in note for note in notes))
+            self.assertIn("/run/bandctl.json", host.files)
 
     def test_failed_leaf_cleanup_keeps_state_and_retries(self):
         shaper, host = _shaper()
