@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import stat
+import sys
 import tempfile
 import threading
 import unittest
@@ -125,6 +126,13 @@ def _joined(host: FakeHost) -> list[str]:
 
 
 class ParseTests(unittest.TestCase):
+    def test_command_output_with_invalid_utf8_does_not_crash(self):
+        host = LinuxHost()
+        output = host.run([sys.executable, "-c", "import os; os.write(1, b'out\\xff')"])
+        self.assertEqual(output, "out\ufffd")
+        with self.assertRaisesRegex(ShaperError, "error\ufffd"):
+            host.run([sys.executable, "-c", "import os; os.write(2, b'error\\xff'); exit(1)"])
+
     def test_root_qdisc(self):
         self.assertEqual(parse_root_qdisc("qdisc fq_codel 0: root refcnt 2\n"), "fq_codel")
         self.assertIsNone(parse_root_qdisc("qdisc fq_codel 0: parent 1:1\n"))

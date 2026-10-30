@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep shaping command output readable when it contains invalid UTF-8.
+
 - Reject interface names that recovery cannot safely read.
 
 - Reject non-UTF-8 route data instead of changing interface names during detection.
