@@ -5,11 +5,13 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from bandctl.cli_transport import request
 from bandctl.cli_worker import _remove_stale_socket, run_worker
 from bandctl.procscan import ProcessInfo
 from bandctl.session_lock import SessionLock, SessionLockError
+from bandctl.shaper import ShaperError
 from test_shaper import _shaper
 
 
@@ -25,6 +27,19 @@ def wait_ready(path):
 
 
 class WorkerTests(unittest.TestCase):
+    def test_worker_refuses_session_when_recovery_fails(self):
+        shaper, host = _shaper()
+        shaper.apply(42, None, 10, None, 100_000_000)
+        host.fail_substr = "tc qdisc add dev eth0 root"
+        with tempfile.TemporaryDirectory() as directory:
+            lock_path, socket_path = str(Path(directory) / "lock"), str(Path(directory) / "socket")
+            with patch("bandctl.cli_worker.serve") as serve:
+                with self.assertRaisesRegex(ShaperError, "recovery failed.*forced failure"):
+                    run_worker("eth0", lock_path=lock_path, socket_path=socket_path,
+                               host=host, processes=lambda: [], detected_bps=100_000_000)
+            serve.assert_not_called()
+            self.assertIn("/run/bandctl.json", host.files)
+
     def test_worker_holds_lock_and_cleans_up_after_stop(self):
         _, host = _shaper()
         host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"

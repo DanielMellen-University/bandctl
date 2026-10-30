@@ -19,7 +19,7 @@ python3 -m venv .venv
 | `tests/test_cli_process.py` | A real worker subprocess using fake shaping state and temporary socket and lock paths. |
 | `tests/test_cli_integration.py` | CLI limit, remove, export, import, and stop over a temporary socket with a fake host. |
 | `tests/test_cli_client.py` | Session discovery, startup failure, timeout, and waiting for cleanup. |
-| `tests/test_cli_worker.py` | Worker lock ownership, fake-host cleanup, and safe handling of stale or live socket paths. |
+| `tests/test_cli_worker.py` | Worker lock ownership, failed recovery, fake-host cleanup, and safe handling of stale or live socket paths. |
 | `tests/test_cli_transport.py` | Temporary local sockets, request framing, deeply nested requests, private permissions, refresh warnings, and cleanup without host shaping. |
 | `tests/test_cli_protocol.py` | Request fields, dispatch, error responses, and explicit session stop. |
 | `tests/test_cli_session.py` | Verified CLI session limits and removals, capacity failures, PID reuse, settings imports, changing capacity, scheduled rules, and manual overrides using a fake host. |

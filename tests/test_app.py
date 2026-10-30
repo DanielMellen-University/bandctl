@@ -99,6 +99,22 @@ def _app(fake, *, root=True, link_bps=100_000_000, rates=None):
 
 
 class AppTests(unittest.IsolatedAsyncioTestCase):
+    async def test_failed_recovery_is_shown_and_apply_is_disabled(self):
+        from bandctl.shaper import Shaper
+        from test_shaper import _shaper
+
+        previous, host = _shaper()
+        previous.apply(42, None, 10, None, 100_000_000)
+        host.fail_substr = "tc qdisc add dev eth0 root"
+        shaper = Shaper("eth0", host=host, state_path="/run/bandctl.json")
+        app = _app(None)
+        with patch("bandctl.app.Shaper", return_value=shaper):
+            async with app.run_test(size=(80, 24)):
+                self.assertIn("recovery failed", app._status_text)
+                self.assertIn("forced failure", app._status_text)
+                self.assertTrue(app.query_one("#apply", Button).disabled)
+                self.assertTrue(app.query_one("#remove", Button).disabled)
+
     async def test_manual_apply_verifies_selected_process_identity(self):
         fake = FakeShaper()
         proc = ProcessInfo(42, "curl", "curl", "user", 1, 123)

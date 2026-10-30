@@ -135,6 +135,7 @@ class Shaper:
     _flows: dict[tuple, InstalledFlow] = field(default_factory=dict)
     _next_flow_handle: int = 1
     flow_warning: str | None = None
+    recovery_error: str | None = None
 
     def __post_init__(self) -> None:
         if self.host is None:
@@ -646,6 +647,7 @@ class Shaper:
             self._filters.clear()
             if self._egress:
                 self._torn = True
+                self.recovery_error = f"recovery failed: {notes[-1]}"
             else:
                 self._unlink_state()
         return notes

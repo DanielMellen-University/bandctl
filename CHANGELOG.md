@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Failed root qdisc recovery is shown in the TUI and stops CLI session startup.
+
 - Failed root qdisc restoration is reported and keeps recovery state for a retry.
 
 - Recovery state updates replace the old file atomically, so a failed write does not truncate it.

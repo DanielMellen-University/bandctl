@@ -203,7 +203,12 @@ class BandctlApp(App):
             for note in self.shaper.recover():
                 self._log(note)
         await self._refresh()
-        if self.is_root and not self._ss_warned:
+        recovery_error = getattr(self.shaper, "recovery_error", None)
+        if recovery_error:
+            self.query_one("#apply", Button).disabled = True
+            self.query_one("#remove", Button).disabled = True
+            self._note(recovery_error, bad=True)
+        elif self.is_root and not self._ss_warned:
             self._note("ready")
         else:
             self.query_one("#apply", Button).disabled = True
@@ -212,7 +217,7 @@ class BandctlApp(App):
             banner.update("Not root. Limits stay off.  " + self.sudo_command())
             banner.add_class("-show")
             self._note("read-only, limits are off", bad=True)
-        if self._startup_settings:
+        if self._startup_settings and not recovery_error:
             if not self.is_root or self.shaper is None:
                 self._note("cannot import settings without root and an interface", bad=True)
             else:
