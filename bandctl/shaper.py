@@ -197,15 +197,15 @@ class Shaper:
                     raise ShaperError(f"pid {pid} changed since the process scan")
             if pid not in self._shares:
                 self._check_leaf_empty(pid)
+            created = pid not in self._shares
+            original = self._read_cgroup(pid) if created else None
             old_shares = {pid_: _copy_share(share) for pid_, share in self._shares.items()}
             old_caps = (self._down_cap, self._up_cap)
             self._revision += 1
             self._down_cap = down_cap
             self._up_cap = up_cap
-            created = pid not in self._shares
             if created:
                 minor = self._alloc_minor()
-                original = self._read_cgroup(pid)
                 share = Share(pid, down_pct, up_pct, minor, original, command, expected_start_ticks, self._revision)
             else:
                 share = self._shares[pid]

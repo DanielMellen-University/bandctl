@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A failed process cgroup lookup no longer changes capacity for existing limits.
+
 - Recovery rejects invalid ownership flags before changing network state.
 
 - Recovery rejects invalid process start times instead of skipping identity checks.

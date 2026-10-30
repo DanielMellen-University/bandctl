@@ -430,6 +430,20 @@ class ApplyTests(unittest.TestCase):
                 self.assertNotIn("/sys/fs/cgroup/bandctl/bandctl-42", host.dirs)
                 self.assertNotIn("/run/bandctl.json", host.files)
 
+    def test_failed_cgroup_lookup_keeps_previous_capacity(self):
+        shaper, host = _shaper()
+        shaper.apply(42, None, 10, None, 100_000_000)
+        del host.files["/proc/43/cgroup"]
+
+        with self.assertRaisesRegex(ShaperError, "pid 43"):
+            shaper.apply(43, None, 20, None, 200_000_000)
+
+        self.assertEqual(shaper._up_cap, 100_000_000)
+        host.commands.clear()
+        shaper._sync()
+        self.assertTrue(any("classid 1:10" in cmd and "ceil 10000kbit" in cmd
+                            for cmd in _joined(host)))
+
     def test_shares_snapshot_does_not_change_when_live_share_changes(self):
         shaper, host = _shaper()
         shaper.apply(42, None, 10, None, 100_000_000)
