@@ -422,6 +422,40 @@ class ImportGroupTests(unittest.TestCase):
             shaper.replace_groups(settings, None, None)
         self.assertFalse(shaper.shares)
 
+    def test_invalid_rate_import_does_not_move_any_group_member(self):
+        shaper, host = self.setup_shaper()
+        shaper.apply_group(Group("old", None, 20, (42,)), {42: 100}, None, 100_000_000)
+        previous = shaper.shares
+        settings = self.settings([Group("new", None, 30, (43,))])
+        with patch.object(shaper, "_move_to_leaf", side_effect=ShaperError("unexpected move")) as move, \
+             patch.object(shaper, "_restore_share", side_effect=ShaperError("unexpected restore")) as restore:
+            with self.assertRaisesRegex(ShaperError, "too small"):
+                shaper.replace_groups(settings, None, 1)
+        move.assert_not_called()
+        restore.assert_not_called()
+        self.assertEqual(shaper.shares, previous)
+        self.assertEqual(shaper._up_cap, 100_000_000)
+
+    def test_invalid_group_rate_does_not_move_any_member(self):
+        shaper, host = self.setup_shaper()
+        with patch.object(shaper, "_move_to_leaf", side_effect=ShaperError("unexpected move")) as move:
+            with self.assertRaisesRegex(ShaperError, "too small"):
+                shaper.apply_group(Group("new", None, 10, (42, 43)), {42: 100, 43: 100}, None, 1)
+        move.assert_not_called()
+        self.assertFalse(shaper.shares)
+
+    def test_invalid_group_update_does_not_resync_existing_limit(self):
+        shaper, host = self.setup_shaper()
+        shaper.apply_group(Group("work", None, 20, (42, 43)), {42: 100, 43: 100}, None, 100_000_000)
+        previous = shaper.shares
+        with patch.object(host, "run", side_effect=ShaperError("unexpected sync")) as run:
+            with self.assertRaisesRegex(ShaperError, "too small") as error:
+                shaper.update_group("work", None, 20, None, 1)
+        self.assertNotIn("rollback incomplete", str(error.exception))
+        run.assert_not_called()
+        self.assertEqual(shaper.shares, previous)
+        self.assertEqual(shaper._up_cap, 100_000_000)
+
     def test_sync_failure_restores_previous_groups_and_processes(self):
         shaper, host = self.setup_shaper()
         shaper.apply_group(Group("old", 20, None, (42, 44)), {42: 100, 44: 100}, 100_000_000, None)
@@ -492,6 +526,25 @@ class ImportGroupTests(unittest.TestCase):
 
 
 class ApplyTests(unittest.TestCase):
+    def test_invalid_individual_rate_does_not_move_process(self):
+        shaper, host = _shaper()
+        with patch.object(shaper, "_move_to_leaf", side_effect=ShaperError("unexpected move")) as move:
+            with self.assertRaisesRegex(ShaperError, "too small"):
+                shaper.apply(42, None, 10, None, 1)
+        move.assert_not_called()
+        self.assertFalse(shaper.shares)
+
+    def test_invalid_individual_update_does_not_resync_existing_limit(self):
+        shaper, host = _shaper()
+        shaper.apply(42, None, 10, None, 100_000_000)
+        previous = shaper.shares
+        with patch.object(host, "run", side_effect=ShaperError("unexpected sync")) as run:
+            with self.assertRaisesRegex(ShaperError, "too small"):
+                shaper.apply(42, None, 10, None, 1)
+        run.assert_not_called()
+        self.assertEqual(shaper.shares, previous)
+        self.assertEqual(shaper._up_cap, 100_000_000)
+
     def test_unrepresentable_share_is_rejected_and_restored(self):
         shaper, host = _shaper()
         with self.assertRaisesRegex(ShaperError, "too small"):

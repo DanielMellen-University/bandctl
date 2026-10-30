@@ -199,6 +199,11 @@ class Shaper:
                 self._check_leaf_empty(pid)
             created = pid not in self._shares
             original = self._read_cgroup(pid) if created else None
+            candidate = (Share(pid, down_pct, up_pct, -1, original, command, expected_start_ticks)
+                         if created else _copy_share(existing))
+            candidate.down_pct, candidate.up_pct = down_pct, up_pct
+            proposed = [share for other, share in self._shares.items() if other != pid] + [candidate]
+            self._validate_rate_plans(proposed, down_cap, up_cap)
             old_shares = {pid_: _copy_share(share) for pid_, share in self._shares.items()}
             old_caps = (self._down_cap, self._up_cap)
             self._revision += 1
@@ -274,6 +279,8 @@ class Shaper:
                 raise ShaperError("download capacity is unknown; enter a download budget")
             if group.up_pct is not None and not up_cap:
                 raise ShaperError("upload capacity is unknown; enter an upload budget")
+            candidate = Share(group.members[0], group.down_pct, group.up_pct, -1, None, group=group.name)
+            self._validate_rate_plans([*self._shares.values(), candidate], down_cap, up_cap)
             old_caps = (self._down_cap, self._up_cap)
             minor = self._alloc_minor()
             self._down_cap, self._up_cap = down_cap, up_cap
@@ -405,6 +412,7 @@ class Shaper:
                         previous.original_cgroup if previous else originals[pid],
                         previous.command if previous else "", start, self._revision, item.group.name,
                     )
+            self._validate_rate_plans(list(replacement.values()), down_cap, up_cap)
             removed = []
             attempted = []
             self._shares = replacement
@@ -479,6 +487,11 @@ class Shaper:
                 raise ShaperError("download capacity is unknown; enter a download budget")
             if group.up_pct is not None and not up_cap:
                 raise ShaperError("upload capacity is unknown; enter an upload budget")
+            proposed = [_copy_share(share) for share in self._shares.values()]
+            for share in proposed:
+                if share.group is not None and share.group.casefold() == group.name.casefold():
+                    share.down_pct, share.up_pct = group.down_pct, group.up_pct
+            self._validate_rate_plans(proposed, down_cap, up_cap)
             old_shares = {share.pid: _copy_share(share) for share in members}
             old_caps = (self._down_cap, self._up_cap)
             self._down_cap, self._up_cap = down_cap, up_cap

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Rate plans are checked before moving processes for limits, groups, and settings imports.
+
 - Rejected capacity updates leave existing classes alone without an unnecessary rollback.
 
 - Limits that are too small for HTB classes are rejected instead of being reported as active.
