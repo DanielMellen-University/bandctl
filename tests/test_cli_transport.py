@@ -71,14 +71,56 @@ class TransportTests(unittest.TestCase):
 
     def test_multiple_requests_in_one_read_are_rejected(self):
         connection = Mock()
+        connection.gettimeout.return_value = None
         connection.recv.return_value = b'{"command":"stop"}\n{"command":"stop"}\n'
         with self.assertRaisesRegex(ValueError, "invalid request framing"):
             _read_line(connection)
 
     def test_fragmented_request_is_reassembled(self):
         connection = Mock()
+        connection.gettimeout.return_value = None
         connection.recv.side_effect = [b'{"command":', b'"ping"}\n']
         self.assertEqual(_read_line(connection), b'{"command":"ping"}')
+
+    def test_fragmented_request_cannot_extend_the_read_timeout(self):
+        connection = Mock()
+        connection.gettimeout.return_value = 1.0
+        clock = [0.0]
+        fragments = iter((b'{', b'"command":', b'"ping"', b'}\n'))
+
+        def recv(_size):
+            clock[0] += 0.4
+            return next(fragments)
+
+        connection.recv.side_effect = recv
+        with patch("bandctl.cli_transport.time.monotonic", side_effect=lambda: clock[0]):
+            with self.assertRaises(socket.timeout):
+                _read_line(connection)
+        self.assertEqual(connection.recv.call_count, 3)
+        connection.settimeout.assert_called_with(1.0)
+
+    def test_timed_out_request_allows_refresh_and_later_requests(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "session.sock")
+            refreshed = threading.Event()
+            session = Mock()
+            session.iface = "eth0"
+            session.refresh.side_effect = refreshed.set
+            thread = threading.Thread(target=serve, args=(session, path), kwargs={"interval": 0.05})
+            thread.start()
+            wait_ready(path)
+            try:
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                    client.settimeout(2)
+                    client.connect(path)
+                    client.sendall(b'{"command":')
+                    self.assertFalse(json.loads(client.recv(4096))["ok"])
+                self.assertTrue(refreshed.wait(2))
+                self.assertTrue(request(path, {"command": "ping"})["ok"])
+            finally:
+                request(path, {"command": "stop"})
+                thread.join(timeout=3)
+            self.assertFalse(thread.is_alive())
 
     def test_session_warnings_are_returned_to_the_client(self):
         with tempfile.TemporaryDirectory() as directory:

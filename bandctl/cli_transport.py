@@ -16,13 +16,24 @@ _MAX_RESPONSE = _MAX_MESSAGE * 2
 
 def _read_line(connection: socket.socket, *, limit: int = _MAX_MESSAGE) -> bytes:
     data = bytearray()
-    while len(data) <= limit:
-        part = connection.recv(min(4096, limit + 1 - len(data)))
-        if not part:
-            break
-        data.extend(part)
-        if b"\n" in part:
-            break
+    timeout = connection.gettimeout()
+    deadline = time.monotonic() + timeout if timeout is not None else None
+    try:
+        while len(data) <= limit:
+            if deadline is not None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise socket.timeout("timed out reading message")
+                connection.settimeout(remaining)
+            part = connection.recv(min(4096, limit + 1 - len(data)))
+            if not part:
+                break
+            data.extend(part)
+            if b"\n" in part:
+                break
+    finally:
+        if timeout is not None:
+            connection.settimeout(timeout)
     if len(data) > limit:
         raise ValueError("request is too large")
     if not data.endswith(b"\n") or data.count(b"\n") != 1:
