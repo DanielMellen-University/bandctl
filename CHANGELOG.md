@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Failed nftables cleanup keeps recovery state and blocks new limits until cleanup succeeds.
+
 - Failed download cleanup is reported and keeps recovery state for a retry. The IFB stays in place if ingress removal fails.
 
 - Download setup refuses an existing IFB device or ingress qdisc and leaves it untouched. Recovery records which download objects belonged to the session.

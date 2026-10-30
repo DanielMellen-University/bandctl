@@ -129,6 +129,7 @@ class Shaper:
     _ifb_owned: bool = False
     _ingress_owned: bool = False
     _ifb_cleanup_error: str | None = None
+    _nft_cleanup_error: str | None = None
     _saved_qdisc: str | None = None
     _classes: set[tuple[str, int]] = field(default_factory=set)
     _filters: set[tuple[str, int, str]] = field(default_factory=set)
@@ -650,9 +651,9 @@ class Shaper:
             self._shares.clear()
             self._classes.clear()
             self._filters.clear()
-            if self._egress or self._ifb_owned or self._ingress_owned:
+            if self._egress or self._ifb_owned or self._ingress_owned or self._nft_cleanup_error:
                 self._torn = True
-                self.recovery_error = f"recovery failed: {self._ifb_cleanup_error or notes[-1]}"
+                self.recovery_error = f"recovery failed: {self._ifb_cleanup_error or self._nft_cleanup_error or notes[-1]}"
             else:
                 self._unlink_state()
         return notes
@@ -672,15 +673,14 @@ class Shaper:
             self._shares.clear()
             # Only put a root qdisc back if this run replaced it. Otherwise a
             # failed cleanup would swap out a qdisc bandctl never touched.
-            replaced_root = self._egress
             try:
                 self._sync()
             except ShaperError as exc:
                 notes.append(str(exc))
-                notes.extend(self._scrub(self.iface, restore_qdisc=replaced_root,
+                notes.extend(self._scrub(self.iface, restore_qdisc=self._egress,
                                          ifb_owned=self._ifb_owned, ingress_owned=self._ingress_owned))
             self._remove_tree()
-            if not self._egress and not self._ifb_owned and not self._ingress_owned:
+            if not self._egress and not self._ifb_owned and not self._ingress_owned and not self._nft_cleanup_error:
                 self._unlink_state()
         return notes
 
@@ -952,6 +952,7 @@ class Shaper:
             if not any(text in str(exc).lower() for text in ("no such file", "not found")):
                 raise
         self._run(["tc", "qdisc", "add", "dev", iface, "root", kind])
+        self._record_recovery_fields(root_replaced=False)
         self._root_restore_failed = False
         self._egress = False
         self._drop_dev(iface)
@@ -989,11 +990,13 @@ class Shaper:
                 raise
 
     def _record_download_cleanup(self) -> None:
+        self._record_recovery_fields(ifb_owned=self._ifb_owned, ingress_owned=self._ingress_owned)
+
+    def _record_recovery_fields(self, **fields) -> None:
         state = self._read_state()
         if state is None:
             return
-        state["ifb_owned"] = self._ifb_owned
-        state["ingress_owned"] = self._ingress_owned
+        state.update(fields)
         try:
             self.host.write_state(self.state_path, json.dumps(state) + "\n")
         except (OSError, ShaperError) as exc:
@@ -1009,14 +1012,21 @@ class Shaper:
         except ShaperError as exc:
             text = str(exc).lower()
             if "no such file" in text or "does not exist" in text or "not found" in text:
+                self._nft_cleanup_error = None
                 return
+            self._nft_cleanup_error = str(exc)
             if strict:
                 raise
+        else:
+            self._nft_cleanup_error = None
 
     def _scrub(self, iface: str, *, restore_qdisc: bool, ifb_owned: bool | None = None,
                ingress_owned: bool | None = None) -> list[str]:
         notes: list[str] = []
-        self._delete_nft(strict=False)
+        try:
+            self._delete_nft(strict=True)
+        except ShaperError as exc:
+            notes.append(str(exc))
         if ifb_owned is None or ingress_owned is None:
             try:
                 self._run(["ip", "link", "show", IFB])

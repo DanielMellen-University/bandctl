@@ -847,6 +847,36 @@ class ApplyTests(unittest.TestCase):
 class CleanupTests(unittest.TestCase):
     """Fixes for teardown, remove, and failed apply."""
 
+    def test_failed_nft_cleanup_keeps_state_and_blocks_recovery_until_retry(self):
+        shaper, host = _shaper()
+        shaper.apply(42, 10, None, 100_000_000, None)
+        host.fail_substr = "nft delete table"
+        notes = shaper.teardown()
+        self.assertTrue(any("forced failure" in note for note in notes))
+        self.assertIn("/run/bandctl.json", host.files)
+        again = Shaper("eth0", host=host, state_path="/run/bandctl.json")
+        again.recover()
+        self.assertIn("forced failure", again.recovery_error)
+        self.assertIn("/run/bandctl.json", host.files)
+        host.fail_substr = None
+        retry = Shaper("eth0", host=host, state_path="/run/bandctl.json")
+        retry.recover()
+        self.assertIsNone(retry.recovery_error)
+        self.assertNotIn("/run/bandctl.json", host.files)
+
+    def test_nft_cleanup_failure_does_not_repeat_completed_root_restore(self):
+        shaper, host = _shaper()
+        shaper.apply(42, None, 10, None, 100_000_000)
+        host.fail_substr = "nft delete table"
+        shaper.teardown()
+        state = json.loads(host.files["/run/bandctl.json"])
+        self.assertFalse(state["root_replaced"])
+        self.assertEqual(_joined(host).count("tc qdisc add dev eth0 root fq_codel"), 1)
+        host.commands.clear()
+        host.fail_substr = None
+        Shaper("eth0", host=host, state_path="/run/bandctl.json").recover()
+        self.assertNotIn("tc qdisc del dev eth0 root", _joined(host))
+
     def test_failed_ingress_removal_keeps_ifb_and_share_for_retry(self):
         shaper, host = _shaper()
         shaper.apply(42, 10, None, 100_000_000, None)
@@ -1206,9 +1236,12 @@ class CleanupTests(unittest.TestCase):
         shaper, host = _shaper()
         shaper.apply(42, None, 10, None, 100_000_000)
         del host.files["/proc/42/cgroup"]
+        original_write = host.write
 
         def gone(path: str, data: str) -> None:
-            raise ShaperError(f"{path}: No such process")
+            if path.endswith("cgroup.procs"):
+                raise ShaperError(f"{path}: No such process")
+            original_write(path, data)
 
         host.write = gone  # type: ignore[method-assign]
         self.assertIn("removed", shaper.remove(42))
