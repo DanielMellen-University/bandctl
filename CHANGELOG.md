@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep existing socket filters when a port in a socket table is malformed.
+
 - Keep shaping command output readable when it contains invalid UTF-8.
 
 - Reject interface names that recovery cannot safely read.

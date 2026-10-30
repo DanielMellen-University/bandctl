@@ -116,6 +116,8 @@ def parse_proc_net(text: str, proto: str, family: str, *, strict: bool = False) 
 def _decode_endpoint(field: str, family: str) -> tuple[str, int, str]:
     """Return ``(address, port, family)``. Mapped IPv6 comes back as ``ip``."""
     ip_hex, port_hex = field.split(":")
+    if not re.fullmatch(r"[0-9a-fA-F]{4}", port_hex):
+        raise ValueError(port_hex)
     port = int(port_hex, 16)
     if not 0 <= port <= 65535:
         raise ValueError(port_hex)

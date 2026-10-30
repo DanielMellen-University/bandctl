@@ -1736,7 +1736,9 @@ class ApplyTests(unittest.TestCase):
     def test_malformed_socket_table_keeps_filters_until_retry(self):
         header = "sl local_address rem_address inode\n"
         for damaged in ("", "not a socket table\n", header + "0: truncated\n",
-                        header + "0: invalid:0050 04030201:01BB 01 0 0 0 0 0 99\n"):
+                        header + "0: invalid:0050 04030201:01BB 01 0 0 0 0 0 99\n",
+                        header + "0: 0800000A:9C4 04030201:01BB 01 0 0 0 0 0 99\n",
+                        header + "0: 0800000A:9C40 04030201:+1BB 01 0 0 0 0 0 99\n"):
             with self.subTest(damaged=damaged):
                 shaper, host = _shaper()
                 _open_socket(host)
