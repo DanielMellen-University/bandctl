@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep socket filters when a socket table ends mid-line.
+
 - Match Unicode case variants in process searches.
 
 - Match connected UDP sockets before unconnected sockets on the same address and port.

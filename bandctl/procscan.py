@@ -83,6 +83,8 @@ def parse_proc_net(text: str, proto: str, family: str, *, strict: bool = False) 
     lines = text.splitlines()
     if strict and (not lines or not {"local_address", "inode"}.issubset(lines[0].split())):
         raise ValueError("invalid socket table header")
+    if strict and not text.endswith("\n"):
+        raise ValueError("truncated socket table")
     for line in lines[1:]:
         parts = line.split()
         if len(parts) < 10 or not parts[9].isascii() or not parts[9].isdigit():
