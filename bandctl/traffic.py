@@ -69,8 +69,13 @@ def parse_ss(text: str) -> dict[int, tuple[int, int]]:
 
 def parse_ss_sockets(text: str, *, omit_unreported: bool = False) -> dict[tuple[int, str], tuple[int, int]]:
     """Map owned sockets to counters, optionally omitting records without counters."""
-    found: dict[tuple[int, str], tuple[int, int]] = {}
-    reported: set[tuple[int, str]] = set()
+    parsed = _parse_ss_socket_counters(text)
+    return {key: (received or 0, acked or 0) for key, (received, acked) in parsed.items()
+            if not omit_unreported or received is not None or acked is not None}
+
+
+def _parse_ss_socket_counters(text: str) -> dict[tuple[int, str], tuple[int | None, int | None]]:
+    found: dict[tuple[int, str], tuple[int | None, int | None]] = {}
     keys: list[tuple[int, str]] = []
     for raw in text.splitlines():
         if not raw.strip():
@@ -89,7 +94,7 @@ def parse_ss_sockets(text: str, *, omit_unreported: bool = False) -> dict[tuple[
                 identity = f"{local} {peer}" if local and peer else ""
             keys = [(pid, identity) for pid in pids] if identity else []
             for key in keys:
-                found[key] = (0, 0)
+                found[key] = (None, None)
             continue
         received = _field(raw, "bytes_received")
         acked = _field(raw, "bytes_acked")
@@ -98,17 +103,17 @@ def parse_ss_sockets(text: str, *, omit_unreported: bool = False) -> dict[tuple[
         if received is None and acked is None:
             continue
         for key in keys:
-            reported.add(key)
             previous = found[key]
             found[key] = (previous[0] if received is None else received, previous[1] if acked is None else acked)
-    return {key: value for key, value in found.items() if key in reported} if omit_unreported else found
+    return found
 
 
 class TrafficSampler:
     """Track socket counters and return per-process rates and session totals."""
 
     def __init__(self) -> None:
-        self._prev: dict[tuple[int, str], tuple[int, int, float]] | None = None
+        # Counters and their individual sample times, followed by last socket sighting.
+        self._prev: dict[tuple[int, str], tuple[int, int, float, float, float]] | None = None
         self._prev_at: float | None = None
         self._totals: dict[int, tuple[int, int]] = {}
         self._seen_pids: dict[int, float] = {}
@@ -135,11 +140,13 @@ class TrafficSampler:
 
     def rates(self, text: str, now: float) -> dict[int, tuple[float, float]]:
         # An ss record without counters is a gap, not a reset to zero.
-        current = parse_ss_sockets(text, omit_unreported=True)
+        current = {key: value for key, value in _parse_ss_socket_counters(text).items()
+                   if value != (None, None)}
         prev = self._prev
         prev_at = self._prev_at
         if prev is None or prev_at is None:
-            self._prev = {key: (received, acked, now) for key, (received, acked) in current.items()}
+            self._prev = {key: (received or 0, acked or 0, now, now, now)
+                          for key, (received, acked) in current.items()}
             self._prev_at = now
             for pid, _socket in current:
                 self._totals.setdefault(pid, (0, 0))
@@ -150,22 +157,27 @@ class TrafficSampler:
             return {}
         self.primed = True
         self._prev_at = now
-        self._prev = {key: value for key, value in prev.items() if now - value[2] <= 60}
+        self._prev = {key: value for key, value in prev.items() if now - value[4] <= 60}
         rates: dict[int, list[float]] = {}
         for (pid, socket), (received, acked) in current.items():
             old = prev.get((pid, socket))
-            if old is not None and old[2] < prev_at and now - old[2] > 60:
+            if old is not None and old[4] < prev_at and now - old[4] > 60:
                 old = None
-            elapsed = now - old[2] if old is not None else dt
-            down = max(0, received - old[0]) if old is not None else received
-            up = max(0, acked - old[1]) if old is not None else acked
+            down = 0 if received is None else max(0, received - old[0]) if old is not None else received
+            up = 0 if acked is None else max(0, acked - old[1]) if old is not None else acked
             total_down, total_up = self._totals.get(pid, (0, 0))
             self._totals[pid] = (total_down + down, total_up + up)
             self._seen_pids[pid] = now
             slot = rates.setdefault(pid, [0.0, 0.0])
-            slot[0] += down * 8 / elapsed
-            slot[1] += up * 8 / elapsed
-            self._prev[(pid, socket)] = (received, acked, now)
+            slot[0] += down * 8 / (now - old[2] if old is not None else dt)
+            slot[1] += up * 8 / (now - old[3] if old is not None else dt)
+            self._prev[(pid, socket)] = (
+                received if received is not None else old[0] if old is not None else 0,
+                acked if acked is not None else old[1] if old is not None else 0,
+                now if received is not None or old is None else old[2],
+                now if acked is not None or old is None else old[3],
+                now,
+            )
         return {pid: (pair[0], pair[1]) for pid, pair in rates.items()}
 
 

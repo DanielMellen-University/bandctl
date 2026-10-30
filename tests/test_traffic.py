@@ -146,6 +146,20 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(sampler.rates(header + '\t bytes_received:20\n', 2)[5], (160.0, 0.0))
         self.assertEqual(sampler.totals[5], (20, 0))
 
+    def test_missing_one_counter_keeps_its_baseline_and_elapsed_time(self):
+        header = 'ESTAB 0 0 10.0.0.2:1 1.1.1.1:1 users:(("x",pid=5,fd=1)) sk:a\n'
+        for partial, expected_partial in (
+            ('bytes_received:1010', (80.0, 0.0)),
+            ('bytes_acked:510', (0.0, 80.0)),
+        ):
+            with self.subTest(partial=partial):
+                sampler = TrafficSampler()
+                sampler.rates(header + '\t bytes_received:1000 bytes_acked:500\n', 1)
+                self.assertEqual(sampler.rates(header + '\t ' + partial + '\n', 2)[5], expected_partial)
+                rates = sampler.rates(header + '\t bytes_received:1020 bytes_acked:520\n', 3)
+                self.assertEqual(rates[5], (80.0, 80.0))
+                self.assertEqual(sampler.totals[5], (20, 20))
+
     def test_closing_one_socket_does_not_erase_another_sockets_traffic(self):
         first = ('ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 users:(("x",pid=5,fd=1)) sk:a\n'
                  '\t bytes_received:1000 bytes_acked:200\n')

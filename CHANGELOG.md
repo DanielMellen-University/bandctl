@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep each direction's socket baseline when only one byte counter is reported.
+
 - Keep socket counter baselines when a refresh omits byte counters, avoiding repeated traffic counts.
 
 - Address-specific socket filters take priority over wildcard UDP port filters.
