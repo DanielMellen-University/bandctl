@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- An apply waiting for teardown no longer installs a limit after shutdown.
+
 - Deeply nested settings files are rejected without stopping the session.
 
 - A deeply nested CLI socket request no longer stops the background session.

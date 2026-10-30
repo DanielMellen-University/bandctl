@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -133,6 +134,42 @@ class ParseTests(unittest.TestCase):
         self.assertIn("ct mark set 10 meta mark set 10", script)
         self.assertIn("hook output", script)
         self.assertIn("hook prerouting", script)
+
+
+class ShutdownRaceTests(unittest.TestCase):
+    def test_apply_waiting_for_lock_does_not_run_after_teardown(self):
+        shaper, host = _shaper()
+        entered = threading.Event()
+        lock = threading.RLock()
+
+        class ObservedLock:
+            def __enter__(self):
+                if threading.current_thread() is worker:
+                    entered.set()
+                lock.acquire()
+
+            def __exit__(self, *_args):
+                lock.release()
+
+        shaper._lock = ObservedLock()
+        errors = []
+
+        def apply():
+            try:
+                shaper.apply(42, None, 30, None, 100_000_000)
+            except ShaperError as exc:
+                errors.append(str(exc))
+
+        worker = threading.Thread(target=apply)
+        with lock:
+            worker.start()
+            self.assertTrue(entered.wait(2))
+            shaper.teardown()
+        worker.join(timeout=2)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(errors, ["shaper is shut down"])
+        self.assertEqual(shaper.shares, {})
+        self.assertNotIn("/sys/fs/cgroup/bandctl/bandctl-42/cgroup.procs", host.files)
 
 
 class SharedClassTests(unittest.TestCase):
