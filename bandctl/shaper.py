@@ -631,7 +631,14 @@ class Shaper:
                 for pid_text, original in (state.get("pids") or {}).items():
                     try:
                         pid = int(pid_text)
-                        if self._read_cgroup(pid) != f"/bandctl/bandctl-{pid}":
+                        try:
+                            cgroup = self._read_cgroup(pid)
+                        except ShaperError as exc:
+                            if not isinstance(exc.__cause__, FileNotFoundError):
+                                pending_pids.add(pid)
+                                pending_error = str(exc)
+                            raise
+                        if cgroup != f"/bandctl/bandctl-{pid}":
                             continue
                         start = starts.get(pid_text)
                         if start is not None:
@@ -727,8 +734,10 @@ class Shaper:
     def _read_cgroup(self, pid: int) -> str:
         try:
             text = self.host.read(f"/proc/{pid}/cgroup")
-        except OSError as exc:
+        except FileNotFoundError as exc:
             raise ShaperError(f"pid {pid} is not running") from exc
+        except OSError as exc:
+            raise ShaperError(f"cannot read cgroup for pid {pid}: {exc}") from exc
         for line in text.splitlines():
             if "::" in line:
                 path = line.split("::", 1)[1].strip() or "/"

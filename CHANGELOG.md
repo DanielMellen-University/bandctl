@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Recovery keeps a process in its leaf for retry if its cgroup cannot be read.
+
 - Failed process restoration keeps its original cgroup in recovery state for a later retry.
 
 - Recovery rejects an invalid PID mapping without crashing or discarding the state file.

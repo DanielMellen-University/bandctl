@@ -737,6 +737,33 @@ class ApplyTests(unittest.TestCase):
         self.assertIn("/run/bandctl.json", host.files)
         self.assertNotIn("/sys/fs/cgroup/cgroup.procs", host.files)
 
+    def test_recover_retries_when_process_cgroup_cannot_be_read(self):
+        shaper, host = _shaper()
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+        host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42\n"
+        host.files["/sys/fs/cgroup/bandctl/bandctl-42/cgroup.procs"] = "42\n"
+        original = "/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs"
+        read = host.read
+
+        def fail_cgroup(path):
+            if path == "/proc/42/cgroup":
+                raise PermissionError("read denied")
+            return read(path)
+
+        with patch.object(host, "read", side_effect=fail_cgroup):
+            again = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+            again.recover()
+            self.assertIn("42", again.recovery_error)
+            self.assertIn("/run/bandctl.json", host.files)
+            self.assertNotIn("/sys/fs/cgroup/cgroup.procs", host.files)
+
+        retry = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+        retry.recover()
+        self.assertIsNone(retry.recovery_error)
+        self.assertEqual(host.files[original], "42\n")
+        self.assertNotIn("/run/bandctl.json", host.files)
+
     def test_recover_cleans_the_saved_interface_not_the_new_one(self):
         shaper, host = _shaper()
         shaper.apply(42, 10, 10, 100_000_000, 100_000_000)
