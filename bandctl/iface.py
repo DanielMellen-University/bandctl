@@ -59,14 +59,16 @@ def default_iface(run=None, proc_route: Path | None = None) -> str:
         run = _run
     try:
         text = run(["ip", "route", "show", "default"])
-    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+    except (OSError, UnicodeDecodeError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
         text = ""
     name = parse_ip_route(text or "")
     if name:
         return name
     path = proc_route or Path("/proc/net/route")
     try:
-        name = parse_proc_route(path.read_text(encoding="utf-8", errors="replace"))
+        name = parse_proc_route(path.read_text(encoding="utf-8"))
+    except UnicodeDecodeError as exc:
+        raise IfaceError("routing table is not valid UTF-8; pass --iface") from exc
     except OSError as exc:
         raise IfaceError("could not read the routing table") from exc
     if not name:
@@ -120,7 +122,7 @@ def link_speed_bps(iface: str, speed_path: Path | None = None) -> int | None:
 
 
 def _run(args: list[str]) -> str:
-    proc = subprocess.run(args, capture_output=True, text=True, check=False, timeout=2)
+    proc = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", check=False, timeout=2)
     if proc.returncode != 0:
         return ""
     return proc.stdout

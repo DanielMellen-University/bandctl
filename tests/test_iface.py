@@ -67,6 +67,24 @@ class LookupTests(unittest.TestCase):
                 self.assertEqual(default_iface(proc_route=path), "wlan0")
         self.assertEqual(run.call_args.kwargs["timeout"], 2)
 
+    def test_undecodable_ip_output_falls_back_to_proc_route(self):
+        error = UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid byte")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "route"
+            path.write_text("Iface Destination Gateway Flags RefCnt Use Metric Mask\n"
+                            "wlan0 00000000 0 0001 0 0 10 00000000\n", encoding="utf-8")
+            with patch("bandctl.iface.subprocess.run", side_effect=error) as run:
+                self.assertEqual(default_iface(proc_route=path), "wlan0")
+        self.assertEqual(run.call_args.kwargs["encoding"], "utf-8")
+
+    def test_undecodable_proc_route_is_not_changed_into_another_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "route"
+            path.write_bytes(b"Iface Destination Gateway Flags RefCnt Use Metric Mask\n"
+                             b"eth\xff 00000000 0 0001 0 0 10 00000000\n")
+            with self.assertRaisesRegex(IfaceError, "routing table.*UTF-8"):
+                default_iface(run=lambda _args: "", proc_route=path)
+
     def test_missing(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "route"
