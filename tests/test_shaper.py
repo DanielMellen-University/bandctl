@@ -441,6 +441,7 @@ class ImportGroupTests(unittest.TestCase):
             with self.assertRaisesRegex(ShaperError, "rollback incomplete"):
                 shaper.replace_groups(settings, 100_000_000, None)
         self.assertEqual(shaper.shares[42].group, "new")
+        self.assertEqual(shaper._down_cap, 100_000_000)
 
     def test_import_rollback_keeps_reused_pid_in_old_leaf(self):
         shaper, host = self.setup_shaper()
@@ -459,6 +460,35 @@ class ImportGroupTests(unittest.TestCase):
         self.assertTrue(any("cannot verify pid 42" in note for note in notes))
         self.assertFalse(any(call.args[1] == "42\n" for call in write.call_args_list))
         self.assertIn("/run/bandctl.json", host.files)
+
+    def test_import_rollback_keeps_old_capacity_when_new_members_were_restored(self):
+        shaper, host = self.setup_shaper()
+        shaper.apply_group(Group("old", None, 20, (42,)), {42: 100}, None, 100_000_000)
+        settings = self.settings([Group("new", None, 30, (43,))])
+        move = shaper._move_to_leaf
+        sync = shaper._sync
+        sync_attempts = []
+
+        def fail_old_move(share):
+            if share.pid == 42:
+                raise ShaperError("old member move failed")
+            return move(share)
+
+        def fail_first_sync():
+            sync_attempts.append(True)
+            if len(sync_attempts) == 1:
+                raise ShaperError("import failed")
+            return sync()
+
+        with patch.object(shaper, "_move_to_leaf", side_effect=fail_old_move), \
+             patch.object(shaper, "_sync", side_effect=fail_first_sync):
+            with self.assertRaisesRegex(ShaperError, "rollback incomplete.*old member move failed"):
+                shaper.replace_groups(settings, None, 200_000_000)
+
+        self.assertEqual(set(shaper.shares), {42})
+        self.assertEqual(shaper._up_cap, 100_000_000)
+        classes = [cmd for cmd in _joined(host) if "class replace dev eth0" in cmd and "classid 1:10" in cmd]
+        self.assertIn("ceil 20000kbit", classes[-1])
 
 
 class ApplyTests(unittest.TestCase):

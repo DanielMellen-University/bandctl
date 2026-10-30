@@ -448,7 +448,7 @@ class Shaper:
                             self._move_to_leaf(share)
                         except (OSError, ShaperError) as move_error:
                             problems.append(f"cannot restore group for pid {share.pid}: {move_error}")
-                if problems and attempted:
+                if any(share.pid in self._shares for share in attempted):
                     # A newly moved member may still need the imported capacities.
                     self._down_cap, self._up_cap = down_cap, up_cap
                 try:

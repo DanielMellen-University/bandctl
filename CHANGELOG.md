@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Group import rollback restores old capacities when all newly added members were restored.
+
 - Group import rollback keeps a reused PID tracked when it remains in its old leaf.
 
 - Teardown, removal, and sampling keep a reused PID in its old leaf for safe recovery.
