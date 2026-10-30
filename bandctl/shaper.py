@@ -222,25 +222,25 @@ class Shaper:
             except Exception as exc:
                 attempted_move = created and pid in self._shares
                 self._shares = old_shares
-                rollback_error = None
+                problems = []
                 if attempted_move:
                     try:
                         self._restore_share(share)
                     except ShaperError as restore_exc:
-                        rollback_error = restore_exc
+                        problems.append(str(restore_exc))
                         self._shares[pid] = share
                     else:
                         # The leaf was made for this apply. Do not leave it behind.
                         self._rmdir_leaf(pid)
-                if rollback_error is None:
+                if not problems:
                     self._down_cap, self._up_cap = old_caps
                 try:
                     self._sync()
-                except ShaperError:
-                    pass
-                if rollback_error is not None:
+                except ShaperError as sync_exc:
+                    problems.append(str(sync_exc))
+                if problems:
                     self._write_state()
-                    raise ShaperError(f"{exc}; rollback incomplete: {rollback_error}") from exc
+                    raise ShaperError(f"{exc}; rollback incomplete: {'; '.join(problems)}") from exc
                 raise
         return _applied_text(share)
 
@@ -290,12 +290,14 @@ class Shaper:
                     created.append(share)
                     self._move_to_leaf(share)
                 self._sync()
-            except Exception:
+            except Exception as exc:
+                problems = []
                 for share in reversed(created):
                     try:
                         self._restore_share(share)
-                    except ShaperError:
+                    except ShaperError as restore_exc:
                         # Keep a process tracked if it could not be restored.
+                        problems.append(str(restore_exc))
                         continue
                     self._shares.pop(share.pid, None)
                     self._rmdir_leaf(share.pid)
@@ -303,8 +305,10 @@ class Shaper:
                     self._down_cap, self._up_cap = old_caps
                 try:
                     self._sync()
-                except ShaperError:
-                    pass
+                except ShaperError as sync_exc:
+                    problems.append(str(sync_exc))
+                if problems:
+                    raise ShaperError(f"{exc}; rollback incomplete: {'; '.join(problems)}") from exc
                 raise
 
     def add_group_member(self, name: str, pid: int, *, expected_start_ticks: int) -> None:
@@ -337,18 +341,21 @@ class Shaper:
             try:
                 self._move_to_leaf(share)
                 self._sync()
-            except Exception:
+            except Exception as exc:
+                problems = []
                 try:
                     self._restore_share(share)
-                except ShaperError:
-                    pass
+                except ShaperError as restore_exc:
+                    problems.append(str(restore_exc))
                 else:
                     self._shares.pop(pid, None)
                     self._rmdir_leaf(pid)
                 try:
                     self._sync()
-                except ShaperError:
-                    pass
+                except ShaperError as sync_exc:
+                    problems.append(str(sync_exc))
+                if problems:
+                    raise ShaperError(f"{exc}; rollback incomplete: {'; '.join(problems)}") from exc
                 raise
 
     def replace_groups(self, settings, down_cap: int | None, up_cap: int | None) -> None:
@@ -476,13 +483,13 @@ class Shaper:
             try:
                 self._require_caps()
                 self._sync()
-            except Exception:
+            except Exception as exc:
                 self._shares.update(old_shares)
                 self._down_cap, self._up_cap = old_caps
                 try:
                     self._sync()
-                except ShaperError:
-                    pass
+                except ShaperError as sync_exc:
+                    raise ShaperError(f"{exc}; rollback incomplete: {sync_exc}") from exc
                 raise
 
     def apply_tracked(

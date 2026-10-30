@@ -135,7 +135,7 @@ Keys:
 | `x` | Import or export settings |
 | `q` | Quit and remove every rule this process installed |
 
-The log under the bars keeps the last successes and failures. A failed `tc`, `nft`, or cgroup write is one line there and in the status bar. The previous share is left in place when an update fails. A brand new share is rolled back, and the empty cgroup made for it is removed. If the process cannot be restored, the error reports an incomplete rollback and the share stays listed so you can try Remove. Its ceiling may not be active. If Remove cannot put a running process back in its old cgroup, the share stays listed so you can try again. A process that has already exited is dropped.
+The log under the bars keeps the last successes and failures. A failed `tc`, `nft`, or cgroup write is one line there and in the status bar. bandctl tries to restore the previous share when an update fails and reports an incomplete rollback if that also fails. A brand new share is rolled back, and the empty cgroup made for it is removed. If the process cannot be restored, the error reports an incomplete rollback and the share stays listed so you can try Remove. Its ceiling may not be active. If Remove cannot put a running process back in its old cgroup, the share stays listed so you can try again. A process that has already exited is dropped.
 
 If restoring a process or the root qdisc, removing the download redirect, or deleting the nftables table fails, bandctl reports the error and keeps the recovery file. Remove can retry while the session is open; after exit, the next start retries recovery.
 

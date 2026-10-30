@@ -115,7 +115,7 @@ Unmarked traffic is not capped. It uses a default HTB class whose ceil is the wh
 
 If download shares (or upload shares) add up to more than 100%, each process still cannot cross its own percent. The rates HTB guarantees are scaled so they fit in the parent class. The status line reports the total.
 
-A failed new share is rolled back, and its empty cgroup is removed. If the process cannot be restored, the error reports an incomplete rollback and the share stays listed so you can try Remove. Its ceiling may not be active. The error text from `tc`, `nft`, or the cgroup write is in the log. bandctl refuses to use an existing `inet bandctl` table or replace an HTB root qdisc. A download share also requires that the interface has no existing ingress qdisc and that `ifb-bandctl` does not already exist.
+A failed share or group update is rolled back where possible. If rollback fails, the error reports that it is incomplete and the active ceiling may differ from the listed share. A failed new share is rolled back, and its empty cgroup is removed. If the process cannot be restored, the error reports an incomplete rollback and the share stays listed so you can try Remove. Its ceiling may not be active. The error text from `tc`, `nft`, or the cgroup write is in the log. bandctl refuses to use an existing `inet bandctl` table or replace an HTB root qdisc. A download share also requires that the interface has no existing ingress qdisc and that `ifb-bandctl` does not already exist.
 
 ## Exit
 

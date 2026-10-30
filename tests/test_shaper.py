@@ -214,6 +214,31 @@ class SharedClassTests(unittest.TestCase):
         with self.assertRaisesRegex(ShaperError, "already has"):
             shaper.add_group_member("work", 43, expected_start_ticks=100)
 
+    def test_group_operations_report_failed_synchronization_rollback(self):
+        for operation in ("create", "add", "update"):
+            with self.subTest(operation=operation):
+                shaper, host = self.group_shaper()
+                if operation != "create":
+                    shaper.apply_group(Group("work", None, 20, (42,)), {42: 100}, None, 100_000_000)
+                with patch.object(shaper, "_sync", side_effect=[ShaperError("update failed"),
+                                                               ShaperError("rollback failed")]):
+                    with self.assertRaisesRegex(ShaperError, "update failed.*rollback incomplete.*rollback failed"):
+                        if operation == "create":
+                            shaper.apply_group(Group("work", None, 20, (42,)), {42: 100}, None, 100_000_000)
+                        elif operation == "add":
+                            shaper.add_group_member("work", 43, expected_start_ticks=100)
+                        else:
+                            shaper.update_group("work", None, 30, None, 100_000_000)
+
+    def test_group_add_reports_failed_process_restoration(self):
+        shaper, host = self.group_shaper()
+        shaper.apply_group(Group("work", None, 20, (42,)), {42: 100}, None, 100_000_000)
+        with patch.object(shaper, "_restore_share", side_effect=ShaperError("restore failed")), \
+             patch.object(shaper, "_sync", side_effect=[ShaperError("update failed"), None]):
+            with self.assertRaisesRegex(ShaperError, "rollback incomplete.*restore failed"):
+                shaper.add_group_member("work", 43, expected_start_ticks=100)
+        self.assertIn(43, shaper.shares)
+
     def test_failed_add_restores_member_and_preserves_group(self):
         shaper, host = self.group_shaper()
         shaper.apply_group(Group("work", None, 20, (42,)), {42: 100}, None, 100_000_000)
@@ -419,6 +444,15 @@ class ImportGroupTests(unittest.TestCase):
 
 
 class ApplyTests(unittest.TestCase):
+    def test_individual_update_reports_failed_synchronization_rollback(self):
+        shaper, host = _shaper()
+        shaper.apply(42, None, 10, None, 100_000_000)
+        with patch.object(shaper, "_sync", side_effect=[ShaperError("update failed"),
+                                                       ShaperError("rollback failed")]):
+            with self.assertRaisesRegex(ShaperError, "update failed.*rollback incomplete.*rollback failed"):
+                shaper.apply(42, None, 20, None, 100_000_000)
+        self.assertEqual(shaper.shares[42].up_pct, 10)
+
     def test_first_share_needs_capacity_before_moving_process(self):
         for down, up, down_cap, up_cap in ((30, None, None, None), (None, 10, None, 0), (30, 10, 100_000_000, None)):
             with self.subTest(down=down, up=up):
