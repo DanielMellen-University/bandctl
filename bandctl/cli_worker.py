@@ -17,6 +17,7 @@ from bandctl.session_lock import SessionLock, SessionLockError
 from bandctl.shaper import Shaper, ShaperError
 
 SOCKET_PATH = "/run/bandctl.sock"
+_stop_signum: int | None = None
 
 
 def _remove_stale_socket(path: str) -> None:
@@ -43,7 +44,8 @@ def _remove_stale_socket(path: str) -> None:
 
 
 def run_worker(iface: str, *, lock_path: str = "/run/bandctl.lock", socket_path: str = SOCKET_PATH,
-               host=None, processes=scan_processes, detected_bps=None, match_wildcard: bool = False) -> None:
+               host=None, processes=scan_processes, detected_bps=None, match_wildcard: bool = False,
+               stop_requested=None) -> None:
     """Hold the session lock until the socket closes and shaping is removed."""
     with SessionLock(lock_path):
         _remove_stale_socket(socket_path)
@@ -55,16 +57,19 @@ def run_worker(iface: str, *, lock_path: str = "/run/bandctl.lock", socket_path:
             capacity = link_speed_bps(iface) if detected_bps is None else detected_bps
             speed_source = (lambda: link_speed_bps(iface)) if detected_bps is None else None
             session = CliSession(shaper, iface, capacity, processes, speed_source=speed_source)
-            serve(session, socket_path, on_stop=shaper.teardown)
+            if not (stop_requested and stop_requested()):
+                serve(session, socket_path, on_stop=shaper.teardown, stop_requested=stop_requested)
         finally:
             shaper.teardown()
 
 
 def _stop(signum, _frame) -> None:
-    raise SystemExit(128 + signum)
+    global _stop_signum
+    _stop_signum = signum
 
 
 def main(argv=None) -> int:
+    global _stop_signum
     parser = argparse.ArgumentParser(prog="bandctl session")
     parser.add_argument("--iface", required=True)
     parser.add_argument("--match-wildcard", action="store_true")
@@ -72,14 +77,16 @@ def main(argv=None) -> int:
     if os.geteuid() != 0:
         print("bandctl: root is required for limits", file=sys.stderr)
         return 1
+    _stop_signum = None
     signal.signal(signal.SIGTERM, _stop)
     try:
         check_iface(args.iface)
-        run_worker(args.iface, match_wildcard=args.match_wildcard)
+        run_worker(args.iface, match_wildcard=args.match_wildcard,
+                   stop_requested=lambda: _stop_signum is not None)
     except (IfaceError, SessionLockError, ShaperError, OSError, RuntimeError) as exc:
         print(f"bandctl: {exc}", file=sys.stderr)
         return 1
-    return 0
+    return 128 + _stop_signum if _stop_signum is not None else 0
 
 
 if __name__ == "__main__":

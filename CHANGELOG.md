@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Let an in-progress CLI session operation finish before SIGTERM cleanup.
+
 - Recheck process identity after reading its cgroup before restoring it.
 
 - Reject limits when an IPv4 socket table is missing on the first scan.

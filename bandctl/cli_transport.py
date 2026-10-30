@@ -86,7 +86,7 @@ def _encode_response(response: dict) -> bytes:
     return encode(limited)
 
 
-def serve(session, path: str, *, interval: float = 1.0, on_stop=None) -> None:
+def serve(session, path: str, *, interval: float = 1.0, on_stop=None, stop_requested=None) -> None:
     """Serve requests until stop; the caller owns the session lock and teardown."""
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
         # Bind under a restrictive umask so the socket is private from creation.
@@ -102,7 +102,7 @@ def serve(session, path: str, *, interval: float = 1.0, on_stop=None) -> None:
             listener.settimeout(min(interval, 0.5))
             next_refresh = time.monotonic() + interval
             stopping = False
-            while not stopping:
+            while not stopping and not (stop_requested and stop_requested()):
                 try:
                     connection, _ = listener.accept()
                 except socket.timeout:
@@ -132,7 +132,7 @@ def serve(session, path: str, *, interval: float = 1.0, on_stop=None) -> None:
                             connection.sendall(_encode_response(response))
                         except OSError:
                             pass
-                if not stopping and time.monotonic() >= next_refresh:
+                if not stopping and not (stop_requested and stop_requested()) and time.monotonic() >= next_refresh:
                     try:
                         session.refresh()
                     except (OSError, RuntimeError, ValueError) as exc:
