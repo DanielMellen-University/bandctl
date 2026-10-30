@@ -189,6 +189,20 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(sampler.rates(later, 2)[5], (400.0, 80.0))
         self.assertEqual(sampler.totals[5], (50, 10))
 
+    def test_shared_socket_counts_traffic_for_each_owner(self):
+        header = ('ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 '
+                  'users:(("a",pid=5,fd=1),("b",pid=6,fd=2)) sk:a\n')
+        sampler = TrafficSampler()
+        sampler.rates(header + '\t bytes_received:1000 bytes_acked:500\n', 1)
+        rates = sampler.rates(header + '\t bytes_received:1020 bytes_acked:510\n', 3)
+        self.assertEqual(rates, {5: (80.0, 40.0), 6: (80.0, 40.0)})
+        self.assertEqual(sampler.totals, {5: (20, 10), 6: (20, 10)})
+
+        one_owner = header.replace(',("b",pid=6,fd=2)', '')
+        rates = sampler.rates(one_owner + '\t bytes_received:1030 bytes_acked:515\n', 4)
+        self.assertEqual(rates, {5: (80.0, 40.0)})
+        self.assertEqual(sampler.totals, {5: (30, 15), 6: (20, 10)})
+
     def test_new_sockets_and_gaps_contribute_without_recounting(self):
         socket = ('ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 users:(("x",pid=5,fd=1)) sk:a\n'
                   '\t bytes_received:100 bytes_acked:20\n')
