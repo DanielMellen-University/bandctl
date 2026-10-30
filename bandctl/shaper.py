@@ -537,11 +537,18 @@ class Shaper:
             old = (self._down_cap, self._up_cap)
             self._down_cap = down_cap
             self._up_cap = up_cap
+            syncing = False
             try:
                 self._require_caps()
+                syncing = True
                 self._sync()
-            except Exception:
+            except Exception as exc:
                 self._down_cap, self._up_cap = old
+                if syncing:
+                    try:
+                        self._sync()
+                    except Exception as rollback_exc:
+                        raise ShaperError(f"{exc}; rollback incomplete: {rollback_exc}") from exc
                 raise
 
     def sample(self) -> dict[int, tuple[float, float]]:

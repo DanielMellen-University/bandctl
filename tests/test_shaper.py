@@ -430,6 +430,39 @@ class ApplyTests(unittest.TestCase):
                 self.assertNotIn("/sys/fs/cgroup/bandctl/bandctl-42", host.dirs)
                 self.assertNotIn("/run/bandctl.json", host.files)
 
+    def test_failed_capacity_update_restores_already_changed_classes(self):
+        shaper, host = _shaper()
+        shaper.apply(42, 10, 10, 100_000_000, 100_000_000)
+        host.commands.clear()
+        run = host.run
+        failed = [False]
+
+        def fail_download_class(args, input_text=None):
+            if (not failed[0] and args[:3] == ["tc", "class", "replace"]
+                    and "ifb-bandctl" in args and "1:10" in args):
+                failed[0] = True
+                raise ShaperError("download update failed", args)
+            return run(args, input_text)
+
+        with patch.object(host, "run", side_effect=fail_download_class):
+            with self.assertRaisesRegex(ShaperError, "download update failed"):
+                shaper.set_capacities(200_000_000, 200_000_000)
+
+        self.assertEqual((shaper._down_cap, shaper._up_cap), (100_000_000, 100_000_000))
+        up_classes = [cmd for cmd in _joined(host) if "class replace dev eth0" in cmd
+                      and "classid 1:10" in cmd]
+        self.assertEqual(len(up_classes), 2)
+        self.assertIn("ceil 20000kbit", up_classes[0])
+        self.assertIn("ceil 10000kbit", up_classes[1])
+
+    def test_capacity_update_reports_incomplete_rollback(self):
+        shaper, host = _shaper()
+        shaper.apply(42, None, 10, None, 100_000_000)
+        with patch.object(shaper, "_sync", side_effect=[ShaperError("update failed"),
+                                                       ShaperError("rollback failed")]):
+            with self.assertRaisesRegex(ShaperError, "rollback incomplete.*rollback failed"):
+                shaper.set_capacities(None, 200_000_000)
+
     def test_failed_cgroup_lookup_keeps_previous_capacity(self):
         shaper, host = _shaper()
         shaper.apply(42, None, 10, None, 100_000_000)

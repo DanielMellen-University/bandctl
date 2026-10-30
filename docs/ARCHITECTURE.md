@@ -110,7 +110,7 @@ The same HTB shape is then added on `ifb-bandctl`. `ctinfo` is `pipe` so the red
 
 Download setup refuses an existing `ifb-bandctl` device or ingress qdisc. It removes only the objects it created if setup fails. Recovery state records IFB and ingress ownership separately; older state files lack those fields and use the earlier IFB-based cleanup.
 
-Members of one group use the same minor, so their leaf rules and flower filters lead to the same HTB class. The class is counted once when rates are planned. Class rates are replaced in place when a percent or the capacity changes. Filters are added once per class. Removing the last share in a direction deletes that direction's qdisc. Removing the last share overall also deletes the nft table.
+Members of one group use the same minor, so their leaf rules and flower filters lead to the same HTB class. The class is counted once when rates are planned. Class rates are replaced in place when a percent or the capacity changes. A failed capacity update retries the old class rates and reports an incomplete rollback if that also fails. Filters are added once per class. Removing the last share in a direction deletes that direction's qdisc. Removing the last share overall also deletes the nft table.
 
 ## Failure and exit
 

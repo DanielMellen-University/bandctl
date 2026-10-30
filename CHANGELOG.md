@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Failed capacity updates restore earlier class rates where possible and report incomplete rollback.
+
 - Initial refresh and socket filter failures stay visible in the TUI status.
 
 - A root TUI with no default route keeps the interface error visible and disables shaping controls.
