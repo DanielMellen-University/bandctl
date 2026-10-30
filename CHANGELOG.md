@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Recovery rejects an invalid PID mapping without crashing or discarding the state file.
+
 - bandctl refuses an existing `inet bandctl` nftables table and leaves tables it did not create alone.
 
 - Failed nftables cleanup keeps recovery state and blocks new limits until cleanup succeeds.

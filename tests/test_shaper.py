@@ -656,6 +656,20 @@ class ApplyTests(unittest.TestCase):
         self.assertFalse(host.ifb_exists)
         self.assertNotIn("bandctl-42", host.dirs)
 
+    def test_recover_rejects_invalid_pid_mapping_and_keeps_state(self):
+        shaper, host = _shaper()
+        state = json.dumps({"iface": "eth0", "pids": [42]})
+        host.files["/run/bandctl.json"] = state
+
+        notes = shaper.recover()
+
+        self.assertIn("invalid recovery state: pids must be an object", notes)
+        self.assertIn("invalid recovery state", shaper.recovery_error)
+        self.assertEqual(host.files["/run/bandctl.json"], state)
+        self.assertEqual(host.commands, [])
+        with self.assertRaises(ShaperError):
+            shaper.apply(42, None, 10, None, 100_000_000)
+
     def test_recover_uses_state_file(self):
         shaper, host = _shaper()
         shaper.apply(42, None, 10, None, 100_000_000)

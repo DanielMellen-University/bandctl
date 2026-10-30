@@ -616,6 +616,10 @@ class Shaper:
         notes: list[str] = []
         with self._lock:
             state = self._read_state()
+            if state and "pids" in state and not isinstance(state["pids"], dict):
+                self._torn = True
+                self.recovery_error = "invalid recovery state: pids must be an object"
+                return [self.recovery_error]
             if state and state.get("iface"):
                 iface = str(state["iface"])
                 qdisc = str(state.get("qdisc") or "fq_codel")
