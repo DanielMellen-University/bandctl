@@ -1514,15 +1514,17 @@ class ApplyTests(unittest.TestCase):
         self.assertNotIn("/run/bandctl.json", host.files)
 
     def test_recover_keeps_state_when_cgroup_entry_has_an_extra_line(self):
-        shaper, host = _shaper()
-        shaper.apply(42, None, 10, None, 100_000_000)
-        host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42\ncontinued\n"
-        again = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
-        again.recover()
-        self.assertIn("invalid cgroup", again.recovery_error)
-        self.assertIn("/run/bandctl.json", host.files)
-        self.assertNotIn("/sys/fs/cgroup/cgroup.procs", host.files)
-        self.assertNotIn("/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs", host.files)
+        for extra in ("continued", "4:cpu:/other"):
+            with self.subTest(extra=extra):
+                shaper, host = _shaper()
+                shaper.apply(42, None, 10, None, 100_000_000)
+                host.files["/proc/42/cgroup"] = f"0::/bandctl/bandctl-42\n{extra}\n"
+                again = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+                again.recover()
+                self.assertIn("invalid cgroup", again.recovery_error)
+                self.assertIn("/run/bandctl.json", host.files)
+                self.assertNotIn("/sys/fs/cgroup/cgroup.procs", host.files)
+                self.assertNotIn("/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs", host.files)
 
     def test_recover_cleans_the_saved_interface_not_the_new_one(self):
         shaper, host = _shaper()
@@ -2433,6 +2435,14 @@ class CleanupTests(unittest.TestCase):
     def test_unrecognized_cgroup_line_does_not_truncate_path_before_move(self):
         shaper, host = _shaper()
         host.files["/proc/42/cgroup"] = "0::/user.slice/session\ncontinued\n"
+        with self.assertRaisesRegex(ShaperError, "invalid cgroup"):
+            shaper.apply(42, None, 10, None, 100_000_000)
+        self.assertNotIn(42, shaper.shares)
+        self.assertNotIn("/sys/fs/cgroup/bandctl/bandctl-42/cgroup.procs", host.files)
+
+    def test_record_like_line_after_unified_cgroup_does_not_truncate_path(self):
+        shaper, host = _shaper()
+        host.files["/proc/42/cgroup"] = "0::/user.slice/session\n4:cpu:/other\n"
         with self.assertRaisesRegex(ShaperError, "invalid cgroup"):
             shaper.apply(42, None, 10, None, 100_000_000)
         self.assertNotIn(42, shaper.shares)

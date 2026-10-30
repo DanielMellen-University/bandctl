@@ -890,8 +890,12 @@ class Shaper:
             raise ShaperError(f"cannot read cgroup for pid {pid}: {exc}") from exc
         path = None
         for line in text.removesuffix("\n").split("\n"):
+            # The unified hierarchy is last in the kernel's root list. A line
+            # after it could be part of a cgroup name containing a newline.
+            if path is not None:
+                raise ShaperError(f"invalid cgroup entry for pid {pid}")
             if line.startswith("0::"):
-                if path is not None or not _valid_cgroup_path(line[3:]):
+                if not _valid_cgroup_path(line[3:]):
                     raise ShaperError(f"invalid cgroup path for pid {pid}")
                 path = line[3:]
             elif not re.fullmatch(r"[0-9]+:[^:]*:/.*", line):

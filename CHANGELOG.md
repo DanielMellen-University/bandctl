@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reject cgroup paths whose newline could look like a legacy hierarchy entry.
+
 - Reject malformed cgroup entries before moving or restoring processes.
 
 - Omit unusable interface names from the missing-interface hint.
