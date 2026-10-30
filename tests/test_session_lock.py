@@ -34,6 +34,17 @@ class SessionLockTests(unittest.TestCase):
                 SessionLock(str(link)).acquire()
             self.assertEqual(target.read_text(), "unchanged")
 
+    def test_refuses_fifo_as_session_lock(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "lock"
+            os.mkfifo(path)
+            with self.assertRaisesRegex(SessionLockError, "regular file"):
+                SessionLock(str(path)).acquire()
+            self.assertTrue(path.is_fifo())
+            path.unlink()
+            with SessionLock(str(path)):
+                self.assertTrue(path.is_file())
+
     def test_context_manager_releases_after_exception(self):
         with tempfile.TemporaryDirectory() as directory:
             path = str(Path(directory) / "lock")

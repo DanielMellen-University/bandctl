@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Refuse non-regular files as session locks.
+
 - Keep socket filters when a socket table reports a zero local port.
 
 - Reject cgroup paths whose newline could look like a legacy hierarchy entry.
