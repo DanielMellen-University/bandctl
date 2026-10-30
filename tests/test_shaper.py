@@ -840,6 +840,57 @@ class ApplyTests(unittest.TestCase):
 class CleanupTests(unittest.TestCase):
     """Fixes for teardown, remove, and failed apply."""
 
+    def test_records_original_cgroup_before_moving_process(self):
+        shaper, host = _shaper()
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        original_write = host.write
+        recorded = []
+
+        def inspect_state(path, data):
+            if path == "/sys/fs/cgroup/bandctl/bandctl-42/cgroup.procs":
+                recorded.append(json.loads(host.files["/run/bandctl.json"]))
+            original_write(path, data)
+
+        host.write = inspect_state
+        shaper.apply(42, 10, None, 100_000_000, None, expected_start_ticks=100)
+        self.assertEqual(recorded[0]["pids"]["42"], "/user.slice/user-1000.slice/session-1.scope")
+        self.assertEqual(recorded[0]["start_ticks"]["42"], 100)
+
+    def test_refuses_to_move_process_without_recovery_state(self):
+        shaper, host = _shaper()
+        original_write = host.write
+        moved = []
+
+        def fail_state(path, data):
+            if path == "/run/bandctl.json":
+                raise OSError("state is read only")
+            if path == "/sys/fs/cgroup/bandctl/bandctl-42/cgroup.procs":
+                moved.append(data)
+            original_write(path, data)
+
+        host.write = fail_state
+        with self.assertRaisesRegex(ShaperError, "recovery state"):
+            shaper.apply(42, 10, None, 100_000_000, None)
+        self.assertEqual(moved, [])
+        self.assertEqual(shaper.shares, {})
+
+    def test_refuses_qdisc_replacement_without_recovery_state(self):
+        shaper, host = _shaper()
+        shaper.apply(42, 10, None, 100_000_000, None)
+        original_write = host.write
+        host.commands.clear()
+
+        def fail_state(path, data):
+            if path == "/run/bandctl.json":
+                raise ShaperError("state is read only")
+            original_write(path, data)
+
+        host.write = fail_state
+        with self.assertRaisesRegex(ShaperError, "recovery state"):
+            shaper.apply(42, 10, 10, 100_000_000, 100_000_000)
+        self.assertFalse(any("qdisc replace dev eth0 root" in cmd for cmd in _joined(host)))
+        self.assertEqual(shaper.shares[42].up_pct, None)
+
     def test_update_rejects_a_new_process_with_an_old_share(self):
         shaper, host = _shaper()
         host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"

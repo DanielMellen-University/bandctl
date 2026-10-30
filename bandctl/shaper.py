@@ -696,6 +696,7 @@ class Shaper:
         raise ShaperError(f"pid {pid} has no cgroup v2 path")
 
     def _move_to_leaf(self, share: Share) -> None:
+        self._write_state(required=True)
         parent = CGROUP_PARENT
         leaf = f"{parent}/bandctl-{share.pid}"
         self.host.mkdir(parent)
@@ -802,7 +803,7 @@ class Shaper:
         if self._saved_qdisc is None:
             self._saved_qdisc = current if current in SAFE_QDISCS else "fq_codel"
         # Recovery must know the original qdisc before it may be replaced.
-        self._write_state(root_replaced=True)
+        self._write_state(root_replaced=True, required=True)
         self._run(
             ["tc", "qdisc", "replace", "dev", self.iface, "root", "handle", "1:", "htb", "default", "999"]
         )
@@ -1019,7 +1020,7 @@ class Shaper:
         except OSError as exc:
             raise ShaperError(str(exc), args) from exc
 
-    def _write_state(self, *, root_replaced: bool | None = None) -> None:
+    def _write_state(self, *, root_replaced: bool | None = None, required: bool = False) -> None:
         if not self._shares and not self._egress and not self._ifb:
             self._unlink_state()
             return
@@ -1032,8 +1033,9 @@ class Shaper:
         }
         try:
             self.host.write(self.state_path, json.dumps(payload) + "\n")
-        except OSError:
-            return
+        except (OSError, ShaperError) as exc:
+            if required:
+                raise ShaperError(f"cannot write recovery state: {exc}") from exc
 
     def _read_state(self) -> dict | None:
         try:
