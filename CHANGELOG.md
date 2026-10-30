@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Large overcommitted capacities use exact rate splits without floating-point rounding errors.
+
 - Settings import rejects budgets too large for rate calculations before changing the session.
 
 - Unit toggles preserve budget values down to the bit when they are submitted again.

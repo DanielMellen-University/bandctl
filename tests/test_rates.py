@@ -103,6 +103,14 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(default, 1)
         self.assertEqual(rates, [33333, 33333, 33333])
 
+    def test_large_over_commit_allocates_all_available_rate(self):
+        for capacity in (10 ** 29, 10 ** 30):
+            with self.subTest(capacity=capacity):
+                rates, ceils, default = htb_plan([capacity] * 3, capacity)
+                self.assertEqual(sum(rates) + default, capacity // 1000)
+                self.assertEqual(default, 1)
+                self.assertEqual(ceils, [capacity // 1000] * 3)
+
     def test_over_commit_message(self):
         self.assertIsNone(over_commit_message("download", [30, 20]))
         text = over_commit_message("download", [60, 50])

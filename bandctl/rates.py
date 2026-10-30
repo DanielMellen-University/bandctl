@@ -148,8 +148,8 @@ def htb_plan(ceil_bps: list[int], parent_bps: int) -> tuple[list[int], list[int]
     if total <= budget:
         rates = list(ceils)
     else:
-        raw = [budget * c / total for c in ceils]
-        rates = [int(part) for part in raw]
+        portions = [divmod(budget * c, total) for c in ceils]
+        rates = [whole for whole, _remainder in portions]
         for index, rate in enumerate(rates):
             if rate < 1 and ceils[index] > 0:
                 rates[index] = 1
@@ -161,7 +161,7 @@ def htb_plan(ceil_bps: list[int], parent_bps: int) -> tuple[list[int], list[int]
         leftover = budget - sum(rates)
         order = sorted(
             range(len(rates)),
-            key=lambda i: (raw[i] - int(raw[i]), ceils[i]),
+            key=lambda i: (portions[i][1], ceils[i]),
             reverse=True,
         )
         for index in order:
