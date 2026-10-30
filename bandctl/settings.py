@@ -11,6 +11,8 @@ from bandctl.rates import MAX_BUDGET_BPS
 from bandctl.rules import AutoRule
 from bandctl.schedule import DailyWindow, parse_time
 
+_MAX_SETTINGS_BYTES = 1_048_576
+
 
 @dataclass(frozen=True)
 class GroupSettings:
@@ -131,10 +133,10 @@ def read_settings(path) -> Settings:
         with os.fdopen(fd, "rb") as stream:
             if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
                 raise ValueError("settings must be a regular file")
-            raw = stream.read(1_048_577)
+            raw = stream.read(_MAX_SETTINGS_BYTES + 1)
     except OSError as exc:
         raise ValueError(f"cannot read settings: {exc.strerror or exc}") from exc
-    if len(raw) > 1_048_576:
+    if len(raw) > _MAX_SETTINGS_BYTES:
         raise ValueError("settings file is too large")
     try:
         return loads(raw.decode("utf-8"))
@@ -149,6 +151,8 @@ def write_settings(path, settings: Settings) -> None:
     from pathlib import Path
 
     content = dumps(settings)
+    if len(content.encode("utf-8")) > _MAX_SETTINGS_BYTES:
+        raise ValueError("settings file is too large")
     loads(content)
     destination = Path(path)
     temporary = None

@@ -137,6 +137,34 @@ class SettingsFileTests(unittest.TestCase):
             self.assertEqual(path.read_text(), "old content")
             self.assertEqual([entry.name for entry in Path(directory).iterdir()], ["settings.json"])
 
+    def test_oversized_export_keeps_existing_file(self):
+        import tempfile
+        from pathlib import Path
+        from bandctl.settings import write_settings
+
+        settings = Settings("eth0", None, None, (AutoRule("x" * 1_048_576, 10, None),), ())
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            path.write_text("old content")
+            with self.assertRaisesRegex(ValueError, "too large"):
+                write_settings(path, settings)
+            self.assertEqual(path.read_text(), "old content")
+            self.assertEqual([entry.name for entry in Path(directory).iterdir()], ["settings.json"])
+
+    def test_export_at_import_size_limit_can_be_read(self):
+        import tempfile
+        from pathlib import Path
+        from bandctl.settings import read_settings, write_settings
+
+        initial = Settings("eth0", None, None, (AutoRule("x", 10, None),), ())
+        name_length = 1_048_576 - len(dumps(initial).encode("utf-8")) + 1
+        settings = Settings("eth0", None, None, (AutoRule("x" * name_length, 10, None),), ())
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            write_settings(path, settings)
+            self.assertEqual(path.stat().st_size, 1_048_576)
+            self.assertEqual(read_settings(path), settings)
+
     def test_rejects_oversized_invalid_utf8_and_missing_files(self):
         import tempfile
         from pathlib import Path

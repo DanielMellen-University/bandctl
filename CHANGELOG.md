@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Refuse oversized settings exports before replacing the destination file.
+
 - Reject recovery cgroup paths with newlines before changing host state.
 
 - Keep socket filters when an inode field contains non-ASCII digits.

@@ -26,7 +26,7 @@ python3 -m venv .venv
 | `tests/test_cli.py` | Text and JSON process lists, omission of command arguments, CLI dispatch without opening the TUI, process resolution, and share validation. |
 | `tests/test_settings_screen.py` | Export and import through the TUI, explicit startup import, and rejection of an invalid file without changing the session. |
 | `tests/test_settings_session.py` | Session export and import against a fake host, including invalid and deeply nested files, missing processes, and shaper failures. |
-| `tests/test_settings.py` | Settings round trips, atomic private file writes, bounded reads, and rejection of invalid fields, schedules, budgets, process identities, boot IDs, overlapping groups, session snapshots, import target checks, and group membership change plans. |
+| `tests/test_settings.py` | Settings round trips, atomic private file writes, size limits on import and export, and rejection of invalid fields, schedules, budgets, process identities, boot IDs, overlapping groups, session snapshots, import target checks, and group membership change plans. |
 | `tests/test_groups.py` | Group name, share, and membership validation, including duplicate names and processes, and the active group view. |
 | `tests/test_rules.py` | Automatic rule validation, matching, process identity, manual overrides, and retry timing. |
 | `tests/test_schedule.py` | Daily local-time windows, including boundaries and overnight schedules. |
