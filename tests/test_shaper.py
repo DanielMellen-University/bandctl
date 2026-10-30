@@ -455,6 +455,22 @@ class ImportGroupTests(unittest.TestCase):
         self.assertEqual(shaper.shares, previous)
         self.assertEqual(shaper._up_cap, 100_000_000)
 
+    def test_group_does_not_move_pid_reused_after_preflight(self):
+        shaper, host = self.setup_shaper()
+        original_write = host.write
+
+        def replace_second_member(path, data):
+            original_write(path, data)
+            if path.endswith("/bandctl-42/cgroup.procs"):
+                host.files["/proc/43/stat"] = "43 (other) S " + "0 " * 18 + "200"
+                host.files["/proc/43/cgroup"] = "0::/other.slice\n"
+
+        with patch.object(host, "write", side_effect=replace_second_member) as write:
+            with self.assertRaisesRegex(ShaperError, "pid 43"):
+                shaper.apply_group(Group("work", None, 20, (42, 43)), {42: 100, 43: 100}, None, 100_000_000)
+        self.assertFalse(any(call.args[0].endswith("/bandctl-43/cgroup.procs") for call in write.call_args_list))
+        self.assertFalse(shaper.shares)
+
     def test_sync_failure_restores_previous_groups_and_processes(self):
         shaper, host = self.setup_shaper()
         shaper.apply_group(Group("old", 20, None, (42, 44)), {42: 100, 44: 100}, 100_000_000, None)
@@ -525,6 +541,24 @@ class ImportGroupTests(unittest.TestCase):
 
 
 class ApplyTests(unittest.TestCase):
+    def test_apply_rechecks_identity_after_creating_cgroup(self):
+        shaper, host = _shaper()
+        host.files["/proc/42/stat"] = "42 (work) S " + "0 " * 18 + "100"
+        original_mkdir = host.mkdir
+
+        def replace_after_mkdir(path):
+            original_mkdir(path)
+            if path.endswith("/bandctl-42"):
+                host.files["/proc/42/stat"] = "42 (other) S " + "0 " * 18 + "200"
+                host.files["/proc/42/cgroup"] = "0::/other.slice\n"
+
+        with patch.object(host, "mkdir", side_effect=replace_after_mkdir), \
+             patch.object(host, "write", wraps=host.write) as write:
+            with self.assertRaisesRegex(ShaperError, "pid 42"):
+                shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+        self.assertFalse(any(call.args[0].endswith("/bandctl-42/cgroup.procs") for call in write.call_args_list))
+        self.assertFalse(shaper.shares)
+
     def test_class_ids_wrap_and_skip_active_and_stale_classes(self):
         shaper, host = _shaper()
         shaper.apply(42, None, 10, None, 100_000_000)

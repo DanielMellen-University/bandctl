@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Process identities are rechecked immediately before cgroup moves, including group and import operations.
+
 - Removal rollback checks the process identity again before moving it back into a limited cgroup. Socket scans also skip unverified process instances.
 
 - Failed cleanup of exited processes restores the previous class plan and reports rollback failures.

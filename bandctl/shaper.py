@@ -870,11 +870,15 @@ class Shaper:
         raise ShaperError(f"pid {pid} has no cgroup v2 path")
 
     def _move_to_leaf(self, share: Share) -> None:
+        if share.start_ticks is not None and self._process_status(share) != "same":
+            raise ShaperError(f"cannot verify pid {share.pid} before moving it")
         self._write_state(required=True)
         parent = CGROUP_PARENT
         leaf = f"{parent}/bandctl-{share.pid}"
         self.host.mkdir(parent)
         self.host.mkdir(leaf)
+        if share.start_ticks is not None and self._process_status(share) != "same":
+            raise ShaperError(f"cannot verify pid {share.pid} before moving it")
         self.host.write(f"{leaf}/cgroup.procs", f"{share.pid}\n")
 
     def _check_leaf_empty(self, pid: int) -> None:
