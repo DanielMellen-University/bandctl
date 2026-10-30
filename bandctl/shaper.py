@@ -1048,13 +1048,15 @@ class Shaper:
                         "protocol", proto, "prio", "1", "handle", str(minor), "fw",
                     ]
                 )
-            except ShaperError:
-                pass
+            except ShaperError as exc:
+                if not any(text in exc.detail.lower() for text in ("no such file", "cannot find specified filter")):
+                    raise
             self._filters.discard((dev, minor, proto))
         try:
             self._run(["tc", "class", "del", "dev", dev, "classid", f"1:{minor}"])
-        except ShaperError:
-            pass
+        except ShaperError as exc:
+            if "no such file" not in exc.detail.lower():
+                raise
         self._classes.discard((dev, minor))
 
     def _restore_root_qdisc(self, iface: str | None = None) -> None:

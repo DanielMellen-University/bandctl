@@ -579,6 +579,52 @@ class ApplyTests(unittest.TestCase):
         self.assertEqual(sync.call_count, 2)
         self.assertIn(42, shaper.shares)
 
+    def test_remove_reports_class_or_mark_filter_deletion_failure(self):
+        for failed_command in ("tc filter del dev eth0 parent 1: protocol ipv6", "tc class del dev eth0"):
+            with self.subTest(command=failed_command):
+                shaper, host = _shaper()
+                shaper.apply(42, None, 10, None, 100_000_000)
+                shaper.apply(43, None, 20, None, 100_000_000)
+                minor = shaper.shares[42].minor
+                run = host.run
+                failed = []
+
+                def fail_once(args, input_text=None):
+                    if failed_command in " ".join(args) and not failed:
+                        failed.append(True)
+                        raise ShaperError("deletion failed", args)
+                    return run(args, input_text)
+
+                with patch.object(host, "run", side_effect=fail_once):
+                    with self.assertRaisesRegex(ShaperError, "deletion failed"):
+                        shaper.remove(42)
+                self.assertIn(42, shaper.shares)
+                self.assertIn(("eth0", minor), shaper._classes)
+                self.assertIn(("eth0", minor, "ip"), shaper._filters)
+                self.assertIn(("eth0", minor, "ipv6"), shaper._filters)
+                shaper.remove(42)
+                self.assertNotIn(42, shaper.shares)
+                self.assertNotIn(("eth0", minor), shaper._classes)
+
+    def test_remove_accepts_an_already_removed_class_and_filters(self):
+        shaper, host = _shaper()
+        shaper.apply(42, None, 10, None, 100_000_000)
+        shaper.apply(43, None, 20, None, 100_000_000)
+        minor = shaper.shares[42].minor
+        run = host.run
+
+        def missing_entries(args, input_text=None):
+            if args[:3] in (["tc", "filter", "del"], ["tc", "class", "del"]):
+                raise ShaperError("RTNETLINK answers: No such file or directory", args)
+            return run(args, input_text)
+
+        with patch.object(host, "run", side_effect=missing_entries):
+            shaper.remove(42)
+        self.assertNotIn(42, shaper.shares)
+        self.assertNotIn(("eth0", minor), shaper._classes)
+        self.assertNotIn(("eth0", minor, "ip"), shaper._filters)
+        self.assertNotIn(("eth0", minor, "ipv6"), shaper._filters)
+
     def test_failed_remove_reports_incomplete_rollback(self):
         for failure in ("move", "sync"):
             with self.subTest(failure=failure):
