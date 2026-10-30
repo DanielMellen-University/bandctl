@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Recovery rejects duplicate fields before changing host state.
+
 - Recovery rejects malformed interface names before changing host state.
 
 - A recovery file that cannot be removed is reported and blocks new shaping until cleanup succeeds.

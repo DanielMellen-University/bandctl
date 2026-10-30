@@ -1264,9 +1264,17 @@ class Shaper:
             return None
         except OSError as exc:
             raise ShaperError(f"cannot read recovery state: {exc}") from exc
+        def unique_pairs(pairs):
+            result = {}
+            for key, value in pairs:
+                if key in result:
+                    raise ValueError(f"duplicate field {key}")
+                result[key] = value
+            return result
+
         try:
-            data = json.loads(raw)
-        except (json.JSONDecodeError, RecursionError) as exc:
+            data = json.loads(raw, object_pairs_hook=unique_pairs)
+        except (ValueError, RecursionError) as exc:
             raise ShaperError("invalid recovery state: invalid JSON") from exc
         if not isinstance(data, dict):
             raise ShaperError("invalid recovery state: expected an object")

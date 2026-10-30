@@ -825,6 +825,25 @@ class ApplyTests(unittest.TestCase):
                 with self.assertRaises(ShaperError):
                     shaper.apply(42, None, 10, None, 100_000_000)
 
+    def test_recover_rejects_duplicate_fields_before_cleanup(self):
+        states = (
+            '{"iface":"eth0","pids":{},"nft_owned":false,"nft_owned":true}',
+            '{"iface":"eth0","pids":{"42":"/one","42":"/two"}}',
+        )
+        for state in states:
+            with self.subTest(state=state):
+                shaper, host = _shaper()
+                host.files["/run/bandctl.json"] = state
+                host.files["/sys/fs/cgroup/bandctl/bandctl-42/cgroup.procs"] = "42\n"
+
+                notes = shaper.recover()
+
+                self.assertTrue(any("invalid recovery state" in note for note in notes))
+                self.assertIsNotNone(shaper.recovery_error)
+                self.assertEqual(host.files["/run/bandctl.json"], state)
+                self.assertNotIn("/sys/fs/cgroup/cgroup.procs", host.files)
+                self.assertEqual(host.commands, [])
+
     def test_recover_keeps_unreadable_state_for_retry(self):
         shaper, host = _shaper()
         state = '{"iface": "eth0", "pids": {}}'
