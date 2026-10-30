@@ -63,7 +63,7 @@ def default_iface(run=None, proc_route: Path | None = None) -> str:
         text = ""
     name = parse_ip_route(text or "")
     if name:
-        return name
+        return _validate_iface_name(name)
     path = proc_route or Path("/proc/net/route")
     try:
         name = parse_proc_route(path.read_text(encoding="utf-8"))
@@ -73,7 +73,7 @@ def default_iface(run=None, proc_route: Path | None = None) -> str:
         raise IfaceError("could not read the routing table") from exc
     if not name:
         raise IfaceError("no default route; pass --iface")
-    return name
+    return _validate_iface_name(name)
 
 
 def list_ifaces(net_root: Path | None = None) -> list[str]:
@@ -85,22 +85,25 @@ def list_ifaces(net_root: Path | None = None) -> list[str]:
         return []
 
 
-def check_iface(name: str, net_root: Path | None = None) -> str:
-    """Return *name* if it is a real network device, or raise IfaceError.
-
-    Linux names are at most 15 bytes with no slash or whitespace. The name
-    must also exist under ``/sys/class/net``.
-    """
-    root = net_root or Path("/sys/class/net")
+def _validate_iface_name(name: str) -> str:
+    """Reject names that cannot be saved and restored safely."""
     valid = (
         bool(name)
-        and len(name.encode("utf-8", errors="replace")) <= 15
         and name not in (".", "..")
         and "/" not in name
-        and not any(char.isspace() for char in name)
+        and not any(char.isspace() or ord(char) < 32 or ord(char) == 127
+                    or 0xD800 <= ord(char) <= 0xDFFF for char in name)
+        and len(name.encode("utf-8")) <= 15
     )
     if not valid:
         raise IfaceError(f"{name!r} is not a valid interface name")
+    return name
+
+
+def check_iface(name: str, net_root: Path | None = None) -> str:
+    """Return a valid device name that exists under ``/sys/class/net``."""
+    _validate_iface_name(name)
+    root = net_root or Path("/sys/class/net")
     if not (root / name).exists():
         known = list_ifaces(root)
         hint = f" Interfaces here: {', '.join(known)}." if known else ""

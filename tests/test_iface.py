@@ -85,6 +85,15 @@ class LookupTests(unittest.TestCase):
             with self.assertRaisesRegex(IfaceError, "routing table.*UTF-8"):
                 default_iface(run=lambda _args: "", proc_route=path)
 
+    def test_default_route_rejects_interface_name_that_cannot_be_recovered(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "route"
+            path.write_text("Iface Destination Gateway Flags RefCnt Use Metric Mask\n"
+                            "eth\x01 00000000 0 0001 0 0 10 00000000\n", encoding="utf-8")
+            for route in ("default dev eth\x01\n", ""):
+                with self.subTest(from_ip=bool(route)), self.assertRaisesRegex(IfaceError, "not a valid interface name"):
+                    default_iface(run=lambda _args: route, proc_route=path)
+
     def test_missing(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "route"
@@ -126,6 +135,13 @@ class CheckTests(unittest.TestCase):
             with self.assertRaises(IfaceError, msg=name) as caught:
                 check_iface(name, self.net)
             self.assertIn("not a valid interface name", str(caught.exception))
+
+    def test_existing_names_that_cannot_be_recovered_are_rejected(self):
+        for name in ("eth\x01", "eth\x7f", "eth\udcff"):
+            with self.subTest(name=repr(name)):
+                (self.net / name).mkdir()
+                with self.assertRaisesRegex(IfaceError, "not a valid interface name"):
+                    check_iface(name, self.net)
 
 
 class CommandLineTests(unittest.TestCase):

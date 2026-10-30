@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reject interface names that recovery cannot safely read.
+
 - Reject non-UTF-8 route data instead of changing interface names during detection.
 
 - Fall back to the proc route table if `ip route` times out.
