@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Remove keeps a share for retry when process liveness cannot be checked.
+
 - Unreadable or malformed recovery files block startup and are kept for retry.
 
 - Recovery keeps a process in its leaf for retry if its cgroup cannot be read.

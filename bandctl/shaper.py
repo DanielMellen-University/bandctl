@@ -782,8 +782,11 @@ class Shaper:
     def _pid_alive(self, pid: int) -> bool:
         try:
             self.host.read(f"/proc/{pid}/cgroup")
-        except OSError:
+        except FileNotFoundError:
             return False
+        except OSError:
+            # An inaccessible process may still need to be restored.
+            return True
         return True
 
     def _rmdir_leaf(self, pid: int) -> None:

@@ -1404,6 +1404,27 @@ class CleanupTests(unittest.TestCase):
         self.assertIn("removed", shaper.remove(42))
         self.assertEqual(shaper.shares, {})
 
+    def test_remove_keeps_share_when_process_liveness_is_unreadable(self):
+        shaper, host = _shaper()
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+        state = host.files["/run/bandctl.json"]
+        read = host.read
+
+        def inaccessible(path):
+            if path in ("/proc/42/stat", "/proc/42/cgroup"):
+                raise PermissionError("read denied")
+            return read(path)
+
+        with patch.object(host, "read", side_effect=inaccessible):
+            with self.assertRaisesRegex(ShaperError, "cannot verify pid 42"):
+                shaper.remove(42)
+
+        self.assertIn(42, shaper.shares)
+        self.assertTrue(shaper.upload_active)
+        self.assertEqual(host.files["/run/bandctl.json"], state)
+        self.assertIn("removed", shaper.remove(42))
+
     def test_remove_drops_a_share_whose_process_exited(self):
         shaper, host = _shaper()
         shaper.apply(42, None, 10, None, 100_000_000)
