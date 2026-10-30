@@ -126,6 +126,8 @@ class Shaper:
     _egress: bool = False
     _root_restore_failed: bool = False
     _ifb: bool = False
+    _ifb_owned: bool = False
+    _ingress_owned: bool = False
     _saved_qdisc: str | None = None
     _classes: set[tuple[str, int]] = field(default_factory=set)
     _filters: set[tuple[str, int, str]] = field(default_factory=set)
@@ -638,9 +640,12 @@ class Shaper:
                 self._saved_qdisc = qdisc
                 restore_root = bool(state.get("root_replaced", True))
                 self._egress = restore_root
-                notes.extend(self._scrub(iface, restore_qdisc=restore_root))
+                ifb_owned = state.get("ifb_owned") if "ifb_owned" in state else None
+                ingress_owned = state.get("ingress_owned") if "ingress_owned" in state else None
+                notes.extend(self._scrub(iface, restore_qdisc=restore_root,
+                                         ifb_owned=ifb_owned, ingress_owned=ingress_owned))
             else:
-                notes.extend(self._scrub(self.iface, restore_qdisc=False))
+                notes.extend(self._scrub(self.iface, restore_qdisc=False, ifb_owned=False, ingress_owned=False))
             self._shares.clear()
             self._ifb = False
             self._classes.clear()
@@ -672,7 +677,8 @@ class Shaper:
                 self._sync()
             except ShaperError as exc:
                 notes.append(str(exc))
-                notes.extend(self._scrub(self.iface, restore_qdisc=replaced_root))
+                notes.extend(self._scrub(self.iface, restore_qdisc=replaced_root,
+                                         ifb_owned=self._ifb_owned, ingress_owned=self._ingress_owned))
             self._remove_tree()
             if not self._egress:
                 self._unlink_state()
@@ -825,23 +831,23 @@ class Shaper:
     def _ensure_ifb(self) -> None:
         if self._ifb:
             return
+        created_ifb = False
+        added_ingress = False
         try:
             self._run(["modprobe", "ifb"])
             self._run(["modprobe", "sch_ingress"])
             self._run(["modprobe", "cls_matchall"])
             self._run(["modprobe", "act_ctinfo"])
             self._run(["modprobe", "act_mirred"])
-            try:
-                self._run(["ip", "link", "add", IFB, "type", "ifb"])
-            except ShaperError as exc:
-                if "File exists" not in str(exc):
-                    raise
+            self._run(["ip", "link", "add", IFB, "type", "ifb"])
+            created_ifb = True
+            self._ifb_owned = True
+            self._write_state(required=True)
             self._run(["ip", "link", "set", IFB, "up"])
-            try:
-                self._run(["tc", "qdisc", "add", "dev", self.iface, "handle", "ffff:", "ingress"])
-            except ShaperError as exc:
-                if "exists" not in str(exc).lower():
-                    raise
+            self._run(["tc", "qdisc", "add", "dev", self.iface, "handle", "ffff:", "ingress"])
+            added_ingress = True
+            self._ingress_owned = True
+            self._write_state(required=True)
             # u32 rejects protocol all, so a catch-all has to be matchall.
             # prio 10 leaves room for a more specific filter to run first.
             self._run(
@@ -856,7 +862,7 @@ class Shaper:
                 ["tc", "qdisc", "replace", "dev", IFB, "root", "handle", "1:", "htb", "default", "999"]
             )
         except ShaperError:
-            self._destroy_ifb()
+            self._destroy_ifb(remove_ingress=added_ingress, remove_ifb=created_ifb)
             raise
         self._ifb = True
 
@@ -950,20 +956,25 @@ class Shaper:
         # The root qdisc took the upload flower filters with it.
         self._forget_flows(iface, "1:")
 
-    def _destroy_ifb(self, iface: str | None = None) -> None:
+    def _destroy_ifb(self, iface: str | None = None, *, remove_ingress: bool = True,
+                     remove_ifb: bool = True) -> None:
         iface = self.iface if iface is None else iface
-        try:
-            self._run(["tc", "qdisc", "del", "dev", iface, "ingress"])
-        except ShaperError:
-            pass
-        try:
-            self._run(["tc", "qdisc", "del", "dev", IFB, "root"])
-        except ShaperError:
-            pass
-        try:
-            self._run(["ip", "link", "del", IFB])
-        except ShaperError:
-            pass
+        if remove_ingress:
+            try:
+                self._run(["tc", "qdisc", "del", "dev", iface, "ingress"])
+            except ShaperError:
+                pass
+            self._ingress_owned = False
+        if remove_ifb:
+            try:
+                self._run(["tc", "qdisc", "del", "dev", IFB, "root"])
+            except ShaperError:
+                pass
+            self._ifb_owned = False
+            try:
+                self._run(["ip", "link", "del", IFB])
+            except ShaperError:
+                pass
         self._ifb = False
         self._drop_dev(IFB)
         # Ingress lived on the real device. Deleting it drops download flowers.
@@ -983,15 +994,21 @@ class Shaper:
             if strict:
                 raise
 
-    def _scrub(self, iface: str, *, restore_qdisc: bool) -> list[str]:
+    def _scrub(self, iface: str, *, restore_qdisc: bool, ifb_owned: bool | None = None,
+               ingress_owned: bool | None = None) -> list[str]:
         notes: list[str] = []
         self._delete_nft(strict=False)
-        try:
-            self._run(["ip", "link", "show", IFB])
-            self._destroy_ifb(iface)
-            notes.append(f"removed {IFB}")
-        except ShaperError:
-            pass
+        if ifb_owned is None or ingress_owned is None:
+            try:
+                self._run(["ip", "link", "show", IFB])
+            except ShaperError:
+                ifb_owned = ingress_owned = False
+            else:
+                ifb_owned = ingress_owned = True
+        if ifb_owned or ingress_owned:
+            self._destroy_ifb(iface, remove_ingress=bool(ingress_owned), remove_ifb=bool(ifb_owned))
+            if ifb_owned:
+                notes.append(f"removed {IFB}")
         if restore_qdisc:
             self._egress = True
             try:
@@ -1046,6 +1063,8 @@ class Shaper:
             "iface": self.iface,
             "qdisc": self._saved_qdisc or "fq_codel",
             "root_replaced": self._egress if root_replaced is None else root_replaced,
+            "ifb_owned": self._ifb_owned,
+            "ingress_owned": self._ingress_owned,
             "pids": {str(share.pid): share.original_cgroup for share in self._shares.values()},
             "start_ticks": {str(share.pid): share.start_ticks for share in self._shares.values()},
         }

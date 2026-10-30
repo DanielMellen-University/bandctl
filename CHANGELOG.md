@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Download setup refuses an existing IFB device or ingress qdisc and leaves it untouched. Recovery records which download objects belonged to the session.
+
 - Failed root qdisc recovery is shown in the TUI and stops CLI session startup.
 
 - Failed root qdisc restoration is reported and keeps recovery state for a retry.

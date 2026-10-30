@@ -847,6 +847,85 @@ class ApplyTests(unittest.TestCase):
 class CleanupTests(unittest.TestCase):
     """Fixes for teardown, remove, and failed apply."""
 
+    def test_recovery_without_state_leaves_existing_ifb_alone(self):
+        shaper, host = _shaper()
+        host.ifb_exists = True
+        shaper.recover()
+        self.assertTrue(host.ifb_exists)
+        self.assertNotIn("ip link del ifb-bandctl", _joined(host))
+
+    def test_recovery_of_upload_only_session_leaves_existing_ifb_alone(self):
+        shaper, host = _shaper()
+        shaper.apply(42, None, 10, None, 100_000_000)
+        host.ifb_exists = True
+        host.commands.clear()
+        again = Shaper("eth0", host=host, state_path="/run/bandctl.json")
+        again.recover()
+        self.assertTrue(host.ifb_exists)
+        self.assertNotIn("ip link del ifb-bandctl", _joined(host))
+        self.assertNotIn("tc qdisc del dev eth0 ingress", _joined(host))
+
+    def test_recovery_of_partial_download_setup_leaves_foreign_ingress_alone(self):
+        shaper, host = _shaper()
+        host.ifb_exists = True
+        host.files["/run/bandctl.json"] = json.dumps({
+            "iface": "eth0", "root_replaced": False, "ifb_owned": True,
+            "ingress_owned": False, "pids": {},
+        })
+        shaper.recover()
+        self.assertFalse(host.ifb_exists)
+        self.assertNotIn("tc qdisc del dev eth0 ingress", _joined(host))
+
+    def test_recovery_of_old_state_cleans_existing_ifb(self):
+        shaper, host = _shaper()
+        host.ifb_exists = True
+        host.files["/run/bandctl.json"] = json.dumps({"iface": "eth0", "pids": {}})
+        shaper.recover()
+        self.assertFalse(host.ifb_exists)
+        self.assertIn("tc qdisc del dev eth0 ingress", _joined(host))
+
+    def test_download_records_ifb_before_adding_ingress(self):
+        shaper, host = _shaper()
+        original_run = host.run
+        recorded = []
+
+        def inspect_state(args, input_text=None):
+            if args == ["tc", "qdisc", "add", "dev", "eth0", "handle", "ffff:", "ingress"]:
+                recorded.append(json.loads(host.files["/run/bandctl.json"]))
+            return original_run(args, input_text)
+
+        host.run = inspect_state
+        shaper.apply(42, 10, None, 100_000_000, None)
+        self.assertTrue(recorded[0]["ifb_owned"])
+        self.assertFalse(recorded[0]["ingress_owned"])
+        state = json.loads(host.files["/run/bandctl.json"])
+        self.assertTrue(state["ingress_owned"])
+
+    def test_download_refuses_existing_ifb_without_deleting_it(self):
+        shaper, host = _shaper()
+        host.ifb_exists = True
+        with self.assertRaises(ShaperError):
+            shaper.apply(42, 10, None, 100_000_000, None)
+        self.assertTrue(host.ifb_exists)
+        self.assertNotIn("ip link del ifb-bandctl", _joined(host))
+        self.assertNotIn("tc qdisc del dev eth0 ingress", _joined(host))
+
+    def test_download_refuses_existing_ingress_without_deleting_it(self):
+        shaper, host = _shaper()
+        original_run = host.run
+
+        def existing_ingress(args, input_text=None):
+            if args == ["tc", "qdisc", "add", "dev", "eth0", "handle", "ffff:", "ingress"]:
+                host.commands.append((list(args), input_text))
+                raise ShaperError("RTNETLINK answers: File exists", args)
+            return original_run(args, input_text)
+
+        host.run = existing_ingress
+        with self.assertRaises(ShaperError):
+            shaper.apply(42, 10, None, 100_000_000, None)
+        self.assertNotIn("tc qdisc del dev eth0 ingress", _joined(host))
+        self.assertFalse(host.ifb_exists)
+
     def test_remove_reports_root_qdisc_restoration_failure(self):
         shaper, host = _shaper()
         shaper.apply(42, None, 10, None, 100_000_000)
