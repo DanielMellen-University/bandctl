@@ -130,6 +130,22 @@ class ParseTests(unittest.TestCase):
         sampler.rates(before, 1.0)
         self.assertEqual(sampler.rates(after, 2.0)[5], (0.0, 0.0))
 
+    def test_missing_socket_counters_do_not_recount_previous_traffic(self):
+        header = 'ESTAB 0 0 10.0.0.2:1 1.1.1.1:1 users:(("x",pid=5,fd=1)) sk:a\n'
+        sampler = TrafficSampler()
+        sampler.rates(header + '\t bytes_received:1000 bytes_acked:500\n', 1)
+        sampler.rates(header + '\t cubic\n', 2)
+        rates = sampler.rates(header + '\t bytes_received:1020 bytes_acked:510\n', 3)
+        self.assertEqual(rates[5], (80.0, 40.0))
+        self.assertEqual(sampler.totals[5], (20, 10))
+
+    def test_first_reported_counters_after_a_gap_contribute_from_zero(self):
+        header = 'ESTAB 0 0 10.0.0.2:1 1.1.1.1:1 users:(("x",pid=5,fd=1)) sk:a\n'
+        sampler = TrafficSampler()
+        sampler.rates(header + '\t cubic\n', 1)
+        self.assertEqual(sampler.rates(header + '\t bytes_received:20\n', 2)[5], (160.0, 0.0))
+        self.assertEqual(sampler.totals[5], (20, 0))
+
     def test_closing_one_socket_does_not_erase_another_sockets_traffic(self):
         first = ('ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 users:(("x",pid=5,fd=1)) sk:a\n'
                  '\t bytes_received:1000 bytes_acked:200\n')

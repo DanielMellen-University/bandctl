@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep socket counter baselines when a refresh omits byte counters, avoiding repeated traffic counts.
+
 - Address-specific socket filters take priority over wildcard UDP port filters.
 
 - Add opt-in `--match-wildcard` UDP port matching for existing wildcard-bound sockets. It can also shape other processes sharing the port.

@@ -67,9 +67,10 @@ def parse_ss(text: str) -> dict[int, tuple[int, int]]:
     return {pid: (received, acked) for pid, (received, acked) in totals.items()}
 
 
-def parse_ss_sockets(text: str) -> dict[tuple[int, str], tuple[int, int]]:
-    """Map each owned TCP socket to its received and acknowledged byte counters."""
+def parse_ss_sockets(text: str, *, omit_unreported: bool = False) -> dict[tuple[int, str], tuple[int, int]]:
+    """Map owned sockets to counters, optionally omitting records without counters."""
     found: dict[tuple[int, str], tuple[int, int]] = {}
+    reported: set[tuple[int, str]] = set()
     keys: list[tuple[int, str]] = []
     for raw in text.splitlines():
         if not raw.strip():
@@ -97,9 +98,10 @@ def parse_ss_sockets(text: str) -> dict[tuple[int, str], tuple[int, int]]:
         if received is None and acked is None:
             continue
         for key in keys:
+            reported.add(key)
             previous = found[key]
             found[key] = (previous[0] if received is None else received, previous[1] if acked is None else acked)
-    return found
+    return {key: value for key, value in found.items() if key in reported} if omit_unreported else found
 
 
 class TrafficSampler:
@@ -132,7 +134,8 @@ class TrafficSampler:
                 self._totals.pop(pid, None)
 
     def rates(self, text: str, now: float) -> dict[int, tuple[float, float]]:
-        current = parse_ss_sockets(text)
+        # An ss record without counters is a gap, not a reset to zero.
+        current = parse_ss_sockets(text, omit_unreported=True)
         prev = self._prev
         prev_at = self._prev_at
         if prev is None or prev_at is None:
