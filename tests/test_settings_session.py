@@ -68,7 +68,7 @@ class SettingsSessionTests(unittest.TestCase):
         previous = self.shaper.shares
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "settings.json"
-            path.write_text("[" * 2000 + "]" * 2000)
+            path.write_text("[" * 20_000 + "]" * 20_000)
             with self.assertRaisesRegex(ValueError, "invalid settings JSON"):
                 import_session(path, self.shaper, "eth0", 100_000_000, self.procs)
         self.assertEqual(self.shaper.shares, previous)
