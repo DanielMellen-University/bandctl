@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Process names with non-UTF-8 bytes no longer break TCP rate sampling.
+
 - CLI mode is complete: `list`, `limit`, `remove`, `export`, `import`, and `stop`, with `--json`. Commands use the same validation and shaper as the TUI. Later commands report recent background errors, and a failed `stop` shows its own error.
 
 - CLI sessions update detected link capacity while they run.

@@ -32,6 +32,14 @@ class ParseTests(unittest.TestCase):
             self.assertEqual(read_ss(), "")
         self.assertEqual(run.call_args.args[0], ["ss", "-tinpeH"])
 
+    def test_read_ss_handles_non_utf8_process_names(self):
+        def run(_args, **kwargs):
+            output = b'users:(("bad\xffname",pid=5,fd=1))'
+            return SimpleNamespace(returncode=0, stdout=output.decode("utf-8", errors=kwargs.get("errors") or "strict"))
+
+        with patch("bandctl.traffic.subprocess.run", side_effect=run):
+            self.assertEqual(read_ss(), 'users:(("bad\ufffdname",pid=5,fd=1))')
+
     def test_socket_counters_use_cookie_or_inode_and_keep_zero_baselines(self):
         text = (
             'ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 users:(("a",pid=5,fd=1),("b",pid=6,fd=2)) ino:42 sk:ab12\n'
