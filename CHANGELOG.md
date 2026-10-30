@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Long sessions reuse free HTB class IDs before the kernel limit is reached.
+
 - Rate plans are checked before moving processes for limits, groups, and settings imports.
 
 - Rejected capacity updates leave existing classes alone without an unnecessary rollback.

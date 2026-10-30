@@ -16,6 +16,7 @@ from bandctl.rates import htb_plan, percent_to_bps
 from bandctl.procscan import SockFlow
 from bandctl.shaper import (
     IFB,
+    InstalledFlow,
     LinuxHost,
     Share,
     Shaper,
@@ -526,6 +527,38 @@ class ImportGroupTests(unittest.TestCase):
 
 
 class ApplyTests(unittest.TestCase):
+    def test_class_ids_wrap_and_skip_active_and_stale_classes(self):
+        shaper, host = _shaper()
+        shaper.apply(42, None, 10, None, 100_000_000)
+        shaper._classes.add(("eth0", 11))
+        shaper._filters.add(("eth0", 12, "ip"))
+        shaper._flows[("stale",)] = InstalledFlow(1, 13, "eth0", "1:", "ip", 2)
+        shaper._bytes[("up", 14)] = 9000
+        shaper._bytes[("down", 14)] = 8000
+        shaper._next_minor = 10_000
+        shaper.apply(43, None, 10, None, 100_000_000)
+        self.assertEqual(shaper.shares[42].minor, 10)
+        self.assertEqual(shaper.shares[43].minor, 14)
+        self.assertNotIn(("up", 14), shaper._bytes)
+        self.assertNotIn(("down", 14), shaper._bytes)
+
+    def test_class_id_exhaustion_reports_an_error(self):
+        shaper, host = _shaper()
+        shaper._shares = {minor: Share(minor, None, 10, minor, "/")
+                          for minor in range(10, 10_000) if minor != 999}
+        with self.assertRaisesRegex(ShaperError, "class IDs"):
+            shaper._alloc_minor()
+
+    def test_class_ids_reserved_for_a_group_import_cannot_be_reused(self):
+        shaper, host = _shaper()
+        shaper._shares = {minor: Share(minor, None, 10, minor, "/")
+                          for minor in range(10, 9999) if minor != 999}
+        shaper._next_minor = 9999
+        minor = shaper._alloc_minor()
+        self.assertEqual(minor, 9999)
+        with self.assertRaisesRegex(ShaperError, "class IDs"):
+            shaper._alloc_minor({minor})
+
     def test_invalid_individual_rate_does_not_move_process(self):
         shaper, host = _shaper()
         with patch.object(shaper, "_move_to_leaf", side_effect=ShaperError("unexpected move")) as move:

@@ -206,11 +206,11 @@ class Shaper:
             self._validate_rate_plans(proposed, down_cap, up_cap)
             old_shares = {pid_: _copy_share(share) for pid_, share in self._shares.items()}
             old_caps = (self._down_cap, self._up_cap)
+            minor = self._alloc_minor() if created else None
             self._revision += 1
             self._down_cap = down_cap
             self._up_cap = up_cap
             if created:
-                minor = self._alloc_minor()
                 share = Share(pid, down_pct, up_pct, minor, original, command, expected_start_ticks, self._revision)
             else:
                 share = self._shares[pid]
@@ -402,8 +402,10 @@ class Shaper:
             old = {pid: _copy_share(share) for pid, share in self._shares.items()}
             old_caps = (self._down_cap, self._up_cap)
             replacement = {pid: _copy_share(share) for pid, share in old.items() if share.group is None}
+            reserved_minors: set[int] = set()
             for item in settings.groups:
-                minor = self._alloc_minor()
+                minor = self._alloc_minor(reserved_minors)
+                reserved_minors.add(minor)
                 for pid, start in zip(item.group.members, item.starts):
                     previous = old.get(pid)
                     self._revision += 1
@@ -821,13 +823,25 @@ class Shaper:
 
     # --- internals -------------------------------------------------------
 
-    def _alloc_minor(self) -> int:
+    def _alloc_minor(self, reserved: set[int] | None = None) -> int:
         used = {share.minor for share in self._shares.values()}
-        minor = self._next_minor
-        while minor in used or minor == 999:
-            minor += 1
-        self._next_minor = minor + 1
-        return minor
+        used.update(minor for _dev, minor in self._classes)
+        used.update(minor for _dev, minor, _proto in self._filters)
+        used.update(flow.minor for flow in self._flows.values())
+        used.update(reserved or ())
+        # tc parses class IDs as hexadecimal. Decimal-looking IDs through
+        # 9999 fit in its 16-bit minor field; 10000 does not.
+        first, last = 10, 9999
+        start = first + (self._next_minor - first) % (last - first + 1)
+        for offset in range(last - first + 1):
+            minor = first + (start - first + offset) % (last - first + 1)
+            if minor == 999 or minor in used:
+                continue
+            self._next_minor = minor + 1
+            self._bytes.pop(("down", minor), None)
+            self._bytes.pop(("up", minor), None)
+            return minor
+        raise ShaperError("no available HTB class IDs")
 
     def _require_caps(self) -> None:
         for share in self._shares.values():
