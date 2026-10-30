@@ -888,12 +888,16 @@ class Shaper:
             raise ShaperError(f"pid {pid} is not running") from exc
         except OSError as exc:
             raise ShaperError(f"cannot read cgroup for pid {pid}: {exc}") from exc
-        for line in text.split("\n"):
+        path = None
+        for line in text.removesuffix("\n").split("\n"):
             if line.startswith("0::"):
-                path = line[3:]
-                if not _valid_cgroup_path(path):
+                if path is not None or not _valid_cgroup_path(line[3:]):
                     raise ShaperError(f"invalid cgroup path for pid {pid}")
-                return path
+                path = line[3:]
+            elif not re.fullmatch(r"[0-9]+:[^:]*:/.*", line):
+                raise ShaperError(f"invalid cgroup entry for pid {pid}")
+        if path is not None:
+            return path
         raise ShaperError(f"pid {pid} has no cgroup v2 path")
 
     def _move_to_leaf(self, share: Share) -> None:

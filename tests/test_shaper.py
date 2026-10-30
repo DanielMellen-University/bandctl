@@ -1513,6 +1513,17 @@ class ApplyTests(unittest.TestCase):
         self.assertEqual(host.files[original], "42\n")
         self.assertNotIn("/run/bandctl.json", host.files)
 
+    def test_recover_keeps_state_when_cgroup_entry_has_an_extra_line(self):
+        shaper, host = _shaper()
+        shaper.apply(42, None, 10, None, 100_000_000)
+        host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42\ncontinued\n"
+        again = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+        again.recover()
+        self.assertIn("invalid cgroup", again.recovery_error)
+        self.assertIn("/run/bandctl.json", host.files)
+        self.assertNotIn("/sys/fs/cgroup/cgroup.procs", host.files)
+        self.assertNotIn("/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs", host.files)
+
     def test_recover_cleans_the_saved_interface_not_the_new_one(self):
         shaper, host = _shaper()
         shaper.apply(42, 10, 10, 100_000_000, 100_000_000)
@@ -2418,6 +2429,14 @@ class CleanupTests(unittest.TestCase):
         self.assertEqual(state["pids"]["42"], "/user.slice/session.scope")
         shaper.remove(42)
         self.assertEqual(host.files["/sys/fs/cgroup/user.slice/session.scope/cgroup.procs"], "42\n")
+
+    def test_unrecognized_cgroup_line_does_not_truncate_path_before_move(self):
+        shaper, host = _shaper()
+        host.files["/proc/42/cgroup"] = "0::/user.slice/session\ncontinued\n"
+        with self.assertRaisesRegex(ShaperError, "invalid cgroup"):
+            shaper.apply(42, None, 10, None, 100_000_000)
+        self.assertNotIn(42, shaper.shares)
+        self.assertNotIn("/sys/fs/cgroup/bandctl/bandctl-42/cgroup.procs", host.files)
 
     def test_original_cgroup_with_unicode_line_separator_is_restored(self):
         shaper, host = _shaper()

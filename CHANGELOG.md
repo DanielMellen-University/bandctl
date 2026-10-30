@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reject malformed cgroup entries before moving or restoring processes.
+
 - Omit unusable interface names from the missing-interface hint.
 
 - Reject route interface names containing Unicode whitespace without truncating them.
