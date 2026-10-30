@@ -97,6 +97,8 @@ def parse_proc_net(text: str, proto: str, family: str, *, strict: bool = False) 
                 raise ValueError("invalid socket table endpoint") from exc
             continue
         if local_port <= 0:
+            if strict:
+                raise ValueError("invalid socket table local port")
             continue
         if proto == "tcp" and remote_port <= 0:
             continue

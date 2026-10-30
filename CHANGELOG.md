@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep socket filters when a socket table reports a zero local port.
+
 - Reject cgroup paths whose newline could look like a legacy hierarchy entry.
 
 - Reject malformed cgroup entries before moving or restoring processes.
