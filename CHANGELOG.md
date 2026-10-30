@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Removal rollback checks the process identity again before moving it back into a limited cgroup. Socket scans also skip unverified process instances.
+
 - Failed cleanup of exited processes restores the previous class plan and reports rollback failures.
 
 - Class rates use the full interval after a missed sample and start fresh when a class is recreated.

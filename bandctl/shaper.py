@@ -547,6 +547,8 @@ class Shaper:
             except (OSError, ShaperError) as exc:
                 self._shares[pid] = share
                 problems = []
+                if restored and share.start_ticks is not None and self._process_status(share) != "same":
+                    raise ShaperError(f"{exc}; rollback incomplete: cannot verify pid {pid}") from exc
                 if restored:
                     try:
                         self._move_to_leaf(share)
@@ -1374,6 +1376,12 @@ class Shaper:
         desired: dict[tuple, tuple[SockFlow, int, str]] = {}
         net = self._load_net() if self._shares else {}
         for pid, share in self._shares.items():
+            if share.start_ticks is not None:
+                status = self._process_status(share)
+                if status == "gone":
+                    continue
+                if status != "same":
+                    raise ShaperError(f"cannot verify pid {pid} for socket scan")
             for flow in self._pid_flows(pid, net):
                 ident = _flow_id(flow)
                 if share.up_pct and self._egress:

@@ -894,6 +894,35 @@ class ApplyTests(unittest.TestCase):
         self.assertIn("restore failed", shaper.flow_warning)
         self.assertIn(42, shaper.shares)
 
+    def test_failed_remove_does_not_move_changed_or_unverified_pid_back(self):
+        for new_stat in ("42 (other) S " + "0 " * 18 + "200", "malformed", None):
+            with self.subTest(new_stat=new_stat):
+                shaper, host = _shaper()
+                path = "/proc/42/stat"
+                host.files[path] = "42 (work) S " + "0 " * 18 + "100"
+                shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+
+                def fail_after_restore():
+                    if new_stat is None:
+                        host.files.pop(path)
+                    else:
+                        host.files[path] = new_stat
+                    raise ShaperError("sync failed")
+
+                with patch.object(shaper, "_sync", side_effect=fail_after_restore) as sync, \
+                     patch.object(shaper, "_move_to_leaf", wraps=shaper._move_to_leaf) as move:
+                    with self.assertRaisesRegex(ShaperError, "sync failed.*rollback incomplete.*cannot verify pid 42"):
+                        shaper.remove(42)
+                move.assert_not_called()
+                self.assertEqual(sync.call_count, 1)
+                self.assertIn(42, shaper.shares)
+                if new_stat == "malformed":
+                    _open_socket(host)
+                    host.commands.clear()
+                    shaper.sample()
+                    self.assertIn("cannot verify pid 42", shaper.flow_warning)
+                    self.assertFalse(any("flower" in cmd and "filter add" in cmd for cmd in _joined(host)))
+
     def test_sample_keeps_share_when_identity_is_unreadable(self):
         shaper, host = _shaper()
         stat = "/proc/42/stat"
