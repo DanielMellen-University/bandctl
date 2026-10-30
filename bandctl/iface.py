@@ -53,13 +53,13 @@ def parse_speed_mbps(text: str) -> int | None:
 def default_iface(run=None, proc_route: Path | None = None) -> str:
     """Device used by the IPv4 default route.
 
-    ``ip route`` wins. ``/proc/net/route`` is the fallback when ``ip`` is missing.
+    ``ip route`` wins. ``/proc/net/route`` is the fallback if it fails or times out.
     """
     if run is None:
         run = _run
     try:
         text = run(["ip", "route", "show", "default"])
-    except (OSError, subprocess.CalledProcessError):
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
         text = ""
     name = parse_ip_route(text or "")
     if name:
@@ -120,7 +120,7 @@ def link_speed_bps(iface: str, speed_path: Path | None = None) -> int | None:
 
 
 def _run(args: list[str]) -> str:
-    proc = subprocess.run(args, capture_output=True, text=True, check=False)
+    proc = subprocess.run(args, capture_output=True, text=True, check=False, timeout=2)
     if proc.returncode != 0:
         return ""
     return proc.stdout

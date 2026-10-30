@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fall back to the proc route table if `ip route` times out.
+
 - Let an in-progress TUI operation finish before SIGTERM cleanup.
 
 - Let an in-progress CLI session operation finish before SIGTERM cleanup.

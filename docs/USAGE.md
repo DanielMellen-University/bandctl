@@ -83,7 +83,7 @@ If bandctl cannot scan socket tables or process descriptors, or a socket table i
 
 The header shows the detected link speed from `/sys/class/net/<iface>/speed`. That file is in megabits per second. `-1` or `0` (typical for Wi-Fi and some virtual devices) is shown as `unknown`, and the capacity line says `unset` until you type a budget.
 
-When `ip route` is unavailable, bandctl picks the active IPv4 default route with the lowest metric from `/proc/net/route`.
+When `ip route` is unavailable or times out, bandctl picks the active IPv4 default route with the lowest metric from `/proc/net/route`.
 
 The two budget fields are in the unit shown in the header. `b` flips between Mbit/s and MB/s and rewrites a budget you already typed so the underlying bit rate stays the same. Apply reads those fields, and so does Enter while the cursor is in one of them. Empty means "use the detected speed again". If updating active limits fails, the previous submitted budgets are retained and the error is shown. If rollback also fails, class rates may not match those budgets. The fields keep your edits so you can retry.
 
