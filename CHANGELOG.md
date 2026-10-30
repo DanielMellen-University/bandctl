@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Cleanup reports missing nft, tc, and ip commands and retains recovery state. A failed legacy IFB probe is also retried.
+
 - Failed class and mark filter deletions are reported and rolled back instead of being forgotten.
 
 - Failed flower filter deletions stay tracked and are retried, with a warning.

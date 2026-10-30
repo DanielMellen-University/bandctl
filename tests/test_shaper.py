@@ -1213,6 +1213,25 @@ class ApplyTests(unittest.TestCase):
 class CleanupTests(unittest.TestCase):
     """Fixes for teardown, remove, and failed apply."""
 
+    def test_missing_cleanup_commands_keep_recovery_state(self):
+        for missing in ("nft", "tc", "ip"):
+            with self.subTest(command=missing):
+                shaper, host = _shaper()
+                shaper.apply(42, 10, None, 100_000_000, None)
+                run = host.run
+
+                def missing_command(args, input_text=None):
+                    if args[0] == missing:
+                        raise ShaperError(f"command not found: {missing}", args)
+                    return run(args, input_text)
+
+                with patch.object(host, "run", side_effect=missing_command):
+                    notes = shaper.teardown()
+                self.assertTrue(any(f"command not found: {missing}" in note for note in notes))
+                self.assertIn("/run/bandctl.json", host.files)
+                if missing == "tc":
+                    self.assertTrue(host.ifb_exists)
+
     def test_idle_session_does_not_delete_existing_nft_table(self):
         shaper, host = _shaper()
         shaper.recover()
@@ -1400,6 +1419,30 @@ class CleanupTests(unittest.TestCase):
         shaper.recover()
         self.assertFalse(host.ifb_exists)
         self.assertIn("tc qdisc del dev eth0 ingress", _joined(host))
+
+    def test_legacy_recovery_keeps_state_when_ifb_probe_fails(self):
+        shaper, host = _shaper()
+        state = json.dumps({"iface": "eth0", "pids": {}, "root_replaced": False, "nft_owned": False})
+        host.files["/run/bandctl.json"] = state
+        host.ifb_exists = True
+        run = host.run
+
+        def missing_ip(args, input_text=None):
+            if args[:3] == ["ip", "link", "show"]:
+                raise ShaperError("command not found: ip", args)
+            return run(args, input_text)
+
+        with patch.object(host, "run", side_effect=missing_ip):
+            notes = shaper.recover()
+        self.assertTrue(any("command not found: ip" in note for note in notes))
+        self.assertIn("command not found: ip", shaper.recovery_error)
+        self.assertEqual(host.files["/run/bandctl.json"], state)
+        self.assertTrue(host.ifb_exists)
+        retry = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+        retry.recover()
+        self.assertIsNone(retry.recovery_error)
+        self.assertFalse(host.ifb_exists)
+        self.assertNotIn("/run/bandctl.json", host.files)
 
     def test_download_records_ifb_before_adding_ingress(self):
         shaper, host = _shaper()

@@ -1102,8 +1102,10 @@ class Shaper:
         try:
             self._run(args)
         except ShaperError as exc:
-            text = str(exc).lower()
-            if not any(part in text for part in ("no such file", "not found", "cannot find device", "does not exist")):
+            text = exc.detail.lower()
+            if text.startswith("command not found:") or not any(
+                part in text for part in ("no such file", "not found", "cannot find device", "does not exist")
+            ):
                 raise
 
     def _record_download_cleanup(self) -> None:
@@ -1127,8 +1129,10 @@ class Shaper:
         try:
             self._run(["nft", "delete", "table", "inet", TABLE])
         except ShaperError as exc:
-            text = str(exc).lower()
-            if "no such file" in text or "does not exist" in text or "not found" in text:
+            text = exc.detail.lower()
+            if not text.startswith("command not found:") and any(
+                part in text for part in ("no such file", "does not exist", "not found")
+            ):
                 pass
             else:
                 self._nft_cleanup_error = str(exc)
@@ -1152,7 +1156,14 @@ class Shaper:
         if ifb_owned is None or ingress_owned is None:
             try:
                 self._run(["ip", "link", "show", IFB])
-            except ShaperError:
+            except ShaperError as exc:
+                text = exc.detail.lower()
+                if text.startswith("command not found:") or not any(
+                    part in text for part in ("cannot find device", "does not exist", "no such device")
+                ):
+                    self._ifb_owned = self._ingress_owned = True
+                    self._ifb_cleanup_error = str(exc)
+                    notes.append(str(exc))
                 ifb_owned = ingress_owned = False
             else:
                 ifb_owned = ingress_owned = True
