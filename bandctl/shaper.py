@@ -1631,7 +1631,7 @@ def flower_command(
 
 
 def _valid_cgroup_path(path) -> bool:
-    return (isinstance(path, str) and path.startswith("/") and "\x00" not in path
+    return (isinstance(path, str) and path.startswith("/") and "\x00" not in path and "\n" not in path
             and ".." not in path.split("/")
             and not any(0xD800 <= ord(char) <= 0xDFFF for char in path))
 

@@ -1341,7 +1341,7 @@ class ApplyTests(unittest.TestCase):
                               ("-1", "/original"), ("042", "/original"),
                               ("2147483648", "/original"), ("42", None),
                               ("42", "relative"), ("42", "/../outside"), ("42", "/bad\x00path"),
-                              ("42", "/bad\ud800path")):
+                              ("42", "/bad\ud800path"), ("42", "/bad\npath")):
             with self.subTest(pid=pid, original=original):
                 shaper, host = _shaper()
                 state = json.dumps({"iface": "eth0", "pids": {"43": "/original", pid: original}})
