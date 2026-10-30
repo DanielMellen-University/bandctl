@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import shlex
 import sys
 import time
 from datetime import datetime
@@ -223,7 +224,7 @@ class BandctlApp(App):
             self.query_one("#apply", Button).disabled = True
             self.query_one("#remove", Button).disabled = True
             banner = self.query_one("#banner", Static)
-            banner.update("Not root. Limits stay off.  " + self.sudo_command())
+            banner.update(Text("Not root. Limits stay off.  " + self.sudo_command()))
             banner.add_class("-show")
             self._note("read-only, limits are off", bad=True)
         if self._startup_settings and not recovery_error:
@@ -251,13 +252,16 @@ class BandctlApp(App):
             self.cleanup_errors.extend(shaper.teardown())
 
     def sudo_command(self) -> str:
-        extra = f" --iface {self._iface_arg}" if self._iface_arg else ""
-        if self._match_wildcard:
-            extra += " --match-wildcard"
         # The installed command's argv is `bandctl`. A checkout is `python -m`.
-        if Path(sys.argv[0]).name == "bandctl":
-            return f"sudo bandctl{extra}"
-        return f"sudo {sys.executable} -m bandctl{extra}"
+        command = (["sudo", "bandctl"] if Path(sys.argv[0]).name == "bandctl"
+                   else ["sudo", sys.executable, "-m", "bandctl"])
+        if self._iface_arg:
+            command.append(f"--iface={self._iface_arg}")
+        if self._match_wildcard:
+            command.append("--match-wildcard")
+        if self._startup_settings is not None:
+            command.append(f"--config={self._startup_settings}")
+        return shlex.join(command)
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
         if self.is_mounted and self.screen_stack and isinstance(self.screen, (RootRequired, RulesScreen, GroupsScreen, SettingsScreen)):

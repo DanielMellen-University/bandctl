@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shlex
 import unittest
 from types import SimpleNamespace
 from unittest.mock import PropertyMock, patch
@@ -99,6 +100,27 @@ def _app(fake, *, root=True, link_bps=100_000_000, rates=None):
 
 
 class AppTests(unittest.IsolatedAsyncioTestCase):
+    async def test_sudo_command_preserves_and_quotes_startup_options(self):
+        app = BandctlApp(iface="eth;test", startup_settings="saved settings;test.json", match_wildcard=True)
+        options = ["--iface=eth;test", "--match-wildcard", "--config=saved settings;test.json"]
+        with patch("bandctl.app.sys.argv", ["/usr/bin/bandctl"]):
+            command = app.sudo_command()
+            self.assertEqual(shlex.split(command), ["sudo", "bandctl", *options])
+            self.assertIn(shlex.quote("--iface=eth;test"), command)
+            self.assertIn(shlex.quote("--config=saved settings;test.json"), command)
+        with patch("bandctl.app.sys.argv", ["-m"]), patch("bandctl.app.sys.executable", "/venv with spaces/python"):
+            self.assertEqual(shlex.split(app.sudo_command()), ["sudo", "/venv with spaces/python", "-m", "bandctl", *options])
+
+    async def test_non_root_command_displays_markup_characters_literally(self):
+        app = BandctlApp(iface="eth0", startup_settings="[red] settings.json", is_root=False,
+                         shaper=FakeShaper(), processes=lambda: list(PROCS), link_bps=100_000_000, rates=_rates)
+        async with app.run_test(size=(100, 32)) as pilot:
+            await pilot.pause()
+            self.assertIn("[red] settings.json", str(app.screen.query_one("#root-command", Static).render()))
+            await pilot.press("enter")
+            await pilot.pause()
+            self.assertIn("[red] settings.json", str(app.query_one("#banner", Static).render()))
+
     async def test_wildcard_option_reaches_tui_shaper(self):
         from test_shaper import _shaper
 

@@ -191,13 +191,13 @@ class ScriptTests(unittest.TestCase):
             sys.argv = ["/usr/local/bin/bandctl"]
             self.assertEqual(app.sudo_command(), "sudo bandctl")
             app._iface_arg = "wlan0"
-            self.assertEqual(app.sudo_command(), "sudo bandctl --iface wlan0")
+            self.assertEqual(app.sudo_command(), "sudo bandctl --iface=wlan0")
             sys.argv = [old[0]]
             text = app.sudo_command()
         finally:
             sys.argv = old
         self.assertIn(" -m bandctl", text)
-        self.assertIn("--iface wlan0", text)
+        self.assertIn("--iface=wlan0", text)
 
 
 if __name__ == "__main__":

@@ -57,7 +57,7 @@ Only one root bandctl session can control shaping at a time. A second root sessi
 
 ## Not root
 
-The window still opens. A dialog shows the `sudo` command. After you dismiss it, the process list works. Apply and Remove are disabled. No cgroup, nft table, or qdisc is created.
+The window still opens. A dialog shows the `sudo` command, including the interface, settings file, and wildcard option when supplied. After you dismiss it, the process list works. Apply and Remove are disabled. No cgroup, nft table, or qdisc is created.
 
 ## Setting a share
 

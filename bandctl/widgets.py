@@ -27,7 +27,7 @@ class RootRequired(ModalScreen[None]):
                 "Limits are off, and no tc rules are installed.",
                 id="root-body",
             ),
-            Static(self.command, id="root-command"),
+            Static(self.command, id="root-command", markup=False),
             Button("View processes", id="root-ok"),
             id="dialog",
         )
