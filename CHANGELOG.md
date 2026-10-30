@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Match Unicode case variants in process searches.
+
 - Match connected UDP sockets before unconnected sockets on the same address and port.
 
 - Keep terminal control characters out of plain CLI output.

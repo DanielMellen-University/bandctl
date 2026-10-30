@@ -723,7 +723,7 @@ class BandctlApp(App):
         return fit_columns(width)
 
     def _visible(self) -> list[ProcessInfo]:
-        query = self.query_one("#filter", Input).value.strip().lower()
+        query = self.query_one("#filter", Input).value.strip().casefold()
         rows = []
         for proc in self._procs:
             # A search looks through every process, not just the busy ones,
@@ -973,7 +973,7 @@ def _clip(text: str, width: int) -> str:
 
 
 def _matches(proc: ProcessInfo, query: str) -> bool:
-    haystack = f"{proc.comm} {proc.cmdline} {proc.user} {proc.pid}".lower()
+    haystack = f"{proc.comm} {proc.cmdline} {proc.user} {proc.pid}".casefold()
     return query in haystack
 
 

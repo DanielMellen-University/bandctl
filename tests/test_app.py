@@ -310,6 +310,7 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
         async with app.run_test(size=(80, 24)) as pilot:
             await pilot.pause()
             self.assertEqual(app._shown, [42])
+
             await pilot.press("slash")
             field = app.query_one("#filter", Input)
             field.value = "bash"
@@ -326,6 +327,16 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             field.value = ""
             await pilot.pause()
             self.assertEqual(app._shown, [42])
+
+    async def test_filter_matches_unicode_casefolded_process_names(self):
+        proc = ProcessInfo(7, "Straße", "Straße", "user", 0, 7)
+        app = BandctlApp(iface="eth0", shaper=FakeShaper(), processes=lambda: [proc],
+                         link_bps=100_000_000, is_root=True, rates=lambda: {})
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.press("slash")
+            app.query_one("#filter", Input).value = "STRASSE"
+            await pilot.pause()
+            self.assertEqual(app._shown, [7])
 
     async def test_scheduled_rule_applies_expires_and_respects_manual_override(self):
         from datetime import time
