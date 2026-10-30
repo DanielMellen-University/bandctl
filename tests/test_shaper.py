@@ -1619,6 +1619,32 @@ class ApplyTests(unittest.TestCase):
         shaper.sample()
         self.assertEqual(len([args for args, _ in host.commands if "flower" in args and "add" in args]), 1)
 
+    def test_specific_udp_filters_take_precedence_over_wildcard_filters(self):
+        for order in ((42, 43), (43, 42)):
+            with self.subTest(order=order):
+                shaper, host = _shaper()
+                shaper.match_wildcard = True
+                host.files["/proc/net/udp"] = (
+                    "sl local_address rem_address st tx_queue rx_queue tr tm retrnsmt uid timeout inode\n"
+                    "0: 00000000:14E9 00000000:0000 07 0 0 0 0 0 99\n"
+                    "1: 0800000A:14E9 00000000:0000 07 0 0 0 0 0 100\n"
+                )
+                host.links["/proc/42/fd/3"] = "socket:[99]"
+                host.links["/proc/43/fd/3"] = "socket:[100]"
+                for pid in order:
+                    shaper.apply(pid, 30, 10, 100_000_000, 100_000_000)
+                filters = [args for args, _ in host.commands if "flower" in args and "add" in args]
+                for parent in ("1:", "ffff:"):
+                    direction = [args for args in filters if args[args.index("parent") + 1] == parent]
+                    specific = next(args for args in direction if "10.0.0.8" in args)
+                    wildcard = next(args for args in direction if "src_ip" not in args and "dst_ip" not in args)
+                    self.assertLess(int(specific[specific.index("prio") + 1]),
+                                    int(wildcard[wildcard.index("prio") + 1]))
+                shaper.remove(42)
+                deleted = [args for args, _ in host.commands if "flower" in args and "del" in args]
+                self.assertEqual({(args[args.index("parent") + 1], args[args.index("prio") + 1])
+                                  for args in deleted}, {("1:", "3"), ("ffff:", "2")})
+
     def test_upload_flower_does_not_touch_ingress(self):
         shaper, host = _shaper()
         _open_socket(host)

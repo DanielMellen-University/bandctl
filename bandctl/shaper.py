@@ -1492,6 +1492,9 @@ class Shaper:
             dev, parent, prio = self.iface, "1:", 2
         else:
             dev, parent, prio = self.iface, "ffff:", 1
+        if self.match_wildcard and _wildcard_udp(flow):
+            # Keep address-specific flows ahead of the broader port match.
+            prio += 1
         handle = self._next_flow_handle
         self._run(
             flower_command(

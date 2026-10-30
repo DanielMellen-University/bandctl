@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Address-specific socket filters take priority over wildcard UDP port filters.
+
 - Add opt-in `--match-wildcard` UDP port matching for existing wildcard-bound sockets. It can also shape other processes sharing the port.
 
 - Removal and exit leave a process alone if it has moved out of its bandctl cgroup.
