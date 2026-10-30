@@ -682,6 +682,15 @@ class Shaper:
             raise
         if cgroup != f"/bandctl/bandctl-{share.pid}":
             return False
+        if share.start_ticks is not None:
+            status = self._process_status(share)
+            if status == "gone":
+                return False
+            if status == "changed":
+                self._check_reused_leaf(share)
+                return False
+            if status != "same":
+                raise ShaperError(f"cannot verify pid {share.pid}")
         self._restore_pid(share.pid, share.original_cgroup)
         return True
 

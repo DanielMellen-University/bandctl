@@ -125,7 +125,7 @@ A failed share or group update or removal is rolled back where possible. If roll
 
 When cleanup of an exited process fails, bandctl tries to restore the previous class plan and retries cleanup on the next refresh. The warning reports an incomplete rollback if restoring the plan also fails.
 
-If a PID changes or cannot be verified during removal rollback, bandctl leaves it alone and reports an incomplete rollback. The share stays tracked for cleanup.
+bandctl checks a process identity again after reading its cgroup and before restoring it. If a PID changes or cannot be verified during removal rollback, bandctl leaves it alone and reports an incomplete rollback. The share stays tracked for cleanup.
 
 ## Exit
 

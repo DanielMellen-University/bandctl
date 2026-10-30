@@ -2585,6 +2585,32 @@ class CleanupTests(unittest.TestCase):
         self.assertNotIn(original, host.files)
         self.assertFalse(shaper.shares)
 
+    def test_restore_rechecks_identity_after_reading_cgroup(self):
+        for operation in ("remove", "teardown"):
+            with self.subTest(operation=operation):
+                shaper, host = _shaper()
+                stat = "/proc/42/stat"
+                host.files[stat] = "42 (old) S " + "0 " * 18 + "100"
+                shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+                read = host.read
+
+                def replace_after_cgroup(path):
+                    value = read(path)
+                    if path == "/proc/42/cgroup":
+                        host.files[stat] = "42 (new) S " + "0 " * 18 + "200"
+                    return value
+
+                with patch.object(host, "read", side_effect=replace_after_cgroup):
+                    if operation == "remove":
+                        with self.assertRaisesRegex(ShaperError, "cannot verify pid 42"):
+                            shaper.remove(42)
+                        self.assertIn(42, shaper.shares)
+                    else:
+                        self.assertTrue(any("cannot verify pid 42" in note for note in shaper.teardown()))
+                original = "/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs"
+                self.assertNotIn(original, host.files)
+                self.assertIn("/run/bandctl.json", host.files)
+
     def test_teardown_does_not_move_a_process_that_left_its_leaf(self):
         shaper, host = _shaper()
         host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
