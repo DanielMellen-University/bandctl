@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Unreadable or malformed recovery files block startup and are kept for retry.
+
 - Recovery keeps a process in its leaf for retry if its cgroup cannot be read.
 
 - Failed process restoration keeps its original cgroup in recovery state for a later retry.

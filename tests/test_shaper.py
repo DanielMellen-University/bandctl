@@ -656,6 +656,42 @@ class ApplyTests(unittest.TestCase):
         self.assertFalse(host.ifb_exists)
         self.assertNotIn("bandctl-42", host.dirs)
 
+    def test_recover_keeps_unusable_state_and_blocks_shaping(self):
+        invalid_states = ("", "{broken", "[]", "{}", '{"iface": ""}', "[" * 2000 + "]" * 2000)
+        for state in invalid_states:
+            with self.subTest(state=state[:30]):
+                shaper, host = _shaper()
+                host.files["/run/bandctl.json"] = state
+                host.files["/sys/fs/cgroup/bandctl/bandctl-42/cgroup.procs"] = "42\n"
+
+                notes = shaper.recover()
+
+                self.assertTrue(any("recovery state" in note for note in notes))
+                self.assertIsNotNone(shaper.recovery_error)
+                self.assertEqual(host.files["/run/bandctl.json"], state)
+                self.assertNotIn("/sys/fs/cgroup/cgroup.procs", host.files)
+                self.assertEqual(host.commands, [])
+                with self.assertRaises(ShaperError):
+                    shaper.apply(42, None, 10, None, 100_000_000)
+
+    def test_recover_keeps_unreadable_state_for_retry(self):
+        shaper, host = _shaper()
+        state = '{"iface": "eth0", "pids": {}}'
+        host.files["/run/bandctl.json"] = state
+        read = host.read
+
+        def fail_state(path):
+            if path == "/run/bandctl.json":
+                raise PermissionError("read denied")
+            return read(path)
+
+        with patch.object(host, "read", side_effect=fail_state):
+            notes = shaper.recover()
+        self.assertTrue(any("read denied" in note for note in notes))
+        self.assertIsNotNone(shaper.recovery_error)
+        self.assertEqual(host.files["/run/bandctl.json"], state)
+        self.assertEqual(host.commands, [])
+
     def test_recover_rejects_invalid_pid_mapping_and_keeps_state(self):
         shaper, host = _shaper()
         state = json.dumps({"iface": "eth0", "pids": [42]})

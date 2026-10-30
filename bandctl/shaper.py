@@ -615,7 +615,14 @@ class Shaper:
         """Best-effort cleanup of a previous run. Never raises."""
         notes: list[str] = []
         with self._lock:
-            state = self._read_state()
+            try:
+                state = self._read_state()
+                if state is not None and (not isinstance(state.get("iface"), str) or not state["iface"]):
+                    raise ShaperError("invalid recovery state: missing interface")
+            except ShaperError as exc:
+                self._torn = True
+                self.recovery_error = str(exc)
+                return [self.recovery_error]
             if state and "pids" in state and not isinstance(state["pids"], dict):
                 self._torn = True
                 self.recovery_error = "invalid recovery state: pids must be an object"
@@ -1158,15 +1165,17 @@ class Shaper:
     def _read_state(self) -> dict | None:
         try:
             raw = self.host.read(self.state_path)
-        except OSError:
+        except FileNotFoundError:
             return None
-        if not raw.strip():
-            return None
+        except OSError as exc:
+            raise ShaperError(f"cannot read recovery state: {exc}") from exc
         try:
             data = json.loads(raw)
-        except json.JSONDecodeError:
-            return None
-        return data if isinstance(data, dict) else None
+        except (json.JSONDecodeError, RecursionError) as exc:
+            raise ShaperError("invalid recovery state: invalid JSON") from exc
+        if not isinstance(data, dict):
+            raise ShaperError("invalid recovery state: expected an object")
+        return data
 
     def _unlink_state(self) -> None:
         try:
