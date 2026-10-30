@@ -215,7 +215,7 @@ class BandctlApp(App):
                 self.query_one("#apply", Button).disabled = True
                 self.query_one("#remove", Button).disabled = True
                 self._note(self._iface_error or "no interface to shape", bad=True)
-            elif not self._ss_warned:
+            elif not self._ss_warned and not self._status_bad:
                 self._note("ready")
         else:
             self.query_one("#apply", Button).disabled = True

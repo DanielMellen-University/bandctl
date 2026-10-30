@@ -99,6 +99,29 @@ def _app(fake, *, root=True, link_bps=100_000_000, rates=None):
 
 
 class AppTests(unittest.IsolatedAsyncioTestCase):
+    async def test_initial_refresh_failure_stays_visible_until_recovery(self):
+        fail = [True]
+
+        def processes():
+            if fail[0]:
+                raise OSError("scan unavailable")
+            return list(PROCS)
+
+        app = BandctlApp(iface="eth0", shaper=FakeShaper(), processes=processes,
+                         link_bps=100_000_000, is_root=True, rates=_rates)
+        async with app.run_test(size=(80, 24)):
+            self.assertIn("refresh failed: scan unavailable", app._status_text)
+            fail[0] = False
+            await app._refresh()
+            self.assertEqual(app._status_text, "ready")
+
+    async def test_initial_socket_filter_warning_stays_visible(self):
+        fake = FakeShaper()
+        fake.flow_warning = "socket filter update failed"
+        app = _app(fake)
+        async with app.run_test(size=(80, 24)):
+            self.assertEqual(app._status_text, "socket filter update failed")
+
     async def test_root_without_default_route_shows_error_and_disables_controls(self):
         from bandctl.iface import IfaceError
 

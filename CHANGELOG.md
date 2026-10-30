@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Initial refresh and socket filter failures stay visible in the TUI status.
+
 - A root TUI with no default route keeps the interface error visible and disables shaping controls.
 
 - A startup `ss` failure no longer disables root controls or shows a not-root banner. The warning clears when sampling recovers.
