@@ -37,7 +37,7 @@ sudo .venv/bin/python -m bandctl
 
 ## Command line
 
-`bandctl list` prints running PIDs, users, and process names. `bandctl list --json` returns PID, user, name, and socket count as JSON. Command-line arguments are omitted. The other commands need root:
+`bandctl list` prints running PIDs, users, and process names. `bandctl list --json` returns PID, user, name, and socket count as JSON. Command-line arguments are omitted. Plain process lists, session errors and warnings, and settings paths replace ASCII and C1 control characters with `?`. JSON output preserves the original values. The other commands need root:
 
 ```
 sudo bandctl --iface eth0 limit firefox --down 30 --up 10

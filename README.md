@@ -31,6 +31,7 @@ bandctl/
   theme.tcss     dark grey, pastel green, orange
   procscan.py    /proc process list and socket counts
   traffic.py     per-process TCP rates and session totals from ss
+  text.py        safe terminal text for process and session output
   rates.py       percents, units, HTB split
   iface.py       default route and link speed
   shaper.py      cgroup, nft, tc

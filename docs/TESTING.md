@@ -23,7 +23,7 @@ python3 -m venv .venv
 | `tests/test_cli_transport.py` | Temporary local sockets, request framing, deeply nested requests, private permissions, refresh warnings, and cleanup without host shaping. |
 | `tests/test_cli_protocol.py` | Request fields, dispatch, error responses, and explicit session stop. |
 | `tests/test_cli_session.py` | Verified CLI session limits and removals, capacity failures, PID reuse, settings imports, changing capacity, scheduled rules, and manual overrides using a fake host. |
-| `tests/test_cli.py` | Text and JSON process lists, omission of command arguments, CLI dispatch without opening the TUI, process resolution, and share validation. |
+| `tests/test_cli.py` | Text and JSON process lists, terminal control characters, omission of command arguments, CLI dispatch without opening the TUI, process resolution, and share validation. |
 | `tests/test_settings_screen.py` | Export and import through the TUI, explicit startup import, and rejection of an invalid file without changing the session. |
 | `tests/test_settings_session.py` | Session export and import against a fake host, including invalid and deeply nested files, missing processes, and shaper failures. |
 | `tests/test_settings.py` | Settings round trips, atomic private file writes, size limits on import and export, and rejection of invalid fields, schedules, budgets, process identities, boot IDs, overlapping groups, session snapshots, import target checks, and group membership change plans. |

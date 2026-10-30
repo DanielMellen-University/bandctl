@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 from bandctl.procscan import scan_processes
+from bandctl.text import terminal_text
 
 
 def list_processes(*, json_output: bool = False, processes=None) -> str:
@@ -15,11 +16,8 @@ def list_processes(*, json_output: bool = False, processes=None) -> str:
             for proc in sorted(processes, key=lambda proc: proc.pid)]
     if json_output:
         return json.dumps(rows, indent=2) + "\n"
-    def plain(value: str) -> str:
-        return "".join("?" if ord(char) < 32 or ord(char) == 127 else char for char in value)
-
     lines = ["PID      USER         NAME"]
-    lines.extend(f"{row['pid']:<8} {plain(row['user']):<12} {plain(row['name'])}" for row in rows)
+    lines.extend(f"{row['pid']:<8} {terminal_text(row['user']):<12} {terminal_text(row['name'])}" for row in rows)
     return "\n".join(lines) + "\n"
 
 
@@ -107,10 +105,10 @@ def run_command(args) -> int:
             print("session stopped")
         else:
             verb = "imported" if args.command == "import" else "exported"
-            print(f"settings {verb}: {result['path']}")
+            print(f"settings {verb}: {terminal_text(result['path'])}")
         if warnings and not args.json:
             for warning in warnings:
-                print(f"bandctl: {warning}", file=sys.stderr)
+                print(f"bandctl: {terminal_text(warning)}", file=sys.stderr)
         return 0
     except (ValueError, OSError, IfaceError) as exc:
         if args.json:
@@ -119,7 +117,7 @@ def run_command(args) -> int:
                 error["warnings"] = warnings
             print(json.dumps(error), file=sys.stderr)
         else:
-            print(f"bandctl: {exc}", file=sys.stderr)
+            print(f"bandctl: {terminal_text(str(exc))}", file=sys.stderr)
             for warning in warnings:
-                print(f"bandctl: {warning}", file=sys.stderr)
+                print(f"bandctl: {terminal_text(warning)}", file=sys.stderr)
         return 1

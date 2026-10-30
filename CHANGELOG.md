@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep terminal control characters out of plain CLI output.
+
 - Keep control characters in process data from breaking TUI rows and details.
 
 - Display process, rule, and group names as text instead of terminal markup.

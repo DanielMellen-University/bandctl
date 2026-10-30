@@ -24,11 +24,43 @@ class ListTests(unittest.TestCase):
         self.assertEqual(set(data[0]), {"pid", "name", "user", "sockets"})
 
     def test_plain_output_does_not_emit_control_characters(self):
-        process = ProcessInfo(4, "bad\x1bname", "", "u\nser", 0)
+        process = ProcessInfo(4, "bad\x1bname\x9b", "", "u\nser", 0)
         text = list_processes(processes=[process])
-        self.assertIn("bad?name", text)
+        self.assertIn("bad?name?", text)
         self.assertIn("u?ser", text)
         self.assertNotIn("\x1b", text)
+        row = json.loads(list_processes(processes=[process], json_output=True))[0]
+        self.assertEqual(row["name"], process.comm)
+
+    def test_plain_session_output_escapes_controls_in_paths_and_warnings(self):
+        from bandctl.__main__ import main
+
+        response = {"ok": True, "result": {"path": "a\nb\x1b"}, "warnings": ["bad\x9bwarning"]}
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with patch("os.geteuid", return_value=0), \
+             patch("bandctl.cli_client.ensure_session"), \
+             patch("bandctl.cli_transport.request", return_value=response), \
+             contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            self.assertEqual(main(["export", "settings.json"]), 0)
+        self.assertEqual(stdout.getvalue(), "settings exported: a?b?\n")
+        self.assertEqual(stderr.getvalue(), "bandctl: bad?warning\n")
+
+    def test_session_errors_escape_controls_only_in_plain_output(self):
+        from bandctl.__main__ import main
+
+        response = {"ok": False, "error": "failed\nagain", "warnings": ["bad\x1bwarning"]}
+        for json_output in (False, True):
+            stderr = io.StringIO()
+            args = ["remove", "42"] + (["--json"] if json_output else [])
+            with self.subTest(json_output=json_output), patch("os.geteuid", return_value=0), \
+                 patch("bandctl.cli_client.ensure_session"), \
+                 patch("bandctl.cli_transport.request", return_value=response), \
+                 contextlib.redirect_stderr(stderr):
+                self.assertEqual(main(args), 1)
+            if json_output:
+                self.assertEqual(json.loads(stderr.getvalue()), {"error": response["error"], "warnings": response["warnings"]})
+            else:
+                self.assertEqual(stderr.getvalue(), "bandctl: failed?again\nbandctl: bad?warning\n")
 
     def test_list_command_does_not_start_the_tui(self):
         from bandctl.__main__ import main
