@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Socket scans recheck process identities before changing filters.
+
 - Process scans and CLI name matching preserve spaces in process names.
 
 - Limits reject unrestorable original cgroup paths before moving processes.

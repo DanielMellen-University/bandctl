@@ -1379,6 +1379,7 @@ class Shaper:
         the ones that already existed, and drops filters when they close.
         """
         desired: dict[tuple, tuple[SockFlow, int, str]] = {}
+        verified: list[Share] = []
         net = self._load_net() if self._shares else {}
         for pid, share in self._shares.items():
             if share.start_ticks is not None:
@@ -1387,12 +1388,16 @@ class Shaper:
                     continue
                 if status != "same":
                     raise ShaperError(f"cannot verify pid {pid} for socket scan")
+                verified.append(share)
             for flow in self._pid_flows(pid, net):
                 ident = _flow_id(flow)
                 if share.up_pct and self._egress:
                     desired[("up", ident)] = (flow, share.minor, "up")
                 if share.down_pct and self._ifb:
                     desired[("down", ident)] = (flow, share.minor, "down")
+        for share in verified:
+            if self._process_status(share) != "same":
+                raise ShaperError(f"cannot verify pid {share.pid} for socket scan")
         for key in list(self._flows):
             wanted = desired.get(key)
             if wanted is None or wanted[1] != self._flows[key].minor:

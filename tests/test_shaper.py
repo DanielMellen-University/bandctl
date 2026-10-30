@@ -1515,6 +1515,26 @@ class ApplyTests(unittest.TestCase):
         self.assertEqual(len(deleted), 1)
         self.assertEqual(shaper._flows, {})
 
+    def test_reused_pid_during_socket_scan_keeps_existing_filters(self):
+        shaper, host = _shaper()
+        stat = "/proc/42/stat"
+        host.files[stat] = "42 (old) S " + "0 " * 18 + "100"
+        _open_socket(host)
+        shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+        existing = dict(shaper._flows)
+        self.assertTrue(existing)
+        host.commands.clear()
+
+        def scan_replacement(pid, net):
+            host.files[stat] = "42 (new) S " + "0 " * 18 + "200"
+            return [SockFlow("tcp", "ip", "10.0.0.8", 40001, "1.2.3.4", 443)]
+
+        with patch.object(shaper, "_pid_flows", side_effect=scan_replacement):
+            shaper.sample()
+        self.assertIn("cannot verify pid 42", shaper.flow_warning)
+        self.assertEqual(shaper._flows, existing)
+        self.assertFalse(any("flower" in command for command in _joined(host)))
+
     def test_failed_socket_scan_keeps_existing_filters_until_retry(self):
         for operation, path, error in (
             ("read", "/proc/net/tcp", PermissionError("read denied")),
