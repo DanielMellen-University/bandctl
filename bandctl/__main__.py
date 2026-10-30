@@ -83,8 +83,7 @@ def main(argv: list[str] | None = None) -> int:
         app = BandctlApp(iface=args.iface, startup_settings=args.config)
 
         def _stop(signum, _frame) -> None:
-            if app.shaper is not None:
-                app.shaper.teardown()
+            _cleanup(app)
             raise SystemExit(128 + signum)
 
         signal.signal(signal.SIGTERM, _stop)
@@ -93,16 +92,18 @@ def main(argv: list[str] | None = None) -> int:
             app.run()
         finally:
             _cleanup(app)
+            for error in app.cleanup_errors:
+                print(f"bandctl: cleanup failed: {error}", file=sys.stderr)
     finally:
         if lock is not None:
             lock.release()
-    return 0
+    return 1 if app.cleanup_errors else 0
 
 
 def _cleanup(app: BandctlApp) -> None:
     shaper = app.shaper
     if shaper is not None and app.is_root:
-        shaper.teardown()
+        app.cleanup_errors.extend(shaper.teardown())
 
 
 if __name__ == "__main__":

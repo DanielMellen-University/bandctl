@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The TUI reports cleanup errors after exit and returns a failure status.
+
 - Failed cgroup leaf cleanup is reported and retried on the next start.
 
 - A failed process cgroup lookup no longer changes capacity for existing limits.

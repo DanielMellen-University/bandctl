@@ -111,6 +111,8 @@ class CommandLineTests(unittest.TestCase):
             with patch("bandctl.__main__.check_iface") as check, \
                  patch("bandctl.__main__.BandctlApp") as app, \
                  patch("bandctl.__main__.signal.signal"), patch("bandctl.__main__.atexit.register"):
+                app.return_value.is_root = False
+                app.return_value.cleanup_errors = []
                 self.assertEqual(main(["--config", str(path)]), 0)
             check.assert_called_once_with("eth0")
             app.assert_called_once_with(iface="eth0", startup_settings=str(path))

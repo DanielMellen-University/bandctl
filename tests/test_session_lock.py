@@ -72,6 +72,50 @@ class MainLockTests(unittest.TestCase):
                 main([])
         lock.release.assert_called_once()
 
+    def test_tui_reports_cleanup_errors_after_unmount(self):
+        import contextlib
+        import io
+        from unittest.mock import Mock, patch
+        from bandctl.app import BandctlApp
+        from bandctl.__main__ import main
+
+        shaper = Mock()
+        shaper.teardown.side_effect = [["cgroup cleanup failed"], []]
+        app = BandctlApp(iface="eth0", shaper=shaper, is_root=True)
+        stderr = io.StringIO()
+        with patch("bandctl.__main__.os.geteuid", return_value=0), \
+             patch("bandctl.__main__.SessionLock"), \
+             patch("bandctl.__main__.BandctlApp", return_value=app), \
+             patch("bandctl.__main__.signal.signal"), patch("bandctl.__main__.atexit.register"), \
+             patch.object(app, "run", side_effect=app.on_unmount), contextlib.redirect_stderr(stderr):
+            self.assertEqual(main([]), 1)
+        self.assertIn("cgroup cleanup failed", stderr.getvalue())
+
+    def test_sigterm_reports_cleanup_errors(self):
+        import contextlib
+        import io
+        from unittest.mock import Mock, patch
+        from bandctl.app import BandctlApp
+        from bandctl.__main__ import main
+
+        shaper = Mock()
+        shaper.teardown.side_effect = [["restore failed"], []]
+        app = BandctlApp(iface="eth0", shaper=shaper, is_root=True)
+        stderr = io.StringIO()
+        with patch("bandctl.__main__.os.geteuid", return_value=0), \
+             patch("bandctl.__main__.SessionLock"), \
+             patch("bandctl.__main__.BandctlApp", return_value=app), \
+             patch("bandctl.__main__.signal.signal") as signal, \
+             patch("bandctl.__main__.atexit.register"), contextlib.redirect_stderr(stderr):
+            def stop_app():
+                signal.call_args.args[1](15, None)
+
+            with patch.object(app, "run", side_effect=stop_app):
+                with self.assertRaises(SystemExit) as exit_error:
+                    main([])
+        self.assertEqual(exit_error.exception.code, 143)
+        self.assertEqual(stderr.getvalue().count("restore failed"), 1)
+
     def test_root_tui_cleans_up_before_unlocking(self):
         from unittest.mock import Mock, patch
         from bandctl.__main__ import main
@@ -79,7 +123,8 @@ class MainLockTests(unittest.TestCase):
         order = []
         app = Mock()
         app.is_root = True
-        app.shaper.teardown.side_effect = lambda: order.append("cleanup")
+        app.cleanup_errors = []
+        app.shaper.teardown.side_effect = lambda: order.append("cleanup") or []
         lock = Mock()
         lock.release.side_effect = lambda: order.append("unlock")
         with patch("bandctl.__main__.os.geteuid", return_value=0), \

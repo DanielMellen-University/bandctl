@@ -116,6 +116,7 @@ class BandctlApp(App):
         self.is_root = os.geteuid() == 0 if is_root is None else is_root
         self.iface = iface or ""
         self.shaper = shaper
+        self.cleanup_errors: list[str] = []
         self.unit = Unit.MBIT
         self._sort = "name"
         self._show_all = False
@@ -239,7 +240,7 @@ class BandctlApp(App):
     def on_unmount(self) -> None:
         shaper = self.shaper
         if shaper is not None and self.is_root:
-            shaper.teardown()
+            self.cleanup_errors.extend(shaper.teardown())
 
     def sudo_command(self) -> str:
         extra = f" --iface {self._iface_arg}" if self._iface_arg else ""
