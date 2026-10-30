@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Avoid repeated share copies and traffic sums when rendering the process table.
+
 - Skip non-ASCII numeric names when scanning process directories.
 
 - Keep socket filters when a socket table ends mid-line.

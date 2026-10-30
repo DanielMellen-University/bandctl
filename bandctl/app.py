@@ -722,13 +722,14 @@ class BandctlApp(App):
         width, _height = self._dims()
         return fit_columns(width)
 
-    def _visible(self) -> list[ProcessInfo]:
+    def _visible(self, shares) -> list[ProcessInfo]:
         query = self.query_one("#filter", Input).value.strip().casefold()
+        denoms = self._denoms() if not query and not self._show_all else None
         rows = []
         for proc in self._procs:
             # A search looks through every process, not just the busy ones,
             # so an idle process can still be found by name or pid.
-            if not query and not self._show_all and not self._keep_row(proc):
+            if denoms is not None and not self._keep_row(proc, shares.get(proc.pid), denoms):
                 continue
             if query and not _matches(proc, query):
                 continue
@@ -758,12 +759,11 @@ class BandctlApp(App):
             float(up_cap) if up_cap else total_up,
         )
 
-    def _keep_row(self, proc: ProcessInfo) -> bool:
-        share = self.shaper.shares.get(proc.pid) if self.shaper else None
+    def _keep_row(self, proc: ProcessInfo, share, denoms: tuple[float, float]) -> bool:
         if share and (share.down_pct or share.up_pct):
             return True
         down, up = self._usage.get(proc.pid, (0.0, 0.0))
-        down_den, up_den = self._denoms()
+        down_den, up_den = denoms
         return above_share(down, up, down_den, up_den)
 
     def _render_table(self) -> None:
@@ -774,7 +774,8 @@ class BandctlApp(App):
         for key, _label, width in columns:
             if key == "command":
                 self._command_width = width
-        rows = self._visible()
+        shares = self.shaper.shares if self.shaper else {}
+        rows = self._visible(shares)
         pids = [proc.pid for proc in rows]
         if keys != self._cols or widths != self._col_widths or pids != self._shown:
             table.clear(columns=True)
@@ -783,7 +784,8 @@ class BandctlApp(App):
             self._cols = keys
             self._col_widths = widths
             for proc in rows:
-                table.add_row(*[self._cell(proc, key) for key, _label, _width in columns], key=str(proc.pid))
+                share = shares.get(proc.pid)
+                table.add_row(*[self._cell(proc, key, share) for key, _label, _width in columns], key=str(proc.pid))
             self._shown = pids
             if self._selected not in pids:
                 self._selected = pids[0] if pids else None
@@ -791,11 +793,11 @@ class BandctlApp(App):
                 table.move_cursor(row=table.get_row_index(str(self._selected)), animate=False)
         else:
             for proc in rows:
+                share = shares.get(proc.pid)
                 for key, _label, _width in columns:
-                    table.update_cell(str(proc.pid), key, self._cell(proc, key))
+                    table.update_cell(str(proc.pid), key, self._cell(proc, key, share))
 
-    def _cell(self, proc: ProcessInfo, key: str):
-        share = self.shaper.shares.get(proc.pid) if self.shaper else None
+    def _cell(self, proc: ProcessInfo, key: str, share):
         limited = bool(share and (share.down_pct or share.up_pct))
         down_bps, up_bps = self._usage.get(proc.pid, (0.0, 0.0))
         if key == "pid":

@@ -100,6 +100,26 @@ def _app(fake, *, root=True, link_bps=100_000_000, rates=None):
 
 
 class AppTests(unittest.IsolatedAsyncioTestCase):
+    async def test_table_render_uses_one_share_snapshot_and_one_traffic_total(self):
+        fake = FakeShaper()
+        fake._shares[1] = Share(1, 30, None, 10, "/", "systemd", 1)
+        app = _app(fake, link_bps=None)
+        async with app.run_test(size=(100, 32)) as pilot:
+            await pilot.pause()
+            shares = fake.shares
+            with patch.object(FakeShaper, "shares", new_callable=PropertyMock, return_value=shares) as snapshots, \
+                 patch.object(app, "_denoms", wraps=app._denoms) as totals:
+                for rebuild in (False, True):
+                    if rebuild:
+                        app._shown = []
+                    snapshots.reset_mock()
+                    totals.reset_mock()
+                    app._render_table()
+                    self.assertEqual(snapshots.call_count, 1)
+                    self.assertEqual(totals.call_count, 1)
+                    self.assertEqual(set(app._shown), {1, 42})
+                    self.assertEqual(str(app.query_one("#procs", DataTable).get_cell("1", "down_pct")), "30")
+
     async def test_process_control_characters_do_not_break_table_or_detail(self):
         proc = ProcessInfo(42, "curl\nworker", "curl\n--output\tfile\x9b", "user\rname", 2, 42)
         app = BandctlApp(iface="eth0", shaper=FakeShaper(), processes=lambda: [proc],
