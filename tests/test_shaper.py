@@ -1752,6 +1752,7 @@ class ApplyTests(unittest.TestCase):
                         header + "0: invalid:0050 04030201:01BB 01 0 0 0 0 0 99\n",
                         header + "0: 0800000A:9C4 04030201:01BB 01 0 0 0 0 0 99\n",
                         header + "0: 0800000A:0000 04030201:01BB 01 0 0 0 0 0 99\n",
+                        header + "0: 0800000A:9C40 04030201:01BB 01 0 0 0 0 0 ９９\n",
                         header + "0: 0800000A:9C40 04030201:+1BB 01 0 0 0 0 0 99\n"):
             with self.subTest(damaged=damaged):
                 shaper, host = _shaper()

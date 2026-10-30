@@ -65,7 +65,7 @@ def parse_socket_inodes(text: str) -> set[str]:
     inodes: set[str] = set()
     for line in text.splitlines()[1:]:
         parts = line.split()
-        if len(parts) >= 10 and parts[9].isdigit():
+        if len(parts) >= 10 and parts[9].isascii() and parts[9].isdigit():
             inodes.add(parts[9])
     return inodes
 
@@ -85,7 +85,7 @@ def parse_proc_net(text: str, proto: str, family: str, *, strict: bool = False) 
         raise ValueError("invalid socket table header")
     for line in lines[1:]:
         parts = line.split()
-        if len(parts) < 10 or not parts[9].isdigit():
+        if len(parts) < 10 or not parts[9].isascii() or not parts[9].isdigit():
             if strict:
                 raise ValueError("invalid socket table row")
             continue

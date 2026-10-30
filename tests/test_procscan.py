@@ -34,6 +34,7 @@ class ParseTests(unittest.TestCase):
 
     def test_inodes(self):
         self.assertEqual(parse_socket_inodes(TCP), {"555", "777"})
+        self.assertEqual(parse_socket_inodes(TCP + "2: 0 0 0 0 0 0 0 0 ９９\n"), {"555", "777"})
 
     @patch("sys.byteorder", "little")
     def test_tcp_flows_skip_listeners(self):

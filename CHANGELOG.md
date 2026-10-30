@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep socket filters when an inode field contains non-ASCII digits.
+
 - Wait for a concurrently starting CLI session instead of failing on its lock.
 
 - Keep TCP socket owners whose process names contain Unicode line separators.
