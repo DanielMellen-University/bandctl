@@ -131,7 +131,7 @@ bandctl checks a process identity again after reading its cgroup and before rest
 
 ## Exit
 
-`q`, Ctrl+C, or SIGTERM:
+`q`, Ctrl+C, or SIGTERM starts cleanup. On SIGTERM, an in-progress TUI operation finishes first.
 
 - each process still in its bandctl cgroup is written back to its original cgroup
 - table `inet bandctl` is deleted

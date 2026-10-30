@@ -85,10 +85,13 @@ def main(argv: list[str] | None = None) -> int:
             return 1
     try:
         app = BandctlApp(iface=args.iface, startup_settings=args.config, match_wildcard=args.match_wildcard)
+        stop_signum = None
 
         def _stop(signum, _frame) -> None:
-            _cleanup(app)
-            raise SystemExit(128 + signum)
+            nonlocal stop_signum
+            if stop_signum is None:
+                stop_signum = signum
+                app.exit()
 
         signal.signal(signal.SIGTERM, _stop)
         atexit.register(_cleanup, app)
@@ -101,6 +104,8 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         if lock is not None:
             lock.release()
+    if stop_signum is not None:
+        return 128 + stop_signum
     return 1 if app.cleanup_errors else 0
 
 

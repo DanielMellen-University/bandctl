@@ -111,10 +111,43 @@ class MainLockTests(unittest.TestCase):
                 signal.call_args.args[1](15, None)
 
             with patch.object(app, "run", side_effect=stop_app):
-                with self.assertRaises(SystemExit) as exit_error:
-                    main([])
-        self.assertEqual(exit_error.exception.code, 143)
+                self.assertEqual(main([]), 143)
         self.assertEqual(stderr.getvalue().count("restore failed"), 1)
+
+    def test_sigterm_during_qdisc_change_waits_for_operation_before_cleanup(self):
+        from unittest.mock import Mock, patch
+        from bandctl.__main__ import main
+        from test_shaper import _shaper
+
+        shaper, host = _shaper()
+        app = Mock()
+        app.is_root = True
+        app.shaper = shaper
+        app.cleanup_errors = []
+        run = host.run
+        with patch("bandctl.__main__.os.geteuid", return_value=0), \
+             patch("bandctl.__main__.SessionLock"), \
+             patch("bandctl.__main__.BandctlApp", return_value=app), \
+             patch("bandctl.__main__.signal.signal") as signal, \
+             patch("bandctl.__main__.atexit.register"):
+            def stop_after_replace(args, input_text=None):
+                result = run(args, input_text)
+                if args[:4] == ["tc", "qdisc", "replace", "dev"]:
+                    signal.call_args.args[1](15, None)
+                    signal.call_args.args[1](15, None)
+                return result
+
+            def run_app():
+                shaper.apply(42, None, 10, None, 100_000_000)
+
+            with patch.object(host, "run", side_effect=stop_after_replace), \
+                 patch.object(app, "run", side_effect=run_app):
+                self.assertEqual(main([]), 143)
+        app.exit.assert_called_once()
+        commands = [" ".join(args) for args, _ in host.commands]
+        self.assertIn("tc qdisc add dev eth0 root fq_codel", commands)
+        self.assertEqual(host.files["/proc/42/cgroup"], "0::/user.slice/user-1000.slice/session-1.scope\n")
+        self.assertNotIn("/run/bandctl.json", host.files)
 
     def test_root_tui_cleans_up_before_unlocking(self):
         from unittest.mock import Mock, patch
