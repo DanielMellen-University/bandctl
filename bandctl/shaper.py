@@ -866,7 +866,7 @@ class Shaper:
             raise ShaperError(f"cannot read cgroup for pid {pid}: {exc}") from exc
         for line in text.splitlines():
             if "::" in line:
-                path = line.split("::", 1)[1].strip() or "/"
+                path = line.split("::", 1)[1] or "/"
                 return path
         raise ShaperError(f"pid {pid} has no cgroup v2 path")
 
