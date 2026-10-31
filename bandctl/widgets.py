@@ -11,6 +11,7 @@ from textual.widgets import Button, DataTable, Input, Static
 from bandctl.rates import RateError, parse_percent
 from bandctl.rules import AutoRule
 from bandctl.schedule import DailyWindow, parse_time
+from bandctl.text import terminal_text
 
 
 class RootRequired(ModalScreen[None]):
@@ -87,7 +88,7 @@ class RulesScreen(ModalScreen[list[AutoRule]]):
         table.clear()
         for rule in self.rules:
             window = "-" if rule.window is None else f"{rule.window.start:%H:%M}-{rule.window.end:%H:%M}"
-            table.add_row(Text(rule.name), str(rule.down_pct or "-"), str(rule.up_pct or "-"), window)
+            table.add_row(Text(terminal_text(rule.name)), str(rule.down_pct or "-"), str(rule.up_pct or "-"), window)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         # Enter in any rule field adds the rule, like Enter in a percent field

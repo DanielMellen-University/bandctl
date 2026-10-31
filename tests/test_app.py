@@ -153,6 +153,18 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsInstance(cell, Text)
             self.assertEqual(cell.plain, "[red]curl[/red]")
 
+    async def test_rule_control_characters_are_safe_to_display(self):
+        from bandctl.rules import AutoRule
+
+        app = BandctlApp(iface="eth0", shaper=FakeShaper(), processes=lambda: list(PROCS),
+                         link_bps=100_000_000, is_root=True, rates=_rates)
+        app._rules = [AutoRule("work\u0085team", 10, None)]
+        async with app.run_test(size=(100, 32)) as pilot:
+            await pilot.press("t")
+            cell = app.screen.query_one("#rule-table", DataTable).get_row_at(0)[0]
+            self.assertEqual(cell.plain, "work?team")
+            self.assertEqual(app._rules[0].name, "work\u0085team")
+
     async def test_sudo_command_preserves_and_quotes_startup_options(self):
         app = BandctlApp(iface="eth;test", startup_settings="saved settings;test.json", match_wildcard=True)
         options = ["--iface=eth;test", "--match-wildcard", "--config=saved settings;test.json"]

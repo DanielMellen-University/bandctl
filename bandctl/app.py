@@ -853,7 +853,7 @@ class BandctlApp(App):
             total = self._session_totals.get(proc.pid)
             data = format_bytes(sum(total)) if total is not None else "--"
             share = self.shaper.shares.get(proc.pid) if self.shaper else None
-            group = f"  group {share.group}" if share and share.group else ""
+            group = f"  group {terminal_text(share.group)}" if share and share.group else ""
             title = f"{terminal_text(proc.comm)}  pid {proc.pid}{group}  TCP total {data}"
         self.query_one("#detail-title", Static).update(Text(title))
         share = self.shaper.shares.get(self._selected) if self.shaper and self._selected else None

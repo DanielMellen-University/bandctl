@@ -6,6 +6,7 @@ from textual.widgets import DataTable, Input, Static
 
 from bandctl.app import BandctlApp
 from bandctl.group_screen import GroupsScreen
+from bandctl.groups import Group
 from bandctl.procscan import ProcessInfo
 from test_shaper import _shaper
 
@@ -22,6 +23,17 @@ def group_app():
 
 
 class GroupScreenTests(unittest.IsolatedAsyncioTestCase):
+    async def test_group_control_characters_are_safe_to_display(self):
+        app, shaper, _host = group_app()
+        shaper.apply_group(Group("work\u0085team", 30, None, (42,)), {42: 100}, 100_000_000, 100_000_000)
+        async with app.run_test(size=(100, 32)) as pilot:
+            await pilot.pause()
+            self.assertIn("group work?team", str(app.query_one("#detail-title", Static).render()))
+            await pilot.press("g")
+            cell = app.screen.query_one("#group-table", DataTable).get_row_at(0)[0]
+            self.assertEqual(cell.plain, "work?team")
+            self.assertEqual(shaper.shares[42].group, "work\u0085team")
+
     async def test_group_name_displays_markup_literally(self):
         app, shaper, _host = group_app()
         async with app.run_test(size=(100, 32)) as pilot:

@@ -11,6 +11,7 @@ from textual.widgets import Button, DataTable, Input, Static
 from bandctl.groups import Group, active_groups
 from bandctl.rates import RateError, parse_percent
 from bandctl.shaper import ShaperError
+from bandctl.text import terminal_text
 
 
 class GroupsScreen(ModalScreen[bool]):
@@ -49,7 +50,7 @@ class GroupsScreen(ModalScreen[bool]):
         table = self.query_one("#group-table", DataTable)
         table.clear()
         for group in active_groups(self.shaper.shares):
-            table.add_row(Text(group.name), str(group.down_pct or "-"), str(group.up_pct or "-"),
+            table.add_row(Text(terminal_text(group.name)), str(group.down_pct or "-"), str(group.up_pct or "-"),
                           ", ".join(str(pid) for pid in group.members))
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:

@@ -68,6 +68,7 @@ The window needs at least 60 columns and 18 rows. At 108 columns or more the met
 3. Press Enter in either percent field, press `a`, or click Apply.
 
 ASCII and C1 control characters in process names, command lines, and user names appear as `?` in the table and detail line.
+Those characters in rule and group names also appear as `?` in their tables and the group detail line. The stored names do not change.
 
 Apply requires a readable process start time and an original cgroup path that can be restored. Paths with newlines or invalid UTF-8 bytes and malformed cgroup entries are rejected because they cannot be read safely. bandctl checks the start time again before changing the limit. If the process has exited or its PID was reused, rescan and select the intended process.
 

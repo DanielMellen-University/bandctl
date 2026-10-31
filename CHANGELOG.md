@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep control characters in rule and group names out of table rows and details.
+
 - Use the filesystem UID when a process status has an invalid UID.
 
 - Avoid repeated share copies and traffic sums when rendering the process table.
