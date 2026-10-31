@@ -192,6 +192,26 @@ class ParseTests(unittest.TestCase):
                 self.assertEqual(rates[5], (80.0, 80.0))
                 self.assertEqual(sampler.totals[5], (20, 20))
 
+    def test_switching_upload_counter_types_does_not_count_old_bytes(self):
+        header = 'ESTAB 0 0 10.0.0.2:1 1.1.1.1:1 users:(("x",pid=5,fd=1)) sk:a\n'
+        sampler = TrafficSampler()
+        sampler.rates(header + '\t bytes_acked:100 bytes_sent:1000\n', 1)
+        self.assertEqual(sampler.rates(header + '\t bytes_sent:1050\n', 2)[5], (0.0, 0.0))
+        self.assertEqual(sampler.rates(header + '\t bytes_sent:1060\n', 3)[5], (0.0, 80.0))
+        self.assertEqual(sampler.rates(header + '\t bytes_acked:120 bytes_sent:1070\n', 4)[5], (0.0, 0.0))
+        self.assertEqual(sampler.rates(header + '\t bytes_acked:130 bytes_sent:1080\n', 5)[5], (0.0, 80.0))
+        self.assertEqual(sampler.totals[5], (0, 20))
+
+    def test_upload_counter_type_survives_missing_samples(self):
+        header = 'ESTAB 0 0 10.0.0.2:1 1.1.1.1:1 users:(("x",pid=5,fd=1)) sk:a\n'
+        sampler = TrafficSampler()
+        sampler.rates(header + '\t bytes_acked:100\n', 1)
+        sampler.rates(header + '\t bytes_received:5\n', 2)
+        sampler.rates(header + '\t cubic\n', 3)
+        self.assertEqual(sampler.rates(header + '\t bytes_sent:1000\n', 4)[5], (0.0, 0.0))
+        self.assertEqual(sampler.rates(header + '\t bytes_sent:1010\n', 5)[5], (0.0, 80.0))
+        self.assertEqual(sampler.totals[5][1], 10)
+
     def test_closing_one_socket_does_not_erase_another_sockets_traffic(self):
         first = ('ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 users:(("x",pid=5,fd=1)) sk:a\n'
                  '\t bytes_received:1000 bytes_acked:200\n')

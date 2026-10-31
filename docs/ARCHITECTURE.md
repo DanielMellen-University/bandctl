@@ -141,7 +141,7 @@ The screen gets size classes that `theme.tcss` keys off:
 
 Sizes come from the resize event, because `App.size` can still be the old size while that handler runs.
 
-The on-screen rate is each socket's counter delta times 8, divided by its sample interval, summed by PID. The first `ss` sample is a baseline and shows zero. `ss -tinpeH` supplies socket identities; a socket first seen later starts at zero. Class byte counters are still read so the flower filters stay in sync.
+The on-screen rate is each socket's counter delta times 8, divided by its sample interval, summed by PID. The first `ss` sample is a baseline and shows zero. `ss -tinpeH` supplies socket identities; a socket first seen later starts at zero. Upload uses sent bytes when acknowledged bytes are unavailable. A switch between these counters starts a new baseline so their different totals do not create a spike. Class byte counters are still read so the flower filters stay in sync.
 
 `traffic.parse_ss_sockets` can identify individual TCP sockets by the `ss` socket cookie, then inode, then endpoint pair. This keeps counters for separate sockets distinct. Shared sockets are attributed to each listed process.
 

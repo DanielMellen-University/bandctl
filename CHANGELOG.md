@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Avoid upload spikes when `ss` switches between sent and acknowledged byte counters.
+
 - Test recovery when process identity files are missing or inaccessible.
 
 - Keep limits and recovery state when a live process has no readable stat file.

@@ -95,6 +95,8 @@ The graphs beside the bars show the selected process's download and upload rates
 
 `TCP total` shows estimated downloaded plus uploaded bytes observed since bandctl started. The selected process always shows it in the detail line; the table includes it when there is room. `--` means no owned TCP socket with byte counters has been observed. Byte counts do not change when rate units change. The first sample sets a baseline for existing sockets. A socket first seen later contributes its counters from zero, which can include earlier traffic. Sockets that open and close between samples, UDP, loopback, and sockets whose owner is not reported are not counted. A missing byte counter is skipped until it is available again. Its next rate is averaged over the gap. A socket shared by several processes is counted for each owner. These totals are estimates, not billing records.
 
+Upload uses acknowledged bytes when available, and sent bytes otherwise. When a socket switches between these counters, bandctl sets a new baseline and skips that interval's upload bytes.
+
 ## Shared limits
 
 Press `g` to open shared limits. Enter a name, a comma-separated list of running PIDs, and a download percent, upload percent, or both. Choose Create. The combined traffic of those processes shares one ceiling per direction. Each PID must be verified and have no existing limit. Select a group row to fill its name and percentages. Change the percentages and choose Update to change the shared ceiling. To add a running process with no limit, enter its PID and choose Add. The list of processes is scanned when the editor opens. Close it and rescan if a PID is missing.
