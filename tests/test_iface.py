@@ -203,6 +203,20 @@ class CommandLineTests(unittest.TestCase):
             check.assert_called_once_with("eth0")
             app.assert_called_once_with(iface="eth0", startup_settings=str(path), match_wildcard=False)
 
+    def test_startup_config_error_replaces_terminal_controls(self):
+        import contextlib
+        import io
+        from bandctl.__main__ import main
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            path.write_text('{"bad\\u001bkey": 1, "bad\\u001bkey": 2}')
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit):
+                main(["--config", str(path)])
+            self.assertIn("duplicate field bad?key", stderr.getvalue())
+            self.assertNotIn("\x1b", stderr.getvalue())
+
     def test_startup_config_rejects_conflicting_iface(self):
         from bandctl.__main__ import main
         from bandctl.settings import Settings, write_settings

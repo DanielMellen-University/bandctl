@@ -102,6 +102,26 @@ class MainLockTests(unittest.TestCase):
             self.assertEqual(main([]), 1)
         self.assertIn("cgroup cleanup failed", stderr.getvalue())
 
+    def test_tui_cleanup_error_replaces_terminal_controls(self):
+        import contextlib
+        import io
+        from unittest.mock import Mock, patch
+        from bandctl.app import BandctlApp
+        from bandctl.__main__ import main
+
+        shaper = Mock()
+        shaper.teardown.side_effect = [["restore\nfailed\x1b\u0085tail"], []]
+        app = BandctlApp(iface="eth0", shaper=shaper, is_root=True)
+        stderr = io.StringIO()
+        with patch("bandctl.__main__.os.geteuid", return_value=0), \
+             patch("bandctl.__main__.SessionLock"), \
+             patch("bandctl.__main__.BandctlApp", return_value=app), \
+             patch("bandctl.__main__.signal.signal"), patch("bandctl.__main__.atexit.register"), \
+             patch.object(app, "run", side_effect=app.on_unmount), contextlib.redirect_stderr(stderr):
+            self.assertEqual(main([]), 1)
+        self.assertIn("restore?failed??tail", stderr.getvalue())
+        self.assertNotIn("\x1b", stderr.getvalue())
+
     def test_sigterm_reports_cleanup_errors(self):
         import contextlib
         import io

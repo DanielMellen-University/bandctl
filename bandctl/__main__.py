@@ -14,6 +14,7 @@ from bandctl.cli import list_processes, run_command
 from bandctl.iface import IfaceError, check_iface
 from bandctl.settings import read_settings
 from bandctl.session_lock import SessionLock, SessionLockError
+from bandctl.text import terminal_text
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -66,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             settings = read_settings(args.config)
         except ValueError as exc:
-            parser.error(str(exc))
+            parser.error(terminal_text(str(exc)))
         if args.iface is not None and args.iface != settings.iface:
             parser.error("--iface differs from the settings file interface")
         args.iface = settings.iface
@@ -74,14 +75,14 @@ def main(argv: list[str] | None = None) -> int:
         try:
             check_iface(args.iface)
         except IfaceError as exc:
-            parser.error(str(exc))
+            parser.error(terminal_text(str(exc)))
     lock = None
     if os.geteuid() == 0:
         lock = SessionLock()
         try:
             lock.acquire()
         except SessionLockError as exc:
-            print(f"bandctl: {exc}", file=sys.stderr)
+            print(f"bandctl: {terminal_text(str(exc))}", file=sys.stderr)
             return 1
     try:
         app = BandctlApp(iface=args.iface, startup_settings=args.config, match_wildcard=args.match_wildcard)
@@ -100,7 +101,7 @@ def main(argv: list[str] | None = None) -> int:
         finally:
             _cleanup(app)
             for error in app.cleanup_errors:
-                print(f"bandctl: cleanup failed: {error}", file=sys.stderr)
+                print(f"bandctl: cleanup failed: {terminal_text(error)}", file=sys.stderr)
     finally:
         if lock is not None:
             lock.release()

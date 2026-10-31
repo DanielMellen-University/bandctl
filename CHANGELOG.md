@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep terminal controls out of startup and post-exit cleanup errors.
+
 - Keep earlier CLI warnings when a later refresh step fails.
 
 - Keep control characters out of dialog status messages.
