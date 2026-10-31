@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Retry failed capacity updates when detected speed becomes unknown.
+
 - Keep other class counters out of measured share rates.
 
 - Skip malformed fallback route flags and metrics when choosing an interface.
