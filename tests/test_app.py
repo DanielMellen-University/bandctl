@@ -858,6 +858,19 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(app._push_caps())
             self.assertEqual(fake.caps, [(100_000_000, 100_000_000)])
 
+    async def test_capacity_retries_do_not_fill_the_log_with_identical_errors(self):
+        fake = FakeShaper()
+        fake.apply(42, 10, None, 100_000_000, 100_000_000, expected_start_ticks=42)
+        app = _app(fake)
+        async with app.run_test(size=(100, 32)):
+            app._detected_bps = None
+            with patch.object(fake, "set_capacities", side_effect=ShaperError("capacity unknown")), \
+                 patch.object(app, "_log") as log:
+                self.assertFalse(app._push_caps())
+                self.assertFalse(app._push_caps())
+                self.assertEqual(app._status_text, "capacity unknown")
+                log.assert_called_once_with("capacity unknown")
+
     async def test_unit_toggle_preserves_budget_when_applying_a_share(self):
         fake = FakeShaper()
         app = _app(fake, link_bps=None)

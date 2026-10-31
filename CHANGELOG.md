@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Avoid repeating an unchanged capacity error in the TUI log on every retry.
+
 - Retry failed capacity updates when detected speed becomes unknown.
 
 - Keep other class counters out of measured share rates.

@@ -680,7 +680,8 @@ class BandctlApp(App):
             # A failed rollback can leave class rates out of sync. Retry even
             # if the next requested capacities equal the last successful ones.
             self._pushed_caps = None
-            self._note(str(exc), bad=True)
+            if str(exc) != self._status_text or not self._status_bad:
+                self._note(str(exc), bad=True)
             return False
         self._pushed_caps = caps
         return True
