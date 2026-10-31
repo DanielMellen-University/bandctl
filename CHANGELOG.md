@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep other class counters out of measured share rates.
+
 - Skip malformed fallback route flags and metrics when choosing an interface.
 
 - Reject underscore-only budgets instead of clearing the submitted capacity.

@@ -1690,9 +1690,9 @@ def parse_root_qdisc(text: str) -> str | None:
 def parse_class_bytes(text: str) -> dict[int, int]:
     """Minor class id -> bytes sent, from ``tc -s class show``."""
     found: dict[int, int] = {}
-    chunks = re.split(r"(?=^class htb )", text, flags=re.MULTILINE)
+    chunks = re.split(r"(?=^class\s)", text, flags=re.MULTILINE)
     for chunk in chunks:
-        header = re.match(r"class htb 1:(\d+)", chunk)
+        header = re.match(r"class htb 1:([0-9]+)(?=\s|$)", chunk)
         sent = re.search(r"Sent (\d+) bytes", chunk)
         if not header or not sent:
             continue

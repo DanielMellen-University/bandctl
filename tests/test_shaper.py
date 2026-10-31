@@ -145,6 +145,14 @@ class ParseTests(unittest.TestCase):
         )
         self.assertEqual(parse_class_bytes(text), {10: 125000})
 
+    def test_class_bytes_do_not_use_another_classes_counter(self):
+        for other in ("class hfsc 1:20 parent 1:1\n Sent 5000 bytes 1 pkt\n",
+                      "class htb 1:10a parent 1:1\n Sent 9000 bytes 2 pkt\n"):
+            with self.subTest(other=other):
+                text = ("class htb 1:10 parent 1:1\n" + other
+                        + "class htb 1:11 parent 1:1\n Sent 1000 bytes 1 pkt\n")
+                self.assertEqual(parse_class_bytes(text), {11: 1000})
+
     def test_unconnected_udp_flower_omits_the_remote(self):
         flow = SockFlow("udp", "ip", "10.0.0.8", 5353, "", 0)
         command = " ".join(
