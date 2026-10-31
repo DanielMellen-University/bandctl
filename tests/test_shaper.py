@@ -999,6 +999,7 @@ class ApplyTests(unittest.TestCase):
         host.files["/proc/42/stat"] = "42 (work) S " + "0 " * 18 + "100"
         shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
         host.files.pop("/proc/42/stat")
+        host.files.pop("/proc/42/cgroup")
         with patch.object(shaper, "_sync", side_effect=[ShaperError("retire failed"),
                                                        ShaperError("restore failed")]):
             shaper.sample()
@@ -2792,6 +2793,37 @@ class CleanupTests(unittest.TestCase):
                     retry = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
                     retry.recover()
                     self.assertIsNone(retry.recovery_error)
+                restored = "/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs"
+                self.assertEqual(host.files[restored], "42\n")
+
+    def test_missing_stat_for_live_process_keeps_recovery_state(self):
+        for operation in ("remove", "sample", "teardown"):
+            with self.subTest(operation=operation):
+                shaper, host = _shaper()
+                stat = "42 (curl) S " + "0 " * 18 + "100"
+                host.files["/proc/42/stat"] = stat
+                shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+                del host.files["/proc/42/stat"]
+                if operation == "remove":
+                    with self.assertRaisesRegex(ShaperError, "cannot verify pid 42"):
+                        shaper.remove(42)
+                    self.assertIn(42, shaper.shares)
+                elif operation == "sample":
+                    shaper.sample()
+                    self.assertIn(42, shaper.shares)
+                    self.assertIn("cannot verify pid 42", shaper.flow_warning)
+                else:
+                    self.assertTrue(any("cannot verify pid 42" in note for note in shaper.teardown()))
+                self.assertIn("/run/bandctl.json", host.files)
+                self.assertEqual(host.files["/proc/42/cgroup"], "0::/bandctl/bandctl-42\n")
+
+                host.files["/proc/42/stat"] = stat
+                if operation == "teardown":
+                    retry = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+                    retry.recover()
+                    self.assertIsNone(retry.recovery_error)
+                else:
+                    self.assertIn("removed", shaper.remove(42))
                 restored = "/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs"
                 self.assertEqual(host.files[restored], "42\n")
 

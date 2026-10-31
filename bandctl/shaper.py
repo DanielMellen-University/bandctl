@@ -632,7 +632,7 @@ class Shaper:
         try:
             stat = self.host.read(f"/proc/{share.pid}/stat")
         except FileNotFoundError:
-            return "gone"
+            return "unknown" if self._pid_alive(share.pid) else "gone"
         except OSError:
             return "unknown"
         start = parse_start_ticks(stat)
