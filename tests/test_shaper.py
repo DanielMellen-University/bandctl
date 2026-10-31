@@ -1067,6 +1067,18 @@ class ApplyTests(unittest.TestCase):
         shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
         self.assertIn(42, shaper.shares)
 
+    def test_malformed_start_time_does_not_verify_a_process(self):
+        for ticks in ("+100", "1_00", "١٠٠"):
+            with self.subTest(ticks=ticks):
+                shaper, host = _shaper()
+                host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + ticks
+                before = dict(host.files)
+                with self.assertRaises(ShaperError):
+                    shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+                self.assertEqual(host.files, before)
+                self.assertEqual(host.commands, [])
+                self.assertFalse(shaper.shares)
+
     def test_moves_cgroup_and_sets_both_directions(self):
         shaper, host = _shaper()
         text = shaper.apply(42, 30, 10, 100_000_000, 100_000_000, "curl")

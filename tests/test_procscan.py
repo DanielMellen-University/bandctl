@@ -32,6 +32,13 @@ class ParseTests(unittest.TestCase):
         self.assertIsNone(parse_start_ticks("42 (bad) S 0"))
         self.assertIsNone(parse_start_ticks("42 (bad) S " + "0 " * 18 + "oops"))
 
+    def test_start_ticks_reject_non_kernel_numbers(self):
+        for ticks in ("+100", "1_00", "١٠٠", "18446744073709551616", "9" * 100):
+            with self.subTest(ticks=ticks[:24]):
+                self.assertIsNone(parse_start_ticks("42 (work) S " + "0 " * 18 + ticks))
+        self.assertEqual(parse_start_ticks("42 (work) S " + "0 " * 18 + "18446744073709551615"),
+                         18446744073709551615)
+
     def test_inodes(self):
         self.assertEqual(parse_socket_inodes(TCP), {"555", "777"})
         self.assertEqual(parse_socket_inodes(TCP + "2: 0 0 0 0 0 0 0 0 ９９\n"), {"555", "777"})

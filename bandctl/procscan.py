@@ -53,11 +53,11 @@ def parse_start_ticks(text: str) -> int | None:
     fields = text[end + 1 :].split()
     if len(fields) < 20:
         return None
-    try:
-        value = int(fields[19])
-    except ValueError:
+    raw = fields[19]
+    if not raw.isascii() or not raw.isdigit() or len(raw) > 20:
         return None
-    return value if value >= 0 else None
+    value = int(raw)
+    return value if value <= 0xFFFFFFFFFFFFFFFF else None
 
 
 def parse_socket_inodes(text: str) -> set[str]:

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reject malformed process start times before verifying a PID.
+
 - Prefer acknowledged bytes across all detail lines of a socket record.
 
 - Detect inode conflicts with listeners before changing socket filters.
