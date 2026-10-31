@@ -134,7 +134,7 @@ class TrafficSampler:
 
     def __init__(self) -> None:
         # Counters, their sample times, last socket sighting, and upload counter type.
-        self._prev: dict[tuple[int, str], tuple[int, int, float, float, float, str | None]] | None = None
+        self._prev: dict[tuple[int, str], tuple[int | None, int | None, float, float, float, str | None]] | None = None
         self._prev_at: float | None = None
         self._totals: dict[int, tuple[int, int]] = {}
         self._seen_pids: dict[int, float] = {}
@@ -167,7 +167,7 @@ class TrafficSampler:
         prev = self._prev
         prev_at = self._prev_at
         if prev is None or prev_at is None:
-            self._prev = {key: (received or 0, acked or 0, now, now, now, source)
+            self._prev = {key: (received, acked, now, now, now, source)
                           for key, (received, acked, source) in current.items()}
             self._prev_at = now
             for pid, _socket in current:
@@ -190,8 +190,14 @@ class TrafficSampler:
             old = prev.get((pid, socket))
             if old is not None and old[4] < prev_at and now - old[4] > 60:
                 old = None
-            down = 0 if received is None else max(0, received - old[0]) if old is not None else received
-            up = 0 if acked is None else max(0, acked - old[1]) if old is not None else acked
+            def delta(value: int | None, baseline: int | None) -> int:
+                if value is None or baseline is None:
+                    return 0
+                return max(0, value - baseline)
+
+            # New sockets contribute from zero. Missing initial counters need a baseline.
+            down = delta(received, old[0] if old is not None else 0)
+            up = delta(acked, old[1] if old is not None else 0)
             # Sent and acknowledged bytes have different baselines.
             if old is not None and source is not None and old[5] is not None and source != old[5]:
                 up = 0

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Avoid counting old bytes when an initial TCP sample lacks one counter.
+
 - Reject malformed process start times before verifying a PID.
 
 - Prefer acknowledged bytes across all detail lines of a socket record.

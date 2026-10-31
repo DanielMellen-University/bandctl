@@ -192,6 +192,18 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(sampler.rates(header + '\t bytes_received:20\n', 2)[5], (160.0, 0.0))
         self.assertEqual(sampler.totals[5], (20, 0))
 
+    def test_initial_missing_counter_gets_a_baseline_when_first_reported(self):
+        header = 'ESTAB 0 0 10.0.0.2:1 1.1.1.1:1 users:(("x",pid=5,fd=1)) sk:a\n'
+        for first, later in (("bytes_received:100", "bytes_received:110 bytes_acked:500"),
+                             ("bytes_acked:100", "bytes_acked:110 bytes_received:500")):
+            with self.subTest(first=first):
+                sampler = TrafficSampler()
+                sampler.rates(header + "\t " + first + "\n", 1)
+                expected = (80.0, 0.0) if "received" in first else (0.0, 80.0)
+                self.assertEqual(sampler.rates(header + "\t " + later + "\n", 2)[5], expected)
+                totals = (10, 0) if "received" in first else (0, 10)
+                self.assertEqual(sampler.totals[5], totals)
+
     def test_missing_one_counter_keeps_its_baseline_and_elapsed_time(self):
         header = 'ESTAB 0 0 10.0.0.2:1 1.1.1.1:1 users:(("x",pid=5,fd=1)) sk:a\n'
         for partial, expected_partial in (
