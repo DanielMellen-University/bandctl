@@ -2827,6 +2827,49 @@ class CleanupTests(unittest.TestCase):
                 restored = "/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs"
                 self.assertEqual(host.files[restored], "42\n")
 
+    def test_unreadable_identity_with_missing_proc_file_keeps_recovery_state(self):
+        for missing in ("stat", "cgroup"):
+            for operation in ("remove", "sample", "teardown", "recover"):
+                with self.subTest(missing=missing, operation=operation):
+                    shaper, host = _shaper()
+                    host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+                    shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+                    read = host.read
+                    inaccessible = "cgroup" if missing == "stat" else "stat"
+
+                    def fail_identity(path):
+                        if path == f"/proc/42/{missing}":
+                            raise FileNotFoundError(path)
+                        if path == f"/proc/42/{inaccessible}":
+                            raise PermissionError("identity unavailable")
+                        return read(path)
+
+                    with patch.object(host, "read", side_effect=fail_identity):
+                        if operation == "remove":
+                            with self.assertRaises(ShaperError):
+                                shaper.remove(42)
+                            self.assertIn(42, shaper.shares)
+                        elif operation == "sample":
+                            shaper.sample()
+                            self.assertIn(42, shaper.shares)
+                            self.assertIsNotNone(shaper.flow_warning)
+                        elif operation == "teardown":
+                            self.assertTrue(shaper.teardown())
+                        else:
+                            recovering = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+                            recovering.recover()
+                            self.assertIsNotNone(recovering.recovery_error)
+                    self.assertIn("/run/bandctl.json", host.files)
+                    self.assertEqual(host.files["/proc/42/cgroup"], "0::/bandctl/bandctl-42\n")
+                    if operation in ("teardown", "recover"):
+                        retry = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+                        retry.recover()
+                        self.assertIsNone(retry.recovery_error)
+                    else:
+                        self.assertIn("removed", shaper.remove(42))
+                    restored = "/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs"
+                    self.assertEqual(host.files[restored], "42\n")
+
     def test_remove_keeps_share_when_process_liveness_is_unreadable(self):
         shaper, host = _shaper()
         host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"

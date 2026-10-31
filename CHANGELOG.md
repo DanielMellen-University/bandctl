@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Test recovery when process identity files are missing or inaccessible.
+
 - Keep limits and recovery state when a live process has no readable stat file.
 
 - Retry cleanup when a live child has no readable cgroup file.
