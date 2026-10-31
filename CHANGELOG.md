@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep socket filters when socket tables report conflicting inodes.
+
 - Keep socket filters when a socket table has an incomplete header.
 
 - Avoid upload spikes when `ss` switches between sent and acknowledged byte counters.

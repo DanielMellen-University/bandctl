@@ -1788,6 +1788,8 @@ class ApplyTests(unittest.TestCase):
                         header + "0: 0800000A:9C4 04030201:01BB 01 0 0 0 0 0 99\n",
                         header + "0: 0800000A:0000 04030201:01BB 01 0 0 0 0 0 99\n",
                         header + "0: 0800000A:9C40 04030201:01BB 01 0 0 0 0 0 ９９\n",
+                        header + "0: 0800000A:9C40 04030201:01BB 01 0 0 0 0 0 99\n"
+                                 "1: 0800000A:9C41 04030201:01BB 01 0 0 0 0 0 99\n",
                         header + "0: 0800000A:9C40 04030201:+1BB 01 0 0 0 0 0 99\n"):
             with self.subTest(damaged=damaged):
                 shaper, host = _shaper()
@@ -1809,6 +1811,36 @@ class ApplyTests(unittest.TestCase):
                 shaper.sample()
                 self.assertIsNone(shaper.flow_warning)
                 self.assertEqual(shaper._flows, {})
+
+    def test_duplicate_inode_across_socket_tables_keeps_filters_until_retry(self):
+        shaper, host = _shaper()
+        _open_socket(host)
+        shaper.apply(42, None, 10, None, 100_000_000)
+        existing = dict(shaper._flows)
+        host.files["/proc/net/udp"] += "0: 0800000A:9C41 04030201:01BB 01 0 0 0 0 0 99\n"
+        host.commands.clear()
+        shaper.sample()
+        self.assertIn("duplicate socket inode", shaper.flow_warning)
+        self.assertEqual(shaper._flows, existing)
+        self.assertFalse(any("filter del" in command and "flower" in command for command in _joined(host)))
+        host.files["/proc/net/udp"] = host.files["/proc/net/udp"].splitlines(keepends=True)[0]
+        host.links.clear()
+        shaper.sample()
+        self.assertIsNone(shaper.flow_warning)
+        self.assertEqual(shaper._flows, {})
+
+    def test_zero_inode_rows_do_not_block_socket_scans(self):
+        shaper, host = _shaper()
+        _open_socket(host)
+        zero_rows = ("2: 0800000A:9C42 04030201:01BB 06 0 0 0 0 0 0\n"
+                     "3: 0800000A:9C43 04030201:01BB 06 0 0 0 0 0 0\n")
+        host.files["/proc/net/tcp"] += zero_rows
+        host.files["/proc/net/udp"] += zero_rows
+        shaper.apply(42, None, 10, None, 100_000_000)
+        existing = dict(shaper._flows)
+        shaper.sample()
+        self.assertIsNone(shaper.flow_warning)
+        self.assertEqual(shaper._flows, existing)
 
     def test_later_process_scan_failure_preserves_both_directions_until_retry(self):
         shaper, host = _shaper()

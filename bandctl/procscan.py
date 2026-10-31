@@ -78,6 +78,7 @@ def parse_proc_net(text: str, proto: str, family: str, *, strict: bool = False) 
     A row whose two ends are different families is skipped too.
     """
     found: dict[str, SockFlow] = {}
+    seen_inodes: set[str] = set()
     if proto not in ("tcp", "udp") or family not in ("ip", "ipv6"):
         raise ValueError(f"unsupported table {proto}/{family}")
     lines = text.splitlines()
@@ -108,11 +109,16 @@ def parse_proc_net(text: str, proto: str, family: str, *, strict: bool = False) 
             if strict:
                 raise ValueError("invalid socket table local port")
             continue
+        inode = parts[9]
+        if strict and inode != "0":
+            if inode in seen_inodes:
+                raise ValueError("duplicate socket inode")
+            seen_inodes.add(inode)
         if proto == "tcp" and remote_port <= 0:
             continue
         if remote_port and local_family != remote_family:
             continue
-        found[parts[9]] = SockFlow(
+        found[inode] = SockFlow(
             proto=proto,
             family=local_family,
             local_ip=local_ip,

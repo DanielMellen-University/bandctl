@@ -1480,6 +1480,8 @@ class Shaper:
                 raise ShaperError(f"cannot read {path}: {exc}") from exc
             self._known_net_tables.add(filename)
             for inode, flow in flows.items():
+                if inode != "0" and inode in table:
+                    raise ShaperError(f"cannot read {path}: duplicate socket inode")
                 table.setdefault(inode, flow)
         return table
 
