@@ -112,9 +112,11 @@ fi
 py="$PREFIX/venv/bin/python"
 if [ -x "$py" ]; then
   if ! "$py" -c 'from bandctl.shaper import Shaper
-notes = Shaper("lo").recover()
+shaper = Shaper("lo")
+notes = shaper.recover()
 for note in notes:
-    print(note)'; then
+    print(note)
+raise SystemExit(1 if shaper.recovery_error else 0)'; then
     echo "bandctl uninstall: could not clear kernel state. Removing the program anyway." >&2
     echo "If a limit is still in place, install bandctl again, start it, and quit." >&2
   fi

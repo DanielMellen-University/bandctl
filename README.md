@@ -74,7 +74,7 @@ Quit bandctl first if it is open. `q` removes the limits. Then:
 sudo bandctl-uninstall
 ```
 
-That deletes `/opt/bandctl` and the `bandctl` command. If the last run crashed, it also clears the qdisc, nft table, and cgroup that run left behind. It does not remove `iproute2` or `nftables`.
+That deletes `/opt/bandctl` and the `bandctl` command. If the last run crashed, it also tries to clear the qdisc, nft table, and cgroup that run left behind. If cleanup fails, uninstall warns and keeps any recovery file. Reinstall bandctl and start it to retry cleanup. It does not remove `iproute2` or `nftables`.
 
 ## Run from a checkout
 

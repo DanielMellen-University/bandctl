@@ -112,6 +112,32 @@ class ScriptTests(unittest.TestCase):
             self.assertEqual(foreign.read_text(encoding="utf-8"), "keep\n")
             self.assertIn("Uninstalled", result.stdout)
 
+    def test_uninstall_warns_when_recovery_reports_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prefix, bindir, tools = root / "install", root / "bin", root / "tools"
+            venv_bin = prefix / "venv" / "bin"
+            venv_bin.mkdir(parents=True)
+            bindir.mkdir()
+            tools.mkdir()
+            (prefix / "install-stamp").write_text(f"PREFIX={prefix}\nBINDIR={bindir}\n", encoding="utf-8")
+            package = root / "bandctl"
+            package.mkdir()
+            (package / "__init__.py").write_text("", encoding="utf-8")
+            (package / "shaper.py").write_text(
+                "class Shaper:\n"
+                "    def __init__(self, iface): self.recovery_error = 'cleanup failed'\n"
+                "    def recover(self): return ['cleanup failed']\n", encoding="utf-8")
+            python = venv_bin / "python"
+            python.symlink_to(sys.executable)
+            env = _quiet_ps(tools)
+            env["PYTHONPATH"] = str(root)
+            result = _run(["bash", str(UNINSTALL), "--prefix", str(prefix), "--bindir", str(bindir)],
+                          env=env, cwd=root)
+            self.assertIn("cleanup failed", result.stdout)
+            self.assertIn("could not clear kernel state", result.stderr)
+            self.assertFalse(prefix.exists())
+
     def test_uninstall_refuses_a_live_process_and_a_dangerous_prefix(self):
         with tempfile.TemporaryDirectory() as tmp:
             prefix = Path(tmp) / "opt" / "bandctl"

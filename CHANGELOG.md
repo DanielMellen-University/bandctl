@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Warn when uninstall recovery reports that cleanup failed.
+
 - Clear a capacity error after the update succeeds or the last limit is removed.
 
 - Avoid repeating an unchanged capacity error in the TUI log on every retry.
