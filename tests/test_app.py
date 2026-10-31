@@ -290,6 +290,18 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(app.query_one("#apply", Button).disabled)
                 self.assertTrue(app.query_one("#remove", Button).disabled)
 
+    async def test_percent_sign_alone_does_not_clear_an_existing_cap(self):
+        fake = FakeShaper()
+        fake.apply(42, 30, 10, 100_000_000, 100_000_000, expected_start_ticks=42)
+        app = _app(fake)
+        async with app.run_test(size=(80, 24)):
+            app._selected = 42
+            app.query_one("#down-pct", Input).value = "%"
+            app.query_one("#up-pct", Input).value = "20"
+            app.action_apply_limit()
+            self.assertEqual((fake.shares[42].down_pct, fake.shares[42].up_pct), (30, 10))
+            self.assertIn("percent", app._status_text)
+
     async def test_manual_apply_verifies_selected_process_identity(self):
         fake = FakeShaper()
         proc = ProcessInfo(42, "curl", "curl", "user", 1, 123)

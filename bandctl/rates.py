@@ -26,12 +26,12 @@ class RateError(ValueError):
 def parse_percent(text: str, *, allow_empty: bool = False) -> int | None:
     """Return 1..100, or None when *text* is empty and *allow_empty* is set."""
     raw = text.strip()
-    if raw.endswith("%"):
-        raw = raw[:-1].strip()
     if not raw:
         if allow_empty:
             return None
         raise RateError("enter a percent from 1 to 100")
+    if raw.endswith("%"):
+        raw = raw[:-1].strip()
     if not raw.isdigit():
         raise RateError(f"{text.strip()!r} is not a whole-number percent")
     try:

@@ -30,6 +30,11 @@ class PercentTests(unittest.TestCase):
         with self.assertRaises(RateError):
             parse_percent("  ")
 
+    def test_percent_sign_alone_is_not_an_empty_share(self):
+        for text in ("%", "  %  "):
+            with self.subTest(text=text), self.assertRaises(RateError):
+                parse_percent(text, allow_empty=True)
+
     def test_rejects_zero_over_and_junk(self):
         for text in ("0", "101", "5.5", "10M", "-3", "abc"):
             with self.assertRaises(RateError):
