@@ -539,7 +539,13 @@ class BandctlApp(App):
             self._push_caps()
             self._render()
             if self._status_text.startswith("refresh failed:"):
-                self._note("ready")
+                flow_warning = getattr(self.shaper, "flow_warning", None) if self.shaper else None
+                if flow_warning:
+                    self._note(flow_warning, bad=True)
+                elif self._ss_failed:
+                    self._note(_SS_WARNING, bad=True)
+                else:
+                    self._note("ready")
             self._report_flow_warning()
         except Exception as exc:  # one bad scan must not stop the clock
             message = f"refresh failed: {exc}"

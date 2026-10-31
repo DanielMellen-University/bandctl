@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Restore unresolved background warnings after a refresh failure clears.
+
 - Leave noncanonical cgroup leaf names and their processes alone during cleanup.
 
 - Reject process stat records that identify a different PID.

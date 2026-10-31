@@ -225,6 +225,36 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             await app._refresh()
             self.assertEqual(app._status_text, "ready")
 
+    async def test_refresh_recovery_restores_unresolved_background_warning(self):
+        for warning_kind in ("traffic", "socket"):
+            with self.subTest(warning=warning_kind):
+                fail = [False]
+                snapshot = [None if warning_kind == "traffic" else ""]
+                fake = FakeShaper()
+                fake.flow_warning = "socket filter update failed" if warning_kind == "socket" else None
+
+                def processes():
+                    if fail[0]:
+                        raise OSError("scan unavailable")
+                    return list(PROCS)
+
+                app = BandctlApp(iface="eth0", shaper=fake, processes=processes,
+                                 link_bps=100_000_000, is_root=True)
+                with patch("bandctl.app.read_ss", side_effect=lambda: snapshot[0]):
+                    async with app.run_test(size=(80, 24)):
+                        expected = "could not read traffic with ss" if warning_kind == "traffic" else fake.flow_warning
+                        self.assertIn(expected, app._status_text)
+                        fail[0] = True
+                        await app._refresh()
+                        self.assertIn("refresh failed: scan unavailable", app._status_text)
+                        fail[0] = False
+                        await app._refresh()
+                        self.assertIn(expected, app._status_text)
+                        snapshot[0] = ""
+                        fake.flow_warning = None
+                        await app._refresh()
+                        self.assertEqual(app._status_text, "ready")
+
     async def test_initial_socket_filter_warning_stays_visible(self):
         fake = FakeShaper()
         fake.flow_warning = "socket filter update failed"
