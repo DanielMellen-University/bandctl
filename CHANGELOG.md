@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Let non-root uninstall remove a custom install without accessing the root session lock.
+
 - Hold the session lock during uninstall recovery to avoid disrupting a live session.
 
 - Keep terminal controls out of uninstall recovery messages.

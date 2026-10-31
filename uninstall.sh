@@ -110,7 +110,10 @@ if bandctl_is_running; then
 fi
 
 py="$PREFIX/venv/bin/python"
-if [ -x "$py" ]; then
+if [ "$(id -u)" -ne 0 ]; then
+  echo "bandctl uninstall: not root; recovery was skipped." >&2
+  echo "Run bandctl as root after reinstalling if cleanup is needed." >&2
+elif [ -x "$py" ]; then
   if "$py" -c 'import sys
 from bandctl.session_lock import SessionLock, SessionLockError
 from bandctl.shaper import Shaper

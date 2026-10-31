@@ -26,6 +26,9 @@ def _quiet_ps(directory: Path) -> dict[str, str]:
     ps = directory / "ps"
     ps.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     ps.chmod(0o755)
+    identity = directory / "id"
+    identity.write_text("#!/bin/sh\nprintf '0\\n'\n", encoding="utf-8")
+    identity.chmod(0o755)
     env = os.environ.copy()
     env["PATH"] = f"{directory}:/usr/bin:/bin"
     return env
@@ -184,6 +187,27 @@ class ScriptTests(unittest.TestCase):
             self.assertIn("session busy", result.stderr)
             self.assertFalse(marker.exists())
             self.assertTrue(prefix.exists())
+
+    def test_nonroot_uninstall_skips_privileged_recovery(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prefix, bindir, tools = root / "install", root / "bin", root / "tools"
+            venv_bin = prefix / "venv" / "bin"
+            venv_bin.mkdir(parents=True)
+            bindir.mkdir()
+            tools.mkdir()
+            (prefix / "install-stamp").write_text(f"PREFIX={prefix}\nBINDIR={bindir}\n", encoding="utf-8")
+            marker = root / "recovery-called"
+            python = venv_bin / "python"
+            python.write_text(f"#!/bin/sh\ntouch {marker}\nexit 1\n", encoding="utf-8")
+            python.chmod(0o755)
+            env = _quiet_ps(tools)
+            (tools / "id").write_text("#!/bin/sh\nprintf '1000\\n'\n", encoding="utf-8")
+            result = _run(["bash", str(UNINSTALL), "--prefix", str(prefix), "--bindir", str(bindir)], env=env)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse(marker.exists())
+            self.assertFalse(prefix.exists())
+            self.assertIn("recovery was skipped", result.stderr)
 
     def test_uninstall_refuses_a_live_process_and_a_dangerous_prefix(self):
         with tempfile.TemporaryDirectory() as tmp:
