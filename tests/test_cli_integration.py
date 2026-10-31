@@ -24,7 +24,7 @@ class CliIntegrationTests(unittest.TestCase):
                 _, host = _shaper()
                 host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
                 host.files["/proc/net/udp"] = (
-                    "sl local_address rem_address st tx_queue rx_queue tr tm retrnsmt uid timeout inode\n"
+                    "sl local_address rem_address st tx_queue rx_queue tr tm->when retrnsmt uid timeout inode\n"
                     "0: 00000000:14E9 00000000:0000 07 0 0 0 0 0 99\n"
                 )
                 host.links["/proc/42/fd/3"] = "socket:[99]"

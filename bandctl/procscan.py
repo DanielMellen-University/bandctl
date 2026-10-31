@@ -81,8 +81,14 @@ def parse_proc_net(text: str, proto: str, family: str, *, strict: bool = False) 
     if proto not in ("tcp", "udp") or family not in ("ip", "ipv6"):
         raise ValueError(f"unsupported table {proto}/{family}")
     lines = text.splitlines()
-    if strict and (not lines or not {"local_address", "inode"}.issubset(lines[0].split())):
-        raise ValueError("invalid socket table header")
+    if strict:
+        header = lines[0].split() if lines else []
+        expected = ["sl", "local_address", "rem_address", "st", "tx_queue", "rx_queue",
+                    "tr", "tm->when", "retrnsmt", "uid", "timeout", "inode"]
+        if len(header) >= 3 and header[2] == "remote_address":
+            header[2] = "rem_address"
+        if header[:len(expected)] != expected:
+            raise ValueError("invalid socket table header")
     if strict and not text.endswith("\n"):
         raise ValueError("truncated socket table")
     for line in lines[1:]:

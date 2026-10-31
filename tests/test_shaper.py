@@ -32,8 +32,8 @@ class FakeHost:
     def __init__(self):
         self.commands: list[tuple[list[str], str | None]] = []
         self.files: dict[str, str] = {
-            "/proc/net/tcp": "sl local_address rem_address inode\n",
-            "/proc/net/udp": "sl local_address rem_address inode\n",
+            "/proc/net/tcp": "sl local_address rem_address st tx_queue rx_queue tr tm->when retrnsmt uid timeout inode\n",
+            "/proc/net/udp": "sl local_address rem_address st tx_queue rx_queue tr tm->when retrnsmt uid timeout inode\n",
         }
         self.dirs: set[str] = {"/sys/fs/cgroup"}
         self.links: dict[str, str] = {}
@@ -1617,7 +1617,7 @@ class ApplyTests(unittest.TestCase):
                 shaper, host = _shaper()
                 shaper.match_wildcard = enabled
                 host.files["/proc/net/udp"] = (
-                    "sl local_address rem_address st tx_queue rx_queue tr tm retrnsmt uid timeout inode\n"
+                    "sl local_address rem_address st tx_queue rx_queue tr tm->when retrnsmt uid timeout inode\n"
                     "0: 00000000:14E9 00000000:0000 07 0 0 0 0 0 99\n"
                 )
                 host.links["/proc/42/fd/3"] = "socket:[99]"
@@ -1632,7 +1632,7 @@ class ApplyTests(unittest.TestCase):
         shaper, host = _shaper()
         shaper.match_wildcard = True
         host.files["/proc/net/udp"] = (
-            "sl local_address rem_address st tx_queue rx_queue tr tm retrnsmt uid timeout inode\n"
+            "sl local_address rem_address st tx_queue rx_queue tr tm->when retrnsmt uid timeout inode\n"
             "0: 00000000:14E9 04030201:01BB 01 0 0 0 0 0 99\n"
             "1: 00000000:14E9 08080808:0035 01 0 0 0 0 0 100\n"
         )
@@ -1651,7 +1651,7 @@ class ApplyTests(unittest.TestCase):
             with self.subTest(order=order):
                 shaper, host = _shaper()
                 host.files["/proc/net/udp"] = (
-                    "sl local_address rem_address st tx_queue rx_queue tr tm retrnsmt uid timeout inode\n"
+                    "sl local_address rem_address st tx_queue rx_queue tr tm->when retrnsmt uid timeout inode\n"
                     "0: 0800000A:14E9 00000000:0000 07 0 0 0 0 0 99\n"
                     "1: 0800000A:14E9 04030201:01BB 01 0 0 0 0 0 100\n"
                 )
@@ -1684,7 +1684,7 @@ class ApplyTests(unittest.TestCase):
                 shaper, host = _shaper()
                 shaper.match_wildcard = True
                 host.files["/proc/net/udp"] = (
-                    "sl local_address rem_address st tx_queue rx_queue tr tm retrnsmt uid timeout inode\n"
+                    "sl local_address rem_address st tx_queue rx_queue tr tm->when retrnsmt uid timeout inode\n"
                     "0: 00000000:14E9 00000000:0000 07 0 0 0 0 0 99\n"
                     "1: 0800000A:14E9 00000000:0000 07 0 0 0 0 0 100\n"
                 )
@@ -1780,8 +1780,9 @@ class ApplyTests(unittest.TestCase):
                 self.assertEqual(shaper._flows, {})
 
     def test_malformed_socket_table_keeps_filters_until_retry(self):
-        header = "sl local_address rem_address inode\n"
-        for damaged in ("", "not a socket table\n", header.rstrip("\n"), header + "0: truncated\n",
+        header = "sl local_address rem_address st tx_queue rx_queue tr tm->when retrnsmt uid timeout inode\n"
+        for damaged in ("", "not a socket table\n", "sl local_address inode\n", header.replace("tx_queue", "bad_queue"),
+                        header.rstrip("\n"), header + "0: truncated\n",
                         header + "0: 0800000A:9C40 04030201:01BB 01 0 0 0 0 0 99",
                         header + "0: invalid:0050 04030201:01BB 01 0 0 0 0 0 99\n",
                         header + "0: 0800000A:9C4 04030201:01BB 01 0 0 0 0 0 99\n",
@@ -1846,7 +1847,7 @@ class ApplyTests(unittest.TestCase):
             with self.subTest(missing=missing):
                 shaper, host = _shaper()
                 _open_socket(host)
-                host.files["/proc/net/udp"] = "sl local_address rem_address inode\n"
+                host.files["/proc/net/udp"] = "sl local_address rem_address st tx_queue rx_queue tr tm->when retrnsmt uid timeout inode\n"
                 del host.files[f"/proc/net/{missing}"]
                 with self.assertRaisesRegex(ShaperError, f"cannot read /proc/net/{missing}"):
                     shaper.apply(42, None, 10, None, 100_000_000)
@@ -1857,7 +1858,7 @@ class ApplyTests(unittest.TestCase):
             with self.subTest(filename=filename):
                 shaper, host = _shaper()
                 _open_socket(host)
-                host.files[f"/proc/net/{filename}"] = "sl local_address remote_address inode\n"
+                host.files[f"/proc/net/{filename}"] = "sl local_address remote_address st tx_queue rx_queue tr tm->when retrnsmt uid timeout inode\n"
                 shaper.apply(42, None, 10, None, 100_000_000)
                 existing = dict(shaper._flows)
                 self.assertTrue(existing)
