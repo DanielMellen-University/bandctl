@@ -677,7 +677,7 @@ class Shaper:
         try:
             cgroup = self._read_cgroup(share.pid)
         except ShaperError as exc:
-            if isinstance(exc.__cause__, FileNotFoundError):
+            if isinstance(exc.__cause__, FileNotFoundError) and not self._pid_alive(share.pid):
                 return False
             raise
         if cgroup != f"/bandctl/bandctl-{share.pid}":
@@ -698,7 +698,7 @@ class Shaper:
         try:
             cgroup = self._read_cgroup(share.pid)
         except ShaperError as exc:
-            if isinstance(exc.__cause__, FileNotFoundError):
+            if isinstance(exc.__cause__, FileNotFoundError) and not self._pid_alive(share.pid):
                 return
             raise ShaperError(f"cannot verify pid {share.pid}: {exc}") from exc
         if cgroup == f"/bandctl/bandctl-{share.pid}":
@@ -765,7 +765,7 @@ class Shaper:
                         try:
                             cgroup = self._read_cgroup(pid)
                         except ShaperError as exc:
-                            if not isinstance(exc.__cause__, FileNotFoundError):
+                            if not isinstance(exc.__cause__, FileNotFoundError) or self._pid_alive(pid):
                                 pending_pids.add(pid)
                                 pending_error = str(exc)
                             raise
@@ -885,7 +885,7 @@ class Shaper:
         try:
             text = self.host.read(f"/proc/{pid}/cgroup")
         except FileNotFoundError as exc:
-            raise ShaperError(f"pid {pid} is not running") from exc
+            raise ShaperError(f"cannot read cgroup for pid {pid}: file missing") from exc
         except OSError as exc:
             raise ShaperError(f"cannot read cgroup for pid {pid}: {exc}") from exc
         path = None
@@ -940,7 +940,12 @@ class Shaper:
         try:
             self.host.read(f"/proc/{pid}/cgroup")
         except FileNotFoundError:
-            return False
+            try:
+                self.host.read(f"/proc/{pid}/stat")
+            except FileNotFoundError:
+                return False
+            except OSError:
+                return True
         except OSError:
             # An inaccessible process may still need to be restored.
             return True

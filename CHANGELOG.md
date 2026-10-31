@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep recovery state when a live process has no readable cgroup file.
+
 - Keep control characters out of TUI status and log messages.
 
 - Keep control characters in rule and group names out of table rows and details.

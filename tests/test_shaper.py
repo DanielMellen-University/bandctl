@@ -2745,6 +2745,35 @@ class CleanupTests(unittest.TestCase):
                 shaper.remove(42)
         self.assertIn(42, shaper.shares)
 
+    def test_missing_cgroup_for_live_process_keeps_recovery_state(self):
+        for operation in ("remove", "teardown", "recover"):
+            with self.subTest(operation=operation):
+                shaper, host = _shaper()
+                host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+                shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+                original_cgroup = host.files["/proc/42/cgroup"]
+                del host.files["/proc/42/cgroup"]
+                if operation == "remove":
+                    with self.assertRaises(ShaperError):
+                        shaper.remove(42)
+                    self.assertIn(42, shaper.shares)
+                elif operation == "teardown":
+                    self.assertTrue(shaper.teardown())
+                else:
+                    again = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+                    again.recover()
+                    self.assertIsNotNone(again.recovery_error)
+                self.assertIn("/run/bandctl.json", host.files)
+                host.files["/proc/42/cgroup"] = original_cgroup
+                if operation == "remove":
+                    self.assertIn("removed", shaper.remove(42))
+                else:
+                    retry = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+                    retry.recover()
+                    self.assertIsNone(retry.recovery_error)
+                restored = "/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs"
+                self.assertEqual(host.files[restored], "42\n")
+
     def test_remove_keeps_share_when_process_liveness_is_unreadable(self):
         shaper, host = _shaper()
         host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
