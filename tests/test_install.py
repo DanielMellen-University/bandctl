@@ -123,11 +123,11 @@ class ScriptTests(unittest.TestCase):
             (prefix / "install-stamp").write_text(f"PREFIX={prefix}\nBINDIR={bindir}\n", encoding="utf-8")
             package = root / "bandctl"
             package.mkdir()
-            (package / "__init__.py").write_text("", encoding="utf-8")
+            (package / "__init__.py").write_text(f"__path__.append({str(ROOT / 'bandctl')!r})\n", encoding="utf-8")
             (package / "shaper.py").write_text(
                 "class Shaper:\n"
                 "    def __init__(self, iface): self.recovery_error = 'cleanup failed'\n"
-                "    def recover(self): return ['cleanup failed']\n", encoding="utf-8")
+                "    def recover(self): return ['cleanup failed\\x1b[2J\\x85']\n", encoding="utf-8")
             python = venv_bin / "python"
             python.symlink_to(sys.executable)
             env = _quiet_ps(tools)
@@ -135,6 +135,8 @@ class ScriptTests(unittest.TestCase):
             result = _run(["bash", str(UNINSTALL), "--prefix", str(prefix), "--bindir", str(bindir)],
                           env=env, cwd=root)
             self.assertIn("cleanup failed", result.stdout)
+            self.assertIn("cleanup failed?[2J?", result.stdout)
+            self.assertNotIn("\x1b", result.stdout)
             self.assertIn("could not clear kernel state", result.stderr)
             self.assertFalse(prefix.exists())
 

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep terminal controls out of uninstall recovery messages.
+
 - Warn when uninstall recovery reports that cleanup failed.
 
 - Clear a capacity error after the update succeeds or the last limit is removed.
