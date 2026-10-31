@@ -1926,6 +1926,33 @@ class ApplyTests(unittest.TestCase):
         self.assertIsNone(shaper.flow_warning)
         self.assertEqual(shaper._flows, existing)
 
+    @patch("sys.byteorder", "little")
+    def test_connected_wildcard_udp_conflicts_only_with_port_matching_enabled(self):
+        for match_wildcard in (False, True):
+            with self.subTest(match_wildcard=match_wildcard):
+                shaper, host = _shaper()
+                shaper.match_wildcard = match_wildcard
+                shaper.apply(42, 30, 10, 100_000_000, 100_000_000)
+                shaper.apply(43, 30, 10, 100_000_000, 100_000_000)
+                host.files["/proc/net/udp"] = (
+                    "sl local_address rem_address st tx_queue rx_queue tr tm->when retrnsmt uid timeout inode\n"
+                    "0: 00000000:14E9 04030201:01BB 01 0 0 0 0 0 99\n"
+                    "1: 00000000:14E9 08080808:0035 01 0 0 0 0 0 100\n"
+                )
+                host.links["/proc/42/fd/3"] = "socket:[99]"
+                host.links["/proc/43/fd/3"] = "socket:[100]"
+                shaper.sample()
+                if match_wildcard:
+                    self.assertIn("socket filter conflicts between pid 42 and pid 43", shaper.flow_warning or "")
+                    self.assertEqual(shaper._flows, {})
+                    del host.links["/proc/43/fd/3"]
+                    shaper.sample()
+                    self.assertIsNone(shaper.flow_warning)
+                    self.assertEqual(len(shaper._flows), 2)
+                else:
+                    self.assertIsNone(shaper.flow_warning)
+                    self.assertEqual(len(shaper._flows), 4)
+
     def test_conflicting_socket_filter_rolls_back_new_share(self):
         shaper, host = _shaper()
         _open_socket(host)
