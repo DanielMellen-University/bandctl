@@ -2277,6 +2277,27 @@ class CleanupTests(unittest.TestCase):
         self.assertIn(leaf, host.dirs)
         self.assertNotIn("/sys/fs/cgroup/cgroup.procs", host.files)
 
+    def test_leaf_cleanup_retries_when_live_child_cgroup_is_missing(self):
+        shaper, host = _shaper()
+        shaper.apply(42, None, 10, None, 100_000_000)
+        leaf = "/sys/fs/cgroup/bandctl/bandctl-42"
+        host.files[leaf + "/cgroup.procs"] = "43\n"
+        host.files["/proc/43/stat"] = "43 (child) S " + "0 " * 18 + "100"
+        del host.files["/proc/43/cgroup"]
+
+        notes = shaper.teardown()
+        self.assertTrue(any("cannot read cgroup for pid 43" in note for note in notes))
+        self.assertIn(leaf, host.dirs)
+        self.assertIn("/run/bandctl.json", host.files)
+        self.assertNotIn("/sys/fs/cgroup/cgroup.procs", host.files)
+
+        host.files["/proc/43/cgroup"] = "0::/bandctl/bandctl-42\n"
+        retry = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+        retry.recover()
+        self.assertIsNone(retry.recovery_error)
+        self.assertEqual(host.files["/sys/fs/cgroup/cgroup.procs"], "43\n")
+        self.assertNotIn("/run/bandctl.json", host.files)
+
     def test_leaf_cleanup_skips_a_process_that_exited_after_the_listing(self):
         shaper, host = _shaper()
         leaf = "/sys/fs/cgroup/bandctl/bandctl-42"

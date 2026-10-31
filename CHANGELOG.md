@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Retry cleanup when a live child has no readable cgroup file.
+
 - Keep recovery state when a live process has no readable cgroup file.
 
 - Keep control characters out of TUI status and log messages.

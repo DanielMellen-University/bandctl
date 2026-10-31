@@ -992,7 +992,7 @@ class Shaper:
                     try:
                         cgroup = self._read_cgroup(pid)
                     except ShaperError as exc:
-                        if isinstance(exc.__cause__, FileNotFoundError):
+                        if isinstance(exc.__cause__, FileNotFoundError) and not self._pid_alive(pid):
                             continue
                         raise
                     if cgroup != f"/bandctl/{name}":
