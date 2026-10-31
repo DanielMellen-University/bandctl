@@ -1439,10 +1439,15 @@ class Shaper:
                 verified.append(share)
             for flow in self._pid_flows(pid, net):
                 ident = _flow_id(flow, match_wildcard=self.match_wildcard)
-                if share.up_pct and self._egress:
-                    desired[("up", ident)] = (flow, share.minor, "up")
-                if share.down_pct and self._ifb:
-                    desired[("down", ident)] = (flow, share.minor, "down")
+                for direction, enabled in (("up", share.up_pct and self._egress),
+                                           ("down", share.down_pct and self._ifb)):
+                    if not enabled:
+                        continue
+                    key = (direction, ident)
+                    previous = desired.get(key)
+                    if previous is not None and previous[1] != share.minor:
+                        raise ShaperError(f"socket filter conflicts between shares ({direction})")
+                    desired[key] = (flow, share.minor, direction)
         for share in verified:
             if self._process_status(share) != "same":
                 raise ShaperError(f"cannot verify pid {share.pid} for socket scan")

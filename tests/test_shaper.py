@@ -1907,6 +1907,49 @@ class ApplyTests(unittest.TestCase):
         deleted = [args for args, _ in host.commands if "flower" in args and "del" in args]
         self.assertEqual({args[args.index("parent") + 1] for args in deleted}, {"1:", "ffff:"})
 
+    def test_conflicting_socket_owners_keep_filters_until_conflict_resolves(self):
+        shaper, host = _shaper()
+        shaper.apply(42, 30, 10, 100_000_000, 100_000_000)
+        shaper.apply(43, 30, 10, 100_000_000, 100_000_000)
+        _open_socket(host)
+        shaper.sample()
+        existing = dict(shaper._flows)
+        self.assertEqual(len(existing), 2)
+        host.links["/proc/43/fd/3"] = "socket:[99]"
+        host.commands.clear()
+        shaper.sample()
+        self.assertIn("socket filter conflicts", shaper.flow_warning or "")
+        self.assertEqual(shaper._flows, existing)
+        self.assertFalse(any("flower" in args for args, _ in host.commands))
+        del host.links["/proc/43/fd/3"]
+        shaper.sample()
+        self.assertIsNone(shaper.flow_warning)
+        self.assertEqual(shaper._flows, existing)
+
+    def test_conflicting_socket_filter_rolls_back_new_share(self):
+        shaper, host = _shaper()
+        _open_socket(host)
+        shaper.apply(42, None, 10, None, 100_000_000)
+        existing = dict(shaper._flows)
+        host.links["/proc/43/fd/3"] = "socket:[99]"
+        with self.assertRaisesRegex(ShaperError, "socket filter conflicts"):
+            shaper.apply(43, None, 10, None, 100_000_000)
+        self.assertEqual(set(shaper.shares), {42})
+        self.assertEqual(shaper._flows, existing)
+
+    def test_group_members_can_share_a_socket_filter(self):
+        shaper, host = _shaper()
+        for pid in (42, 43):
+            host.files[f"/proc/{pid}/stat"] = f"{pid} (work) S " + "0 " * 18 + "100"
+        shaper.apply_group(Group("work", 30, 10, (42, 43)), {42: 100, 43: 100},
+                           100_000_000, 100_000_000)
+        _open_socket(host)
+        host.links["/proc/43/fd/3"] = "socket:[99]"
+        shaper.sample()
+        self.assertIsNone(shaper.flow_warning)
+        self.assertEqual(len(shaper._flows), 2)
+        self.assertEqual({entry.minor for entry in shaper._flows.values()}, {shaper.shares[42].minor})
+
     def test_first_scan_rejects_missing_ipv4_socket_tables(self):
         for missing in ("tcp", "udp"):
             with self.subTest(missing=missing):

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Report conflicting socket filters instead of silently assigning them to another share.
+
 - Set baselines for existing TCP sockets with no initial byte counters.
 
 - Avoid counting old bytes when an initial TCP sample lacks one counter.

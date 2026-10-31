@@ -79,7 +79,7 @@ The kernel does not move an existing socket into the new cgroup, so bandctl also
 
 For the CLI, start the session with `sudo bandctl --match-wildcard limit <pid> --down 30` or put the option before the first `import` command. The option applies to the whole session and is not included in exported settings. Later commands can omit it. If an existing session was started without the option, a command that explicitly requests it fails. Stop that session and start a new one to change the setting.
 
-If bandctl cannot scan socket tables or process descriptors, or a socket table is malformed, it reports a warning and keeps the existing filters until a scan succeeds. New or closed connections may not be reflected until then. IPv4 TCP and UDP tables are required even on the first scan. IPv6 tables may be absent, but a table that was available must stay readable.
+If bandctl cannot scan socket tables or process descriptors, or a socket table is malformed, it reports a warning and keeps the existing filters until a scan succeeds. New or closed connections may not be reflected until then. If sockets from different shares need the same filter, bandctl reports a conflict and keeps the existing filters until it resolves. An existing filter can still shape traffic from both processes. Members of one shared limit do not conflict. An apply or update that detects a conflict fails and rolls back. IPv4 TCP and UDP tables are required even on the first scan. IPv6 tables may be absent, but a table that was available must stay readable.
 
 `r` rescans `/proc` immediately. The table also refreshes every second. The selection stays on the same pid.
 
