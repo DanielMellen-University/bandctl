@@ -109,37 +109,8 @@ if bandctl_is_running; then
   die "bandctl is still running. Press q in that window so it can remove the limits, then uninstall."
 fi
 
-py="$PREFIX/venv/bin/python"
-if [ "$(id -u)" -ne 0 ]; then
-  echo "bandctl uninstall: not root; recovery was skipped." >&2
-  echo "Run bandctl as root after reinstalling if cleanup is needed." >&2
-elif [ -x "$py" ]; then
-  if "$py" -c 'import sys
-from bandctl.session_lock import SessionLock, SessionLockError
-from bandctl.shaper import Shaper
-from bandctl.text import terminal_text
-try:
-    with SessionLock():
-        shaper = Shaper("lo")
-        notes = shaper.recover()
-        for note in notes:
-            print(terminal_text(note))
-        failed = bool(shaper.recovery_error)
-except SessionLockError as exc:
-    print("bandctl uninstall: " + terminal_text(str(exc)), file=sys.stderr)
-    raise SystemExit(2)
-raise SystemExit(1 if failed else 0)'; then
-    :
-  else
-    status=$?
-    if [ "$status" -eq 2 ]; then
-      exit 1
-    fi
-    echo "bandctl uninstall: could not clear kernel state. Removing the program anyway." >&2
-    echo "If a limit is still in place, install bandctl again, start it, and quit." >&2
-  fi
-fi
-
+remove_install() {
+local PREFIX=$1 BINDIR=$2 link current wrapper
 link="$BINDIR/bandctl"
 if [ -L "$link" ] || [ -e "$link" ]; then
   current=$(readlink -f "$link" 2>/dev/null || true)
@@ -156,3 +127,71 @@ fi
 
 rm -rf "$PREFIX"
 echo "Uninstalled bandctl"
+}
+export -f remove_install
+
+if [ "$(id -u)" -ne 0 ]; then
+  echo "bandctl uninstall: not root; recovery was skipped." >&2
+  echo "Run bandctl as root after reinstalling if cleanup is needed." >&2
+  remove_install "$PREFIX" "$BINDIR"
+  exit 0
+fi
+
+py="$PREFIX/venv/bin/python"
+recover=1
+if [ ! -x "$py" ]; then
+  py=$(command -v python3) || die "python3 is required to lock the session"
+  recover=0
+fi
+
+"$py" -c 'import contextlib
+import fcntl
+import os
+import stat
+import subprocess
+import sys
+
+prefix, bindir, recover = sys.argv[1:]
+
+@contextlib.contextmanager
+def fallback_lock():
+    fd = os.open("/run/bandctl.lock", os.O_CREAT | os.O_RDWR | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise OSError("session lock must be a regular file")
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        yield
+    finally:
+        os.close(fd)
+
+def safe(text):
+    return "".join("?" if ord(c) < 32 or 127 <= ord(c) <= 159 else c for c in text)
+
+try:
+    if recover == "1":
+        from bandctl.session_lock import SessionLock
+        lock = SessionLock()
+    else:
+        lock = fallback_lock()
+    with lock:
+        if recover == "0":
+            print("bandctl uninstall: installed Python is missing; recovery was skipped.", file=sys.stderr)
+            print("Reinstall bandctl and start it to retry cleanup.", file=sys.stderr)
+        if recover == "1":
+            try:
+                from bandctl.shaper import Shaper
+                shaper = Shaper("lo")
+                for note in shaper.recover():
+                    print(safe(note), flush=True)
+                failed = bool(shaper.recovery_error)
+            except Exception as exc:
+                print("bandctl uninstall: " + safe(str(exc)), file=sys.stderr)
+                failed = True
+            if failed:
+                print("bandctl uninstall: could not clear kernel state. Removing the program anyway.", file=sys.stderr)
+                print("If a limit is still in place, install bandctl again, start it, and quit.", file=sys.stderr)
+        result = subprocess.run(["bash", "-e", "-c", "remove_install \"$1\" \"$2\"", "bandctl-uninstall", prefix, bindir])
+except (OSError, RuntimeError) as exc:
+    print("bandctl uninstall: " + safe(str(exc)), file=sys.stderr)
+    raise SystemExit(1)
+raise SystemExit(result.returncode)' "$PREFIX" "$BINDIR" "$recover"

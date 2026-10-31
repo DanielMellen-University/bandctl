@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import fcntl
 import stat
 import subprocess
 import sys
@@ -80,9 +81,9 @@ class ScriptTests(unittest.TestCase):
             python.write_text(
                 textwrap.dedent(
                     f"""\
-                    #!/bin/sh
+                    #!/bin/bash
                     printf '%s\\n' "$*" >> {log}
-                    exit 0
+                    exec bash -e -c 'remove_install "$1" "$2"' bandctl-uninstall "$3" "$4"
                     """
                 ),
                 encoding="utf-8",
@@ -135,8 +136,9 @@ class ScriptTests(unittest.TestCase):
                 "        self.recovery_error = 'cleanup failed'\n"
                 "    def recover(self): return ['cleanup failed\\x1b[2J\\x85']\n", encoding="utf-8")
             (package / "session_lock.py").write_text(
+                "import os\n"
                 "held = False\n"
-                "class SessionLockError(Exception): pass\n"
+                "class SessionLockError(RuntimeError): pass\n"
                 "class SessionLock:\n"
                 "    def __enter__(self):\n"
                 "        global held\n"
@@ -144,7 +146,9 @@ class ScriptTests(unittest.TestCase):
                 "        return self\n"
                 "    def __exit__(self, *args):\n"
                 "        global held\n"
-                "        held = False\n", encoding="utf-8")
+                "        held = False\n"
+                f"        if os.path.exists({str(prefix)!r}): open({str(root / 'lock-released-early')!r}, 'w').close()\n",
+                encoding="utf-8")
             python = venv_bin / "python"
             python.symlink_to(sys.executable)
             env = _quiet_ps(tools)
@@ -156,6 +160,7 @@ class ScriptTests(unittest.TestCase):
             self.assertNotIn("\x1b", result.stdout)
             self.assertIn("could not clear kernel state", result.stderr)
             self.assertFalse(prefix.exists())
+            self.assertFalse((root / "lock-released-early").exists())
 
     def test_uninstall_refuses_recovery_when_session_lock_is_held(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -170,7 +175,7 @@ class ScriptTests(unittest.TestCase):
             package.mkdir()
             (package / "__init__.py").write_text(f"__path__.append({str(ROOT / 'bandctl')!r})\n", encoding="utf-8")
             (package / "session_lock.py").write_text(
-                "class SessionLockError(Exception): pass\n"
+                "class SessionLockError(RuntimeError): pass\n"
                 "class SessionLock:\n"
                 "    def __enter__(self): raise SessionLockError('session busy')\n"
                 "    def __exit__(self, *args): pass\n", encoding="utf-8")
@@ -187,6 +192,38 @@ class ScriptTests(unittest.TestCase):
             self.assertIn("session busy", result.stderr)
             self.assertFalse(marker.exists())
             self.assertTrue(prefix.exists())
+
+    def test_uninstall_without_venv_still_checks_session_lock(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prefix, bindir, tools = root / "install", root / "bin", root / "tools"
+            prefix.mkdir()
+            bindir.mkdir()
+            tools.mkdir()
+            (prefix / "install-stamp").write_text(f"PREFIX={prefix}\nBINDIR={bindir}\n", encoding="utf-8")
+            python = tools / "python3"
+            python.symlink_to(sys.executable)
+            (root / "sitecustomize.py").write_text(
+                "import os\n"
+                "original_open = os.open\n"
+                "def redirected_open(path, flags, mode=0o777, *, dir_fd=None):\n"
+                "    if path == '/run/bandctl.lock': path = os.environ['TEST_BANDCTL_LOCK']\n"
+                "    return original_open(path, flags, mode, dir_fd=dir_fd)\n"
+                "os.open = redirected_open\n", encoding="utf-8")
+            env = _quiet_ps(tools)
+            env["PYTHONPATH"] = str(root)
+            env["TEST_BANDCTL_LOCK"] = str(root / "lock")
+            with open(root / "lock", "w") as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                result = _run(["bash", str(UNINSTALL), "--prefix", str(prefix), "--bindir", str(bindir)],
+                              env=env, cwd=root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertTrue(prefix.exists())
+            result = _run(["bash", str(UNINSTALL), "--prefix", str(prefix), "--bindir", str(bindir)],
+                          env=env, cwd=root)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("recovery was skipped", result.stderr)
+            self.assertFalse(prefix.exists())
 
     def test_nonroot_uninstall_skips_privileged_recovery(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -261,6 +298,9 @@ class ScriptTests(unittest.TestCase):
             sudo = fake_bin / "sudo"
             sudo.write_text("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$BANDCTL_SUDO_LOG\"\nexit 0\n", encoding="utf-8")
             sudo.chmod(0o755)
+            python = fake_bin / "python3"
+            python.write_text("#!/bin/bash\nexec bash -e -c 'remove_install \"$1\" \"$2\"' bandctl-uninstall \"$3\" \"$4\"\n", encoding="utf-8")
+            python.chmod(0o755)
             log = root / "sudo.log"
             env = _quiet_ps(fake_bin)
             (prefix / "install-stamp").write_text(
