@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Detect inode conflicts with listeners before changing socket filters.
+
 - Keep socket filters when socket tables report conflicting inodes.
 
 - Keep socket filters when a socket table has an incomplete header.

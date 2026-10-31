@@ -70,15 +70,18 @@ def parse_socket_inodes(text: str) -> set[str]:
     return inodes
 
 
-def parse_proc_net(text: str, proto: str, family: str, *, strict: bool = False) -> dict[str, SockFlow]:
+def parse_proc_net(text: str, proto: str, family: str, *, strict: bool = False,
+                   seen_inodes: set[str] | None = None) -> dict[str, SockFlow]:
     """Inode to flow for one ``/proc/net`` table.
 
     ``proto`` is ``tcp`` or ``udp``. ``family`` is ``ip`` or ``ipv6``, matching
     the file the text came from. TCP listeners (remote port 0) are skipped.
     A row whose two ends are different families is skipped too.
+    Strict scans can share ``seen_inodes`` to detect conflicts across tables.
     """
     found: dict[str, SockFlow] = {}
-    seen_inodes: set[str] = set()
+    if seen_inodes is None:
+        seen_inodes = set()
     if proto not in ("tcp", "udp") or family not in ("ip", "ipv6"):
         raise ValueError(f"unsupported table {proto}/{family}")
     lines = text.splitlines()

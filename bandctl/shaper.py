@@ -1462,6 +1462,7 @@ class Shaper:
 
     def _load_net(self) -> dict[str, SockFlow]:
         table: dict[str, SockFlow] = {}
+        seen_inodes: set[str] = set()
         assert self.host is not None
         for filename, proto, family in _NET_TABLES:
             path = f"/proc/net/{filename}"
@@ -1475,13 +1476,11 @@ class Shaper:
             except OSError as exc:
                 raise ShaperError(f"cannot read {path}: {exc}") from exc
             try:
-                flows = parse_proc_net(text, proto, family, strict=True)
+                flows = parse_proc_net(text, proto, family, strict=True, seen_inodes=seen_inodes)
             except ValueError as exc:
                 raise ShaperError(f"cannot read {path}: {exc}") from exc
             self._known_net_tables.add(filename)
             for inode, flow in flows.items():
-                if inode != "0" and inode in table:
-                    raise ShaperError(f"cannot read {path}: duplicate socket inode")
                 table.setdefault(inode, flow)
         return table
 

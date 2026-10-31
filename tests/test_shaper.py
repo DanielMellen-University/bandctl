@@ -1829,6 +1829,27 @@ class ApplyTests(unittest.TestCase):
         self.assertIsNone(shaper.flow_warning)
         self.assertEqual(shaper._flows, {})
 
+    def test_listener_inode_conflict_across_tables_keeps_existing_filters(self):
+        shaper, host = _shaper()
+        _open_socket(host)
+        shaper.apply(42, None, 10, None, 100_000_000)
+        existing = dict(shaper._flows)
+        host.files["/proc/net/tcp"] = (
+            host.files["/proc/net/tcp"].splitlines(keepends=True)[0]
+            + "0: 0800000A:9C40 00000000:0000 0A 0 0 0 0 0 99\n"
+        )
+        original_udp = host.files["/proc/net/udp"]
+        host.files["/proc/net/udp"] += "0: 0800000A:9C41 04030201:01BB 01 0 0 0 0 0 99\n"
+        host.commands.clear()
+        shaper.sample()
+        self.assertIn("duplicate socket inode", shaper.flow_warning or "")
+        self.assertEqual(shaper._flows, existing)
+        self.assertFalse(any("filter del" in command and "flower" in command for command in _joined(host)))
+        host.files["/proc/net/udp"] = original_udp
+        shaper.sample()
+        self.assertIsNone(shaper.flow_warning)
+        self.assertEqual(shaper._flows, {})
+
     def test_zero_inode_rows_do_not_block_socket_scans(self):
         shaper, host = _shaper()
         _open_socket(host)
