@@ -125,9 +125,23 @@ class ScriptTests(unittest.TestCase):
             package.mkdir()
             (package / "__init__.py").write_text(f"__path__.append({str(ROOT / 'bandctl')!r})\n", encoding="utf-8")
             (package / "shaper.py").write_text(
+                "from bandctl import session_lock\n"
                 "class Shaper:\n"
-                "    def __init__(self, iface): self.recovery_error = 'cleanup failed'\n"
+                "    def __init__(self, iface):\n"
+                "        assert session_lock.held\n"
+                "        self.recovery_error = 'cleanup failed'\n"
                 "    def recover(self): return ['cleanup failed\\x1b[2J\\x85']\n", encoding="utf-8")
+            (package / "session_lock.py").write_text(
+                "held = False\n"
+                "class SessionLockError(Exception): pass\n"
+                "class SessionLock:\n"
+                "    def __enter__(self):\n"
+                "        global held\n"
+                "        held = True\n"
+                "        return self\n"
+                "    def __exit__(self, *args):\n"
+                "        global held\n"
+                "        held = False\n", encoding="utf-8")
             python = venv_bin / "python"
             python.symlink_to(sys.executable)
             env = _quiet_ps(tools)
@@ -139,6 +153,37 @@ class ScriptTests(unittest.TestCase):
             self.assertNotIn("\x1b", result.stdout)
             self.assertIn("could not clear kernel state", result.stderr)
             self.assertFalse(prefix.exists())
+
+    def test_uninstall_refuses_recovery_when_session_lock_is_held(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prefix, bindir, tools = root / "install", root / "bin", root / "tools"
+            venv_bin = prefix / "venv" / "bin"
+            venv_bin.mkdir(parents=True)
+            bindir.mkdir()
+            tools.mkdir()
+            (prefix / "install-stamp").write_text(f"PREFIX={prefix}\nBINDIR={bindir}\n", encoding="utf-8")
+            package = root / "bandctl"
+            package.mkdir()
+            (package / "__init__.py").write_text(f"__path__.append({str(ROOT / 'bandctl')!r})\n", encoding="utf-8")
+            (package / "session_lock.py").write_text(
+                "class SessionLockError(Exception): pass\n"
+                "class SessionLock:\n"
+                "    def __enter__(self): raise SessionLockError('session busy')\n"
+                "    def __exit__(self, *args): pass\n", encoding="utf-8")
+            marker = root / "recovery-called"
+            (package / "shaper.py").write_text(
+                f"class Shaper:\n    def __init__(self, iface): open({str(marker)!r}, 'w').close()\n"
+                "    def recover(self): return []\n", encoding="utf-8")
+            (venv_bin / "python").symlink_to(sys.executable)
+            env = _quiet_ps(tools)
+            env["PYTHONPATH"] = str(root)
+            result = _run(["bash", str(UNINSTALL), "--prefix", str(prefix), "--bindir", str(bindir)],
+                          env=env, cwd=root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("session busy", result.stderr)
+            self.assertFalse(marker.exists())
+            self.assertTrue(prefix.exists())
 
     def test_uninstall_refuses_a_live_process_and_a_dangerous_prefix(self):
         with tempfile.TemporaryDirectory() as tmp:

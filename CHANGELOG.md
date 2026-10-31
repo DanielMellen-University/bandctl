@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Hold the session lock during uninstall recovery to avoid disrupting a live session.
+
 - Keep terminal controls out of uninstall recovery messages.
 
 - Warn when uninstall recovery reports that cleanup failed.

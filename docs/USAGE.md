@@ -21,7 +21,7 @@ To remove it, quit any open bandctl (`q` drops the limits), then:
 sudo bandctl-uninstall
 ```
 
-Uninstall deletes `/opt/bandctl` and the commands. It also tries to clear a crashed run's qdisc, nft table, and cgroup. If cleanup fails, uninstall warns and keeps any recovery file. Reinstall bandctl and start it to retry cleanup. `iproute2` and `nftables` stay.
+Uninstall deletes `/opt/bandctl` and the commands. It also tries to clear a crashed run's qdisc, nft table, and cgroup. Recovery takes the session lock and stops if another session owns it. If cleanup fails, uninstall warns and keeps any recovery file. Reinstall bandctl and start it to retry cleanup. `iproute2` and `nftables` stay.
 
 A checkout can skip the installer:
 

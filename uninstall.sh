@@ -111,13 +111,27 @@ fi
 
 py="$PREFIX/venv/bin/python"
 if [ -x "$py" ]; then
-  if ! "$py" -c 'from bandctl.shaper import Shaper
+  if "$py" -c 'import sys
+from bandctl.session_lock import SessionLock, SessionLockError
+from bandctl.shaper import Shaper
 from bandctl.text import terminal_text
-shaper = Shaper("lo")
-notes = shaper.recover()
-for note in notes:
-    print(terminal_text(note))
-raise SystemExit(1 if shaper.recovery_error else 0)'; then
+try:
+    with SessionLock():
+        shaper = Shaper("lo")
+        notes = shaper.recover()
+        for note in notes:
+            print(terminal_text(note))
+        failed = bool(shaper.recovery_error)
+except SessionLockError as exc:
+    print("bandctl uninstall: " + terminal_text(str(exc)), file=sys.stderr)
+    raise SystemExit(2)
+raise SystemExit(1 if failed else 0)'; then
+    :
+  else
+    status=$?
+    if [ "$status" -eq 2 ]; then
+      exit 1
+    fi
     echo "bandctl uninstall: could not clear kernel state. Removing the program anyway." >&2
     echo "If a limit is still in place, install bandctl again, start it, and quit." >&2
   fi
