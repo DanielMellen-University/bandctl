@@ -2403,6 +2403,44 @@ class CleanupTests(unittest.TestCase):
         self.assertEqual(notes, [])
         self.assertNotIn("/run/bandctl.json", host.files)
 
+    def test_leaf_cleanup_ignores_noncanonical_leaf_names(self):
+        for name in ("bandctl-00042", "bandctl-０４２", "bandctl-0", "bandctl-2147483648"):
+            with self.subTest(name=name):
+                shaper, host = _shaper()
+                leaf = "/sys/fs/cgroup/bandctl/" + name
+                host.dirs.update({"/sys/fs/cgroup/bandctl", leaf})
+                host.files[leaf + "/cgroup.procs"] = "43\n"
+                host.files["/proc/43/cgroup"] = "0::/bandctl/" + name + "\n"
+                shaper._remove_tree()
+                self.assertIn(leaf, host.dirs)
+                self.assertNotIn("/sys/fs/cgroup/cgroup.procs", host.files)
+                self.assertEqual(host.files["/proc/43/cgroup"], "0::/bandctl/" + name + "\n")
+
+    def test_recovery_keeps_state_when_noncanonical_leaf_blocks_parent_removal(self):
+        shaper, host = _shaper()
+        parent = "/sys/fs/cgroup/bandctl"
+        leaf = parent + "/bandctl-00042"
+        host.dirs.update({parent, leaf})
+        host.files[leaf + "/cgroup.procs"] = "43\n"
+        host.files["/proc/43/cgroup"] = "0::/bandctl/bandctl-00042\n"
+        host.files["/run/bandctl.json"] = json.dumps({
+            "iface": "eth0", "pids": {}, "root_replaced": False, "nft_owned": False,
+            "ifb_owned": False, "ingress_owned": False,
+        })
+        remove = host.rmdir
+
+        def rmdir(path):
+            if path == parent:
+                raise OSError("directory not empty")
+            remove(path)
+
+        with patch.object(host, "rmdir", side_effect=rmdir):
+            shaper.recover()
+        self.assertIn("cannot remove", shaper.recovery_error)
+        self.assertIn("/run/bandctl.json", host.files)
+        self.assertIn(leaf, host.dirs)
+        self.assertNotIn("/sys/fs/cgroup/cgroup.procs", host.files)
+
     def test_leaf_cleanup_does_not_move_a_process_that_left_the_leaf(self):
         shaper, host = _shaper()
         leaf = "/sys/fs/cgroup/bandctl/bandctl-42"

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Leave noncanonical cgroup leaf names and their processes alone during cleanup.
+
 - Reject process stat records that identify a different PID.
 
 - Reject malformed process stat headers before using their start times.

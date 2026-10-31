@@ -973,7 +973,8 @@ class Shaper:
             return [f"cannot list bandctl cgroups: {exc}"]
         protected = {f"bandctl-{pid}" for pid in (protected_pids or ())}
         for name in names:
-            if not name.startswith("bandctl-") or not name[8:].isdigit():
+            match = re.fullmatch(r"bandctl-([1-9][0-9]{0,9})", name)
+            if match is None or int(match.group(1)) > 2_147_483_647:
                 continue
             if name in protected:
                 continue
