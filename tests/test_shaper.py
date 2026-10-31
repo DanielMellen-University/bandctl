@@ -1206,6 +1206,19 @@ class ApplyTests(unittest.TestCase):
             self.assertEqual(shaper.sample()[42][1], 0.0)
             self.assertEqual(shaper.sample()[42][1], 800.0)
 
+    def test_unrelated_class_does_not_replace_a_missing_counter_baseline(self):
+        shaper, host = _shaper()
+        shaper.apply(42, None, 50, None, 100_000_000)
+        with patch.object(shaper, "_sync_flows"), \
+             patch("bandctl.shaper.time.monotonic", side_effect=[1.0, 2.0, 3.0]):
+            host.class_show["eth0"] = "class htb 1:10 parent 1:1\n Sent 100 bytes 1 pkt\n"
+            self.assertEqual(shaper.sample()[42][1], 0.0)
+            host.class_show["eth0"] = ("class htb 1:10 parent 1:1\n"
+                                       "class htb 1:10a parent 1:1\n Sent 5000 bytes 1 pkt\n")
+            self.assertEqual(shaper.sample()[42][1], 0.0)
+            host.class_show["eth0"] = "class htb 1:10 parent 1:1\n Sent 300 bytes 1 pkt\n"
+            self.assertEqual(shaper.sample()[42][1], 800.0)
+
     def test_class_counter_reset_and_non_increasing_time(self):
         shaper, host = _shaper()
         self.assertEqual(shaper._delta_bps("up", 10, 100, 1.0), 0.0)
