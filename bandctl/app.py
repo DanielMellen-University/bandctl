@@ -41,6 +41,7 @@ from bandctl.traffic import TrafficSampler, above_share, read_ss
 from bandctl.widgets import RootRequired, RulesScreen
 
 _MISSING = object()
+_SS_WARNING = "could not read traffic with ss. Press n to list every process."
 
 # (key, header, content width, dropped first when the terminal is narrow).
 # Rendered width is the content width plus two cells of padding.
@@ -500,11 +501,14 @@ class BandctlApp(App):
             usage = await asyncio.to_thread(self._load_usage)
             if self._ss_failed and not self._ss_warned:
                 self._ss_warned = True
-                self._note("could not read traffic with ss. Press n to list every process.", bad=True)
+                self._note(_SS_WARNING, bad=True)
             elif not self._ss_failed and self._ss_warned:
                 self._ss_warned = False
                 if self._status_text.startswith("could not read traffic with ss."):
-                    self._note("ready")
+                    if self._flow_warning:
+                        self._note(self._flow_warning, bad=True)
+                    else:
+                        self._note("ready")
             # sample() also refreshes flower filters. The table uses _load_usage.
             if self.shaper is not None:
                 await asyncio.to_thread(self.shaper.sample)
@@ -594,7 +598,10 @@ class BandctlApp(App):
         previous = self._flow_warning
         self._flow_warning = None
         if previous and self._status_text == previous:
-            self._note("ready")
+            if self._ss_failed:
+                self._note(_SS_WARNING, bad=True)
+            else:
+                self._note("ready")
 
     def _load_procs(self) -> list[ProcessInfo]:
         if self._process_source is not None:

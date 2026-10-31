@@ -711,6 +711,41 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
                 app.action_apply_limit()
                 self.assertEqual(fake.expected_starts, [42])
 
+    async def test_ss_warning_remains_after_socket_filter_warning_clears(self):
+        fake = FakeShaper()
+        fake.flow_warning = "socket filter update failed"
+        snapshot = [None]
+        app = BandctlApp(iface="eth0", shaper=fake, processes=lambda: list(PROCS),
+                         link_bps=100_000_000, is_root=True)
+        with patch("bandctl.app.read_ss", side_effect=lambda: snapshot[0]):
+            async with app.run_test(size=(100, 32)):
+                self.assertEqual(app._status_text, "socket filter update failed")
+                fake.flow_warning = None
+                await app._refresh()
+                self.assertIn("could not read traffic with ss", app._status_text)
+                snapshot[0] = ""
+                await app._refresh()
+                self.assertEqual(app._status_text, "ready")
+
+    async def test_socket_filter_warning_remains_after_ss_recovers(self):
+        fake = FakeShaper()
+        fake.flow_warning = "socket filter update failed"
+        snapshot = [""]
+        app = BandctlApp(iface="eth0", shaper=fake, processes=lambda: list(PROCS),
+                         link_bps=100_000_000, is_root=True)
+        with patch("bandctl.app.read_ss", side_effect=lambda: snapshot[0]):
+            async with app.run_test(size=(100, 32)):
+                self.assertEqual(app._status_text, "socket filter update failed")
+                snapshot[0] = None
+                await app._refresh()
+                self.assertIn("could not read traffic with ss", app._status_text)
+                snapshot[0] = ""
+                await app._refresh()
+                self.assertEqual(app._status_text, "socket filter update failed")
+                fake.flow_warning = None
+                await app._refresh()
+                self.assertEqual(app._status_text, "ready")
+
     async def test_read_only_without_root(self):
         fake = FakeShaper()
         app = _app(fake, root=False)
