@@ -101,7 +101,7 @@ fi
 
 bandctl_is_running() {
   local hits
-  hits=$(ps -eo args= | grep -E '(^|/)bandctl( |$)|python[0-9.]* -m bandctl' | grep -v uninstall | grep -v install.sh || true)
+  hits=$(ps -eo args= | grep -E '^([^[:space:]]*/)?bandctl([[:space:]]|$)|^([^[:space:]]*/)?python[0-9.]*[[:space:]]+(-m[[:space:]]+bandctl([.[:space:]]|$)|([^[:space:]]*/)?bandctl([[:space:]]|$))' || true)
   [ -n "$hits" ]
 }
 

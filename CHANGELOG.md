@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Detect a running bandctl even when its arguments name install or uninstall files.
+
 - Let non-root uninstall remove a custom install without accessing the root session lock.
 
 - Keep the session lock until uninstall has removed its files.

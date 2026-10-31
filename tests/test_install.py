@@ -284,6 +284,35 @@ class ScriptTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("refusing", result.stderr)
 
+    def test_scripts_detect_bandctl_even_when_arguments_name_install_scripts(self):
+        for script in (INSTALL, UNINSTALL):
+            commands = (f"{launcher} --config {argument}"
+                        for launcher in ("/usr/bin/python3 -m bandctl",
+                                         "/opt/bandctl/venv/bin/python3 /usr/local/bin/bandctl",
+                                         "/usr/local/bin/bandctl")
+                        for argument in ("/tmp/install.sh", "/tmp/uninstall.json"))
+            for command in commands:
+                with self.subTest(script=script.name, command=command), tempfile.TemporaryDirectory() as tmp:
+                    root = Path(tmp)
+                    prefix, bindir, tools = root / "install", root / "bin", root / "tools"
+                    bindir.mkdir()
+                    tools.mkdir()
+                    env = _quiet_ps(tools)
+                    (tools / "ps").write_text(
+                        f"#!/bin/sh\nprintf '%s\\n' '{command}'\n",
+                        encoding="utf-8")
+                    python = tools / "python3"
+                    python.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+                    python.chmod(0o755)
+                    if script == UNINSTALL:
+                        prefix.mkdir()
+                        (prefix / "install-stamp").write_text(
+                            f"PREFIX={prefix}\nBINDIR={bindir}\n", encoding="utf-8")
+                    result = _run(["bash", str(script), "--prefix", str(prefix), "--bindir", str(bindir),
+                                   *(["--skip-deps"] if script == INSTALL else [])], env=env)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("running", result.stderr)
+
     def test_installed_copy_uninstalls_itself_without_a_prefix_flag(self):
         if os.geteuid() == 0:
             self.skipTest("root would not need the sudo guard this test plants")
