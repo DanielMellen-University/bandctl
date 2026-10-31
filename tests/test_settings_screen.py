@@ -26,6 +26,17 @@ class SettingsScreenTests(unittest.IsolatedAsyncioTestCase):
                 export.assert_called_once()
                 self.assertIn("Enter a file path", str(app.screen.query_one("#settings-status", Static).render()))
 
+    async def test_settings_error_replaces_control_characters(self):
+        app, _shaper, _host = group_app()
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.press("x")
+            app.screen.query_one("#settings-path", Input).value = "settings.json"
+            with patch("bandctl.settings_screen.export_session", side_effect=ValueError("bad\npath\x1b\u0085")):
+                await pilot.click("#settings-export")
+            status = str(app.screen.query_one("#settings-status", Static).render())
+            self.assertIn("bad?path??", status)
+            self.assertNotIn("\x1b", status)
+
     async def test_import_and_export_preserve_spaces_in_file_path(self):
         app, shaper, host = group_app()
         app._rules = [AutoRule("work", 20, None)]

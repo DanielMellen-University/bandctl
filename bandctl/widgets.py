@@ -99,7 +99,7 @@ class RulesScreen(ModalScreen[list[AutoRule]]):
     def _status(self, text: str, *, bad: bool = False) -> None:
         status = self.query_one("#rule-status", Static)
         status.set_class(bad, "-error")
-        status.update(Text(text))
+        status.update(Text(terminal_text(text)))
 
     def _add_rule(self) -> None:
         try:

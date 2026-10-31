@@ -1,5 +1,6 @@
 """Group editor through a fake host and the Textual pilot."""
 import unittest
+from unittest.mock import patch
 
 from rich.text import Text
 from textual.widgets import DataTable, Input, Static
@@ -8,6 +9,7 @@ from bandctl.app import BandctlApp
 from bandctl.group_screen import GroupsScreen
 from bandctl.groups import Group
 from bandctl.procscan import ProcessInfo
+from bandctl.shaper import ShaperError
 from test_shaper import _shaper
 
 
@@ -33,6 +35,18 @@ class GroupScreenTests(unittest.IsolatedAsyncioTestCase):
             cell = app.screen.query_one("#group-table", DataTable).get_row_at(0)[0]
             self.assertEqual(cell.plain, "work?team")
             self.assertEqual(shaper.shares[42].group, "work\u0085team")
+
+    async def test_group_error_replaces_control_characters(self):
+        app, shaper, _host = group_app()
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.press("g")
+            app.screen.query_one("#group-name", Input).value = "work"
+            app.screen.query_one("#group-down", Input).value = "30"
+            with patch.object(shaper, "update_group", side_effect=ShaperError("bad\ncommand\x1b\u0085tail")):
+                await pilot.click("#group-update")
+            status = str(app.screen.query_one("#group-status", Static).render())
+            self.assertIn("bad?command??tail", status)
+            self.assertNotIn("\x1b", status)
 
     async def test_group_name_displays_markup_literally(self):
         app, shaper, _host = group_app()

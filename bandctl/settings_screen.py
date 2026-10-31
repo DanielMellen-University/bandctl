@@ -9,6 +9,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Static
 
 from bandctl.settings_session import export_session, import_session
+from bandctl.text import terminal_text
 
 
 class SettingsScreen(ModalScreen):
@@ -37,7 +38,7 @@ class SettingsScreen(ModalScreen):
     def _status(self, message: str, bad: bool = False) -> None:
         status = self.query_one("#settings-status", Static)
         status.set_class(bad, "-error")
-        status.update(Text(message))
+        status.update(Text(terminal_text(message)))
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         action = event.button.id

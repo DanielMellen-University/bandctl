@@ -67,7 +67,7 @@ class GroupsScreen(ModalScreen[bool]):
     def _status(self, message: str, bad: bool = False) -> None:
         status = self.query_one("#group-status", Static)
         status.set_class(bad, "-error")
-        status.update(Text(message))
+        status.update(Text(terminal_text(message)))
 
     def _pids(self) -> tuple[int, ...]:
         raw = self.query_one("#group-pids", Input).value

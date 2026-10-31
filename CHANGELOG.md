@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep control characters out of dialog status messages.
+
 - Restore unresolved background warnings after a refresh failure clears.
 
 - Leave noncanonical cgroup leaf names and their processes alone during cleanup.
