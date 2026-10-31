@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep control characters out of TUI status and log messages.
+
 - Keep control characters in rule and group names out of table rows and details.
 
 - Use the filesystem UID when a process status has an invalid UID.

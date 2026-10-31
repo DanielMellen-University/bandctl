@@ -100,6 +100,18 @@ def _app(fake, *, root=True, link_bps=100_000_000, rates=None):
 
 
 class AppTests(unittest.IsolatedAsyncioTestCase):
+    async def test_status_and_log_replace_control_characters_in_errors(self):
+        app = _app(FakeShaper())
+        async with app.run_test(size=(100, 32)):
+            log = app.query_one("#log", RichLog)
+            with patch.object(log, "write", wraps=log.write) as write:
+                app._note("tc failed\nsecond line\x1b[31m\u0085end", bad=True)
+                status = str(app.query_one("#status", Static).render())
+                self.assertEqual(status, "tc failed?second line?[31m?end")
+                self.assertIn("tc failed?second line?[31m?end", write.call_args.args[0])
+                app._log("recovery\nfailed")
+                self.assertIn("recovery?failed", write.call_args.args[0])
+
     async def test_table_render_uses_one_share_snapshot_and_one_traffic_total(self):
         fake = FakeShaper()
         fake._shares[1] = Share(1, 30, None, 10, "/", "systemd", 1)

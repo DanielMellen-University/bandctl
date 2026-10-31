@@ -919,7 +919,7 @@ class BandctlApp(App):
             status = self.query_one("#status", Static)
         except NoMatches:  # the screen is closing
             return
-        status.update(Text(self._status_text, style=color))
+        status.update(Text(terminal_text(self._status_text), style=color))
 
     def _log(self, text: str) -> None:
         if not self.is_mounted:
@@ -929,7 +929,7 @@ class BandctlApp(App):
             log = self.query_one("#log", RichLog)
         except NoMatches:  # the screen is closing
             return
-        log.write(f"{stamp}  {text}")
+        log.write(f"{stamp}  {terminal_text(text)}")
 
 
 def fit_columns(table_width: int) -> list[tuple[str, str, int]]:
