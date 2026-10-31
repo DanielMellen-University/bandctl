@@ -125,6 +125,11 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(user_from_status("Uid:\t0\t0\t0\t0\n"), "root")
         self.assertEqual(user_from_status("Name:\tnobody\n", fallback_uid=999999), "999999")
 
+    def test_invalid_status_uid_uses_fallback(self):
+        for uid in ("9" * 5000, "4294967296", "１２３"):
+            with self.subTest(uid=uid[:12]), patch("bandctl.procscan.pwd.getpwuid", side_effect=KeyError):
+                self.assertEqual(user_from_status(f"Uid:\t{uid}\n", fallback_uid=456), "456")
+
 
 class ScanTests(unittest.TestCase):
     def test_scan_skips_non_ascii_numeric_directory_names(self):

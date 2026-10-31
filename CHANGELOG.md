@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Use the filesystem UID when a process status has an invalid UID.
+
 - Avoid repeated share copies and traffic sums when rendering the process table.
 
 - Skip non-ASCII numeric names when scanning process directories.

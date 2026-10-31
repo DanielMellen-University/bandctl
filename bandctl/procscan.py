@@ -42,7 +42,7 @@ class SockFlow:
     remote_port: int
 
 
-_UID_RE = re.compile(r"^Uid:\s+(\d+)", re.MULTILINE)
+_UID_RE = re.compile(r"^Uid:[ \t]+([0-9]+)(?=[ \t\r\n]|$)", re.MULTILINE)
 
 
 def parse_start_ticks(text: str) -> int | None:
@@ -154,7 +154,10 @@ def format_cmdline(raw: bytes, comm: str, limit: int = 80) -> str:
 
 def user_from_status(status_text: str, fallback_uid: int | None = None) -> str:
     match = _UID_RE.search(status_text)
-    uid = int(match.group(1)) if match else fallback_uid
+    raw_uid = match.group(1) if match else ""
+    uid = int(raw_uid) if raw_uid and len(raw_uid) <= 10 else fallback_uid
+    if uid is not None and uid > 0xFFFFFFFF:
+        uid = fallback_uid
     if uid is None:
         return "?"
     try:
