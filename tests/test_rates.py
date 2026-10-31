@@ -53,6 +53,12 @@ class BudgetTests(unittest.TestCase):
         self.assertEqual(parse_budget("1", Unit.MB), 8_000_000)
         self.assertIsNone(parse_budget("  ", Unit.MBIT))
 
+    def test_underscores_alone_are_not_an_empty_budget(self):
+        for unit in Unit:
+            for text in ("_", "  ___  "):
+                with self.subTest(unit=unit, text=text), self.assertRaises(RateError):
+                    parse_budget(text, unit)
+
     def test_rejects_non_positive(self):
         with self.assertRaises(RateError):
             parse_budget("0", Unit.MBIT)

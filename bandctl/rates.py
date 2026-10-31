@@ -45,11 +45,11 @@ def parse_percent(text: str, *, allow_empty: bool = False) -> int | None:
 
 def parse_budget(text: str, unit: Unit) -> int | None:
     """Parse a capacity in the active unit. Empty means 'use the detected speed'."""
-    raw = text.strip().replace("_", "")
+    raw = text.strip()
     if not raw:
         return None
     try:
-        decimal_value = Decimal(raw)
+        decimal_value = Decimal(raw.replace("_", ""))
     except InvalidOperation as exc:
         raise RateError("budget must be a number, in the unit shown in the header") from exc
     if (not decimal_value.is_finite() or decimal_value <= 0

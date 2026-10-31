@@ -805,6 +805,20 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(fake.applied, [])
         self.assertFalse(fake.torn)
 
+    async def test_underscores_do_not_clear_a_submitted_budget(self):
+        fake = FakeShaper()
+        fake.apply(42, 10, None, 50_000_000, 100_000_000, expected_start_ticks=42)
+        app = _app(fake)
+        async with app.run_test(size=(100, 32)):
+            app._down_budget = 50_000_000
+            app._pushed_caps = (50_000_000, 100_000_000)
+            app.query_one("#down-budget", Input).value = "___"
+            fake.caps.clear()
+            self.assertFalse(app._commit_budgets(announce=True))
+            self.assertEqual(app._down_budget, 50_000_000)
+            self.assertEqual(fake.caps, [])
+            self.assertIn("budget", app._status_text)
+
     async def test_failed_budget_update_keeps_previous_budget_and_blocks_apply(self):
         fake = FakeShaper()
         fake.apply(42, 10, None, 100_000_000, 100_000_000, expected_start_ticks=42)

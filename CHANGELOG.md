@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reject underscore-only budgets instead of clearing the submitted capacity.
+
 - Reject a percent sign without a number instead of clearing a share.
 
 - Keep terminal controls out of startup and post-exit cleanup errors.
