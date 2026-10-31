@@ -106,6 +106,20 @@ class ParseTests(unittest.TestCase):
         text = 'ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 users:(("a",pid=5,fd=1))\n\t bytes_sent:30\n'
         self.assertEqual(parse_ss_sockets(text), {(5, "10.0.0.2:1 1.1.1.1:443"): (0, 30)})
 
+    def test_acknowledged_bytes_take_precedence_across_detail_lines(self):
+        header = 'ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 users:(("a",pid=5,fd=1)) sk:a\n'
+        for details in ("\t bytes_acked:100\n\t bytes_sent:1000\n",
+                        "\t bytes_sent:1000\n\t bytes_acked:100\n"):
+            with self.subTest(details=details):
+                text = header + details
+                self.assertEqual(parse_ss(text), {5: (0, 100)})
+                self.assertEqual(parse_ss_sockets(text), {(5, "sk:a"): (0, 100)})
+                sampler = TrafficSampler()
+                sampler.rates(text, 1)
+                later = header + "\t bytes_acked:110 bytes_sent:1020\n"
+                self.assertEqual(sampler.rates(later, 2)[5], (0.0, 80.0))
+                self.assertEqual(sampler.totals[5], (0, 10))
+
     def test_ipv4_mapped_loopback_in_hex_is_excluded(self):
         text = (
             'ESTAB 0 0 [::ffff:7f00:1]:1234 [::ffff:c000:201]:443 '

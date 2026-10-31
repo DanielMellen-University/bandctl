@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Prefer acknowledged bytes across all detail lines of a socket record.
+
 - Detect inode conflicts with listeners before changing socket filters.
 
 - Keep socket filters when socket tables report conflicting inodes.

@@ -46,24 +46,39 @@ def parse_ss(text: str) -> dict[int, tuple[int, int]]:
     """
     totals: dict[int, list[int]] = {}
     pids: list[int] = []
+    received = acked = 0
+    source = None
+
+    def finish_record() -> None:
+        if received == 0 and acked == 0:
+            return
+        for pid in pids:
+            slot = totals.setdefault(pid, [0, 0])
+            slot[0] += received
+            slot[1] += acked
+
     for raw in text.split("\n"):
         if not raw.strip():
             continue
         if raw[0].isspace():
             if not pids:
                 continue
-            received = _field(raw, "bytes_received") or 0
-            acked = _field(raw, "bytes_acked")
-            if acked is None:
-                acked = _field(raw, "bytes_sent") or 0
-            if received == 0 and acked == 0:
-                continue
-            for pid in pids:
-                slot = totals.setdefault(pid, [0, 0])
-                slot[0] += received
-                slot[1] += acked
+            down = _field(raw, "bytes_received")
+            up = _field(raw, "bytes_acked")
+            if down is not None:
+                received = down
+            if up is not None:
+                acked, source = up, "acked"
+            elif source != "acked":
+                up = _field(raw, "bytes_sent")
+                if up is not None:
+                    acked, source = up, "sent"
             continue
+        finish_record()
         pids = _socket_pids(raw)
+        received = acked = 0
+        source = None
+    finish_record()
     return {pid: (received, acked) for pid, (received, acked) in totals.items()}
 
 
@@ -107,9 +122,10 @@ def _parse_ss_socket_counters(text: str) -> dict[tuple[int, str], tuple[int | No
             continue
         for key in keys:
             previous = found[key]
+            use_upload = acked is not None and not (source == "sent" and previous[2] == "acked")
             found[key] = (previous[0] if received is None else received,
-                          previous[1] if acked is None else acked,
-                          previous[2] if acked is None else source)
+                          acked if use_upload else previous[1],
+                          source if use_upload else previous[2])
     return found
 
 
