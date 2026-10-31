@@ -147,6 +147,7 @@ class BandctlApp(App):
         self._down_budget: int | None = None
         self._up_budget: int | None = None
         self._pushed_caps: tuple[int | None, int | None] | None = None
+        self._capacity_warning: str | None = None
         self._busy = False
         self._status_text = ""
         self._status_bad = False
@@ -670,6 +671,7 @@ class BandctlApp(App):
 
     def _push_caps(self) -> bool:
         if self.shaper is None or not self.shaper.shares:
+            self._clear_capacity_warning()
             return True
         caps = self._effective_caps()
         if caps == self._pushed_caps:
@@ -680,11 +682,25 @@ class BandctlApp(App):
             # A failed rollback can leave class rates out of sync. Retry even
             # if the next requested capacities equal the last successful ones.
             self._pushed_caps = None
+            self._capacity_warning = str(exc)
             if str(exc) != self._status_text or not self._status_bad:
                 self._note(str(exc), bad=True)
             return False
         self._pushed_caps = caps
+        self._clear_capacity_warning()
         return True
+
+    def _clear_capacity_warning(self) -> None:
+        warning, self._capacity_warning = self._capacity_warning, None
+        if not warning or self._status_text != warning:
+            return
+        flow_warning = getattr(self.shaper, "flow_warning", None) if self.shaper else None
+        if flow_warning:
+            self._note(flow_warning, bad=True)
+        elif self._ss_failed:
+            self._note(_SS_WARNING, bad=True)
+        else:
+            self._note("ready")
 
     def _render(self) -> None:
         if not self.is_mounted:

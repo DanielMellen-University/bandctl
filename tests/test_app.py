@@ -871,6 +871,46 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(app._status_text, "capacity unknown")
                 log.assert_called_once_with("capacity unknown")
 
+    async def test_capacity_error_clears_after_retry_succeeds_or_last_share_is_removed(self):
+        for remove in (False, True):
+            with self.subTest(remove=remove):
+                fake = FakeShaper()
+                fake.apply(42, 10, None, 100_000_000, 100_000_000, expected_start_ticks=42)
+                app = _app(fake)
+                async with app.run_test(size=(100, 32)):
+                    app._detected_bps = None
+                    with patch.object(fake, "set_capacities", side_effect=ShaperError("capacity unknown")):
+                        self.assertFalse(app._push_caps())
+                    if remove:
+                        fake.remove(42)
+                    else:
+                        app._detected_bps = 100_000_000
+                    self.assertTrue(app._push_caps())
+                    self.assertEqual(app._status_text, "ready")
+
+    async def test_capacity_recovery_preserves_other_status_and_warnings(self):
+        for other in ("socket", "traffic", "message"):
+            with self.subTest(other=other):
+                fake = FakeShaper()
+                fake.apply(42, 10, None, 100_000_000, 100_000_000, expected_start_ticks=42)
+                app = _app(fake)
+                async with app.run_test(size=(100, 32)):
+                    app._detected_bps = None
+                    with patch.object(fake, "set_capacities", side_effect=ShaperError("capacity unknown")):
+                        self.assertFalse(app._push_caps())
+                    if other == "socket":
+                        fake.flow_warning = "socket failure"
+                        expected = fake.flow_warning
+                    elif other == "traffic":
+                        app._ss_failed = True
+                        expected = "could not read traffic with ss"
+                    else:
+                        app._note("another message")
+                        expected = "another message"
+                    app._detected_bps = 100_000_000
+                    self.assertTrue(app._push_caps())
+                    self.assertIn(expected, app._status_text)
+
     async def test_unit_toggle_preserves_budget_when_applying_a_share(self):
         fake = FakeShaper()
         app = _app(fake, link_bps=None)

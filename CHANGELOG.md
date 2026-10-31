@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Clear a capacity error after the update succeeds or the last limit is removed.
+
 - Avoid repeating an unchanged capacity error in the TUI log on every retry.
 
 - Retry failed capacity updates when detected speed becomes unknown.
