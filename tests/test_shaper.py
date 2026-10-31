@@ -1052,7 +1052,8 @@ class ApplyTests(unittest.TestCase):
     def test_expected_start_time_is_checked_before_changing_anything(self):
         shaper, host = _shaper()
         stat_path = "/proc/42/stat"
-        for stat in (None, "42 (curl) S " + "0 " * 18 + "99", "invalid"):
+        for stat in (None, "42 (curl) S " + "0 " * 18 + "99", "invalid",
+                     "42 curl) S " + "0 " * 18 + "100"):
             if stat is None:
                 host.files.pop(stat_path, None)
             else:

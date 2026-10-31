@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reject malformed process stat headers before using their start times.
+
 - Keep remaining traffic and socket filter warnings visible when the other clears.
 
 - Show the PIDs involved in a socket filter conflict.

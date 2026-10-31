@@ -32,6 +32,14 @@ class ParseTests(unittest.TestCase):
         self.assertIsNone(parse_start_ticks("42 (bad) S 0"))
         self.assertIsNone(parse_start_ticks("42 (bad) S " + "0 " * 18 + "oops"))
 
+    def test_start_ticks_reject_malformed_stat_headers(self):
+        for header in ("42 worker)", "not-a-pid (worker)", "42(worker)", "42 (worker"):
+            with self.subTest(header=header):
+                self.assertIsNone(parse_start_ticks(header + " S " + "0 " * 18 + "100"))
+        for state in ("", "SS", "1"):
+            with self.subTest(state=state):
+                self.assertIsNone(parse_start_ticks("42 (worker) " + state + " " + "0 " * 18 + "100"))
+
     def test_start_ticks_reject_non_kernel_numbers(self):
         for ticks in ("+100", "1_00", "١٠٠", "18446744073709551616", "9" * 100):
             with self.subTest(ticks=ticks[:24]):

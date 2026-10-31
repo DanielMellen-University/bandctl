@@ -47,11 +47,12 @@ _UID_RE = re.compile(r"^Uid:[ \t]+([0-9]+)(?=[ \t\r\n]|$)", re.MULTILINE)
 
 def parse_start_ticks(text: str) -> int | None:
     """Read field 22 from /proc/<pid>/stat, including names with parentheses."""
+    header = re.match(r"[1-9][0-9]* \(", text)
     end = text.rfind(")")
-    if end < 0:
+    if header is None or end < header.end() or text[end + 1:end + 2] != " ":
         return None
     fields = text[end + 1 :].split()
-    if len(fields) < 20:
+    if len(fields) < 20 or not re.fullmatch(r"[A-Za-z?]", fields[0]):
         return None
     raw = fields[19]
     if not raw.isascii() or not raw.isdigit() or len(raw) > 20:
