@@ -72,6 +72,13 @@ class CliSession:
         now = time.monotonic() if now is None else now
         current = datetime.now().astimezone().time() if current is None else current
         messages = []
+        try:
+            self._refresh(now, current, messages)
+        finally:
+            self._remember_warnings(messages, now)
+        return messages
+
+    def _refresh(self, now, current, messages) -> None:
         if self.speed_source is not None:
             detected = self.speed_source()
             if detected != self.detected_bps or self._capacity_retry:
@@ -115,8 +122,6 @@ class CliSession:
                 self._tracker.applied(proc)
                 self._scheduled.applied(proc, rule, revision)
                 messages.append(f"auto rule: {message}")
-        self._remember_warnings(messages, now)
-        return messages
 
     def _remember_warnings(self, messages: list[str], now: float) -> None:
         """Keep background errors for a minute so a later command can still report them."""

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep earlier CLI warnings when a later refresh step fails.
+
 - Keep control characters out of dialog status messages.
 
 - Restore unresolved background warnings after a refresh failure clears.

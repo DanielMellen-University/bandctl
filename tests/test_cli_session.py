@@ -113,6 +113,19 @@ class CliSessionTests(unittest.TestCase):
         self.session._remember_warnings([], 63)
         self.assertEqual(self.session.warnings, [])
 
+    def test_interrupted_refresh_retains_warnings_from_completed_steps(self):
+        from datetime import time
+        from unittest.mock import patch
+
+        self.session.speed_source = lambda: 50_000_000
+        self.session.processes = lambda: (_ for _ in ()).throw(OSError("scan failed"))
+        with patch.object(self.shaper, "set_capacities", side_effect=ShaperError("capacity failed")), \
+             patch.object(self.shaper, "_sync_flows", side_effect=ShaperError("filter failed")):
+            with self.assertRaisesRegex(OSError, "scan failed"):
+                self.session.refresh(now=1, current=time(10))
+        self.assertIn("capacity update: capacity failed", self.session.warnings)
+        self.assertIn("flow refresh: filter failed", self.session.warnings)
+
     def test_refresh_applies_and_expires_scheduled_rules(self):
         from datetime import time
         from bandctl.schedule import DailyWindow
