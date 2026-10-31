@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reject process stat records that identify a different PID.
+
 - Reject malformed process stat headers before using their start times.
 
 - Keep remaining traffic and socket filter warnings visible when the other clears.

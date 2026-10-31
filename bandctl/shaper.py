@@ -197,7 +197,7 @@ class Shaper:
                     stat = self.host.read(f"/proc/{pid}/stat")
                 except OSError as exc:
                     raise ShaperError(f"cannot verify pid {pid}") from exc
-                if parse_start_ticks(stat) != expected_start_ticks:
+                if parse_start_ticks(stat, expected_pid=pid) != expected_start_ticks:
                     raise ShaperError(f"pid {pid} changed since the process scan")
             if pid not in self._shares:
                 self._check_leaf_empty(pid)
@@ -275,7 +275,7 @@ class Shaper:
                     stat = self.host.read(f"/proc/{pid}/stat")
                 except OSError as exc:
                     raise ShaperError(f"cannot verify pid {pid}") from exc
-                if parse_start_ticks(stat) != starts[pid]:
+                if parse_start_ticks(stat, expected_pid=pid) != starts[pid]:
                     raise ShaperError(f"pid {pid} changed since the process scan")
                 self._check_leaf_empty(pid)
                 originals[pid] = self._read_cgroup(pid)
@@ -339,7 +339,7 @@ class Shaper:
                 stat = self.host.read(f"/proc/{pid}/stat")
             except OSError as exc:
                 raise ShaperError(f"cannot verify pid {pid}") from exc
-            if parse_start_ticks(stat) != expected_start_ticks:
+            if parse_start_ticks(stat, expected_pid=pid) != expected_start_ticks:
                 raise ShaperError(f"pid {pid} changed since the process scan")
             self._check_leaf_empty(pid)
             original = self._read_cgroup(pid)
@@ -398,7 +398,7 @@ class Shaper:
                         stat = self.host.read(f"/proc/{pid}/stat")
                     except OSError as exc:
                         raise ShaperError(f"cannot verify pid {pid}") from exc
-                    if parse_start_ticks(stat) != start:
+                    if parse_start_ticks(stat, expected_pid=pid) != start:
                         raise ShaperError(f"pid {pid} changed since the process scan")
                     if pid in changes.add:
                         self._check_leaf_empty(pid)
@@ -635,7 +635,7 @@ class Shaper:
             return "unknown" if self._pid_alive(share.pid) else "gone"
         except OSError:
             return "unknown"
-        start = parse_start_ticks(stat)
+        start = parse_start_ticks(stat, expected_pid=share.pid)
         if start is None:
             return "unknown"
         return "same" if start == share.start_ticks else "changed"
@@ -774,7 +774,7 @@ class Shaper:
                         start = starts.get(pid_text)
                         if start is not None:
                             try:
-                                current = parse_start_ticks(self.host.read(f"/proc/{pid}/stat"))
+                                current = parse_start_ticks(self.host.read(f"/proc/{pid}/stat"), expected_pid=pid)
                             except OSError:
                                 current = None
                             if type(start) is not int or current != start:

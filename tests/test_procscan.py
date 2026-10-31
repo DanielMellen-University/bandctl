@@ -208,6 +208,14 @@ class ScanTests(unittest.TestCase):
                 found = scan_processes(root, skip_pid=0)
         self.assertEqual([(proc.pid, proc.start_ticks) for proc in found], [(7, None)])
 
+    def test_scan_does_not_verify_a_stat_record_for_a_different_pid(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._pid(root, 7, "curl", b"curl\0", "Uid:\t1000\n", None)
+            (root / "7" / "stat").write_text("8 (curl) S " + "0 " * 18 + "12345\n")
+            found = scan_processes(root, skip_pid=0)
+        self.assertEqual([(proc.pid, proc.start_ticks) for proc in found], [(7, None)])
+
     def test_scan_survives_user_database_failure(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
