@@ -168,7 +168,7 @@ class TrafficSampler:
         prev_at = self._prev_at
         if prev is None or prev_at is None:
             self._prev = {key: (received, acked, now, now, now, source)
-                          for key, (received, acked, source) in current.items()}
+                          for key, (received, acked, source) in observed.items()}
             self._prev_at = now
             for pid, _socket in current:
                 self._totals.setdefault(pid, (0, 0))

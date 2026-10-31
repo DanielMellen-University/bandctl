@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Set baselines for existing TCP sockets with no initial byte counters.
+
 - Avoid counting old bytes when an initial TCP sample lacks one counter.
 
 - Reject malformed process start times before verifying a PID.

@@ -188,9 +188,19 @@ class ParseTests(unittest.TestCase):
     def test_first_reported_counters_after_a_gap_contribute_from_zero(self):
         header = 'ESTAB 0 0 10.0.0.2:1 1.1.1.1:1 users:(("x",pid=5,fd=1)) sk:a\n'
         sampler = TrafficSampler()
+        sampler.rates('', 0)
         sampler.rates(header + '\t cubic\n', 1)
         self.assertEqual(sampler.rates(header + '\t bytes_received:20\n', 2)[5], (160.0, 0.0))
         self.assertEqual(sampler.totals[5], (20, 0))
+
+    def test_initial_socket_without_counters_sets_baselines_when_reported(self):
+        header = 'ESTAB 0 0 10.0.0.2:1 1.1.1.1:1 users:(("x",pid=5,fd=1)) sk:a\n'
+        sampler = TrafficSampler()
+        sampler.rates(header + '\t cubic\n', 1)
+        self.assertEqual(sampler.rates(header + '\t bytes_received:100 bytes_acked:200\n', 2)[5], (0.0, 0.0))
+        self.assertEqual(sampler.totals[5], (0, 0))
+        self.assertEqual(sampler.rates(header + '\t bytes_received:110 bytes_acked:220\n', 3)[5], (80.0, 160.0))
+        self.assertEqual(sampler.totals[5], (10, 20))
 
     def test_initial_missing_counter_gets_a_baseline_when_first_reported(self):
         header = 'ESTAB 0 0 10.0.0.2:1 1.1.1.1:1 users:(("x",pid=5,fd=1)) sk:a\n'
