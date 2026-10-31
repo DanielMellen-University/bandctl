@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Skip malformed fallback route flags and metrics when choosing an interface.
+
 - Reject underscore-only budgets instead of clearing the submitted capacity.
 
 - Reject a percent sign without a number instead of clearing a share.

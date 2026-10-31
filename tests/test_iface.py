@@ -45,6 +45,17 @@ class ParseTests(unittest.TestCase):
         self.assertIsNone(parse_speed_mbps("-1\n"))
         self.assertIsNone(parse_speed_mbps("nope"))
 
+    def test_proc_route_skips_invalid_flags_and_metrics(self):
+        header = "Iface Destination Gateway Flags RefCnt Use Metric Mask\n"
+        good = "eth0 00000000 00000000 0001 0 0 100 00000000\n"
+        for flags, metric in (("0001", "-1"), ("0001", "1_0"),
+                              ("0001", "4294967296"), ("+1", "1"),
+                              ("1_1", "1"), ("100000001", "1")):
+            bad = f"bad0 00000000 00000000 {flags} 0 0 {metric} 00000000\n"
+            with self.subTest(flags=flags, metric=metric):
+                self.assertIsNone(parse_proc_route(header + bad))
+                self.assertEqual(parse_proc_route(header + bad + good), "eth0")
+
 
 class LookupTests(unittest.TestCase):
     def test_ip_wins(self):

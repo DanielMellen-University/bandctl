@@ -29,10 +29,12 @@ def parse_proc_route(text: str) -> str | None:
         parts = re.split(r"[ \t]+", line.strip(" \t\r"))
         if len(parts) < 8 or parts[1] != "00000000" or parts[7] != "00000000":
             continue
-        try:
-            flags = int(parts[3], 16)
-            metric = int(parts[6])
-        except ValueError:
+        if (not re.fullmatch(r"[0-9a-fA-F]{1,8}", parts[3])
+                or not re.fullmatch(r"[0-9]{1,10}", parts[6])):
+            continue
+        flags = int(parts[3], 16)
+        metric = int(parts[6])
+        if metric > 0xFFFFFFFF:
             continue
         if flags & 1 and (best is None or metric < best[0]):
             best = (metric, parts[0])
