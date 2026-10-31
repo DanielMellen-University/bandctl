@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Show the PIDs involved in a socket filter conflict.
+
 - Report conflicting socket filters instead of silently assigning them to another share.
 
 - Set baselines for existing TCP sockets with no initial byte counters.

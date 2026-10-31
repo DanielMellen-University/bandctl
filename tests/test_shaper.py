@@ -1918,7 +1918,7 @@ class ApplyTests(unittest.TestCase):
         host.links["/proc/43/fd/3"] = "socket:[99]"
         host.commands.clear()
         shaper.sample()
-        self.assertIn("socket filter conflicts", shaper.flow_warning or "")
+        self.assertIn("socket filter conflicts between pid 42 and pid 43 (up)", shaper.flow_warning or "")
         self.assertEqual(shaper._flows, existing)
         self.assertFalse(any("flower" in args for args, _ in host.commands))
         del host.links["/proc/43/fd/3"]

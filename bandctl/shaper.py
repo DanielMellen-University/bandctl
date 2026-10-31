@@ -1427,6 +1427,7 @@ class Shaper:
         the ones that already existed, and drops filters when they close.
         """
         desired: dict[tuple, tuple[SockFlow, int, str]] = {}
+        owners: dict[tuple, int] = {}
         verified: list[Share] = []
         net = self._load_net() if self._shares else {}
         for pid, share in self._shares.items():
@@ -1446,8 +1447,11 @@ class Shaper:
                     key = (direction, ident)
                     previous = desired.get(key)
                     if previous is not None and previous[1] != share.minor:
-                        raise ShaperError(f"socket filter conflicts between shares ({direction})")
+                        raise ShaperError(
+                            f"socket filter conflicts between pid {owners[key]} and pid {pid} ({direction})"
+                        )
                     desired[key] = (flow, share.minor, direction)
+                    owners[key] = pid
         for share in verified:
             if self._process_status(share) != "same":
                 raise ShaperError(f"cannot verify pid {share.pid} for socket scan")
