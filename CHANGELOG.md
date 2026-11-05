@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep recovery state when a cgroup process list is truncated or malformed.
+
 - Ignore duplicate class counters until the next valid rate sample.
 
 - Keep socket filters when a socket table has an invalid state field.

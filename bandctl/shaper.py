@@ -1047,8 +1047,10 @@ class Shaper:
             except OSError as exc:
                 errors.append(f"cannot read {leaf}/cgroup.procs: {exc}")
                 continue
-            pids = procs.split()
-            if any(not re.fullmatch(r"[1-9][0-9]{0,9}", pid) or int(pid) > 2_147_483_647 for pid in pids):
+            pids = procs[:-1].split("\n") if procs.endswith("\n") else []
+            if (procs and not procs.endswith("\n")) or any(
+                not re.fullmatch(r"[1-9][0-9]{0,9}", pid) or int(pid) > 2_147_483_647 for pid in pids
+            ):
                 errors.append(f"invalid pid in {leaf}/cgroup.procs")
                 continue
             failed = False
