@@ -945,8 +945,9 @@ class BandctlApp(App):
         return None
 
     def _note(self, text: str, *, bad: bool = False) -> None:
-        self._status_text = self._recovery_error or text
-        self._status_bad = bool(self._recovery_error) or bad
+        blocking_error = self._recovery_error or (self._iface_error if self.is_root and self.shaper is None else None)
+        self._status_text = blocking_error or text
+        self._status_bad = bool(blocking_error) or bad
         if self.is_mounted:
             self._paint_status()
             self._log(text)

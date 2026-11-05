@@ -278,6 +278,31 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(app.query_one("#remove", Button).disabled)
                 self.assertIsNone(app.shaper)
 
+    async def test_missing_interface_stays_visible_through_traffic_warning(self):
+        from bandctl.iface import IfaceError
+        from bandctl.shaper import Shaper
+        from test_shaper import _shaper
+
+        _, host = _shaper()
+        snapshot = [""]
+        app = BandctlApp(processes=lambda: list(PROCS), link_bps=100_000_000, is_root=True)
+        with patch("bandctl.app.default_iface", side_effect=IfaceError("no default route; pass --iface")), \
+             patch("bandctl.app.Shaper", return_value=Shaper("", host=host, state_path="/run/bandctl.json")), \
+             patch("bandctl.app.read_ss", side_effect=lambda: snapshot[0]):
+            async with app.run_test(size=(80, 24)):
+                self.assertIn("no default route", app._status_text)
+                snapshot[0] = None
+                log = app.query_one("#log", RichLog)
+                with patch.object(log, "write", wraps=log.write) as write:
+                    await app._refresh()
+                    self.assertTrue(any("could not read traffic with ss" in str(call.args[0])
+                                        for call in write.call_args_list))
+                self.assertIn("no default route", app._status_text)
+                snapshot[0] = ""
+                await app._refresh()
+                self.assertIn("no default route", app._status_text)
+                self.assertTrue(app.query_one("#apply", Button).disabled)
+
     async def test_root_recovers_previous_session_without_default_route(self):
         from bandctl.iface import IfaceError
         from bandctl.shaper import Shaper

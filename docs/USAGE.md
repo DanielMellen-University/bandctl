@@ -166,7 +166,7 @@ The same applies when a group member moves elsewhere during settings import roll
 
 A crash skips that path. The next start reads `/run/bandctl.json` and finishes it. The recovery file must be a regular file. Reboot also drops the qdisc and the file, because neither is persistent.
 
-The root TUI also attempts recovery when no default route is available, using the interface recorded in the recovery file. Apply and Remove stay disabled until you start a session with a usable interface.
+The root TUI also attempts recovery when no default route is available, using the interface recorded in the recovery file. Apply and Remove stay disabled until you start a session with a usable interface. The interface error stays in the status line; other warnings remain in the log.
 
 If a root qdisc replacement could not be confirmed, recovery checks the current qdisc first. If its kind differs from the saved original, recovery leaves the qdisc and recovery file in place. It still tries to restore processes and remove other owned resources.
 
