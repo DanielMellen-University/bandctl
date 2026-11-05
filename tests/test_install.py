@@ -49,6 +49,38 @@ class ScriptTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("Usage", result.stdout)
 
+    def test_piped_install_removes_download_directory_on_success_and_failure(self):
+        for curl_status, child_status, expected in ((0, 0, 0), (0, 7, 7), (9, 0, 9)):
+            with self.subTest(curl_status=curl_status, child_status=child_status), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                tools = root / "tools"
+                downloads = root / "downloads"
+                tools.mkdir()
+                downloads.mkdir()
+                curl = tools / "curl"
+                curl.write_text('#!/bin/sh\nexit "$CURL_STATUS"\n', encoding="utf-8")
+                curl.chmod(0o755)
+                tar = tools / "tar"
+                tar.write_text(textwrap.dedent('''\
+                    #!/bin/sh
+                    cat > "$3/install.sh" <<'EOF'
+                    #!/bin/sh
+                    printf '%s\\n' "$@" > "$BANDCTL_ARG_LOG"
+                    exit "$CHILD_STATUS"
+                    EOF
+                    chmod +x "$3/install.sh"
+                '''), encoding="utf-8")
+                tar.chmod(0o755)
+                env = _quiet_ps(tools)
+                env.update(TMPDIR=str(downloads), CURL_STATUS=str(curl_status), CHILD_STATUS=str(child_status),
+                           BANDCTL_ARG_LOG=str(root / "args"))
+                result = _run(["bash", "-s", "--", "--skip-deps"], input=INSTALL.read_text(encoding="utf-8"),
+                              cwd=root, env=env)
+                self.assertEqual(result.returncode, expected, result.stderr)
+                self.assertEqual(list(downloads.iterdir()), [])
+                if curl_status == 0:
+                    self.assertEqual((root / "args").read_text(encoding="utf-8"), "--skip-deps\n")
+
     def test_default_install_keeps_arguments_when_it_asks_for_root(self):
         if os.geteuid() == 0:
             self.skipTest("already root, so install would not re-exec sudo")

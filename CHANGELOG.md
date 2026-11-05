@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Remove the downloaded temporary checkout after a piped installation.
+
 - Clarify which processes are restored before checking a leaf's member list.
 
 - Keep recovery state when a cgroup process list is truncated or malformed.

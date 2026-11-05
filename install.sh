@@ -39,8 +39,10 @@ if [ ! -f "$0" ] || [ ! -f "$(dirname "$0")/pyproject.toml" ]; then
   command -v curl >/dev/null 2>&1 || die "curl is required to download bandctl"
   command -v tar >/dev/null 2>&1 || die "tar is required to download bandctl"
   tmp=$(mktemp -d)
+  trap 'rm -rf -- "$tmp"' EXIT
   curl -fsSL "$TARBALL_URL" | tar -xz -C "$tmp" --strip-components=1
-  exec "$tmp/install.sh" "$@"
+  "$tmp/install.sh" "$@"
+  exit 0
 fi
 
 SRC=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
