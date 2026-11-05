@@ -132,6 +132,12 @@ class LookupTests(unittest.TestCase):
             path.write_text("-1\n", encoding="utf-8")
             self.assertIsNone(link_speed_bps("eth0", speed_path=path))
 
+    def test_link_speed_outside_capacity_range_is_unknown(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "speed"
+            path.write_text("9" * 309 + "\n", encoding="utf-8")
+            self.assertIsNone(link_speed_bps("eth0", speed_path=path))
+
 
 class CheckTests(unittest.TestCase):
     def setUp(self):

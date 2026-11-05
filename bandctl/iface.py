@@ -6,6 +6,8 @@ import re
 import subprocess
 from pathlib import Path
 
+from bandctl.rates import MAX_BUDGET_BPS
+
 
 class IfaceError(RuntimeError):
     """No default route, or the interface name is not a real device."""
@@ -127,7 +129,7 @@ def link_speed_bps(iface: str, speed_path: Path | None = None) -> int | None:
     except OSError:
         return None
     mbps = parse_speed_mbps(text)
-    if mbps is None:
+    if mbps is None or mbps > MAX_BUDGET_BPS // 1_000_000:
         return None
     return mbps * 1_000_000
 

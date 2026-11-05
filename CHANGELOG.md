@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Treat link speeds outside the supported capacity range as unknown.
+
 - Refuse symlinks at installer-managed files inside the prefix.
 
 - Reject uninstall prefixes that resolve to protected directories.
