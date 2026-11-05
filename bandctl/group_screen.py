@@ -23,6 +23,7 @@ class GroupsScreen(ModalScreen[bool]):
         self.processes = {proc.pid: proc for proc in processes}
         self.down_cap, self.up_cap = down_cap, up_cap
         self.changed = False
+        self._groups_by_row = {}
 
     def compose(self) -> ComposeResult:
         yield Vertical(
@@ -49,15 +50,16 @@ class GroupsScreen(ModalScreen[bool]):
     def _render_groups(self) -> None:
         table = self.query_one("#group-table", DataTable)
         table.clear()
+        self._groups_by_row.clear()
         for group in active_groups(self.shaper.shares):
-            table.add_row(Text(terminal_text(group.name)), str(group.down_pct or "-"), str(group.up_pct or "-"),
-                          ", ".join(str(pid) for pid in group.members))
+            key = table.add_row(Text(terminal_text(group.name)), str(group.down_pct or "-"), str(group.up_pct or "-"),
+                                ", ".join(str(pid) for pid in group.members))
+            self._groups_by_row[key] = group
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
-        groups = active_groups(self.shaper.shares)
-        if event.cursor_row >= len(groups):
+        group = self._groups_by_row.get(event.row_key)
+        if group is None or group not in active_groups(self.shaper.shares):
             return
-        group = groups[event.cursor_row]
         self.query_one("#group-name", Input).value = group.name
         self.query_one("#group-down", Input).value = str(group.down_pct or "")
         self.query_one("#group-up", Input).value = str(group.up_pct or "")

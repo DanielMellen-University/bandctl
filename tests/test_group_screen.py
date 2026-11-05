@@ -63,6 +63,36 @@ class GroupScreenTests(unittest.IsolatedAsyncioTestCase):
             await pilot.press("escape")
             self.assertIn("[red]work[/red]", str(app.query_one("#detail-title", Static).render()))
 
+    async def test_delayed_selection_does_not_select_a_different_group(self):
+        app, shaper, _host = group_app()
+        shaper.apply_group(Group("work", 30, None, (42,)), {42: 100}, 100_000_000, 100_000_000)
+        async with app.run_test(size=(100, 32)) as pilot:
+            await pilot.press("g")
+            screen = app.screen
+            table = screen.query_one("#group-table", DataTable)
+            old_key = table.ordered_rows[0].key
+            event = DataTable.RowSelected(table, 0, old_key)
+            shaper.apply_group(Group("alpha", 15, None, (43,)), {43: 100}, 100_000_000, 100_000_000)
+            screen._render_groups()
+            name = screen.query_one("#group-name", Input)
+            name.value = "pending edit"
+            screen.on_data_table_row_selected(event)
+            self.assertEqual(name.value, "pending edit")
+
+    async def test_selection_ignores_a_group_changed_since_table_render(self):
+        app, shaper, _host = group_app()
+        shaper.apply_group(Group("work", 30, None, (42,)), {42: 100}, 100_000_000, 100_000_000)
+        async with app.run_test(size=(100, 32)) as pilot:
+            await pilot.press("g")
+            screen = app.screen
+            table = screen.query_one("#group-table", DataTable)
+            event = DataTable.RowSelected(table, 0, table.ordered_rows[0].key)
+            shaper.update_group("work", 40, None, 100_000_000, 100_000_000)
+            name = screen.query_one("#group-name", Input)
+            name.value = "pending edit"
+            screen.on_data_table_row_selected(event)
+            self.assertEqual(name.value, "pending edit")
+
     async def test_create_update_and_add_member(self):
         app, shaper, host = group_app()
         async with app.run_test(size=(80, 24)) as pilot:

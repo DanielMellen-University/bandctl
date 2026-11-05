@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Ignore stale group selections after the group table changes.
+
 - Ignore delayed highlights that no longer match the table cursor.
 
 - Clear pending share edits when the selected process changes or its PID is reused.
