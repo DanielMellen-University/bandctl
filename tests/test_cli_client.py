@@ -151,6 +151,17 @@ class ClientTests(unittest.TestCase):
         worker.terminate.assert_called_once()
         worker.wait.assert_called_once_with(timeout=3.0)
 
+    def test_readiness_timeout_does_not_terminate_a_possibly_busy_worker(self):
+        worker = Mock()
+        worker.stderr = io.BytesIO()
+        worker.poll.return_value = None
+        with patch("bandctl.cli_client._ping", side_effect=[None, socket.timeout("timed out")]), \
+             patch("bandctl.cli_client.check_iface", return_value="eth0"), \
+             patch("bandctl.cli_client.subprocess.Popen", return_value=worker):
+            with self.assertRaises(socket.timeout):
+                ensure_session("eth0", start=True)
+        worker.terminate.assert_not_called()
+
     def test_stop_waits_for_lock_release(self):
         lock = Mock()
         lock.acquire.side_effect = [SessionLockError("another bandctl session is already running"), None]

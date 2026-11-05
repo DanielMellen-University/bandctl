@@ -55,7 +55,7 @@ When link speed is unknown, import a settings file containing capacity budgets b
 
 Only one root bandctl session can control shaping at a time. A second root session exits with an error until the first finishes cleanup. If CLI commands start together, a command waits briefly for the first CLI session to open and checks its interface and wildcard setting. The read-only process list does not take the lock.
 
-CLI session checks and requests allow up to 30 seconds for a response from a busy worker. A timeout does not start a second session.
+CLI session checks and requests allow up to 30 seconds for a response from a busy worker. A timeout does not start a second session. If a newly started worker times out during its readiness check, it may keep running to finish another command. Check the session before retrying.
 
 ## Not root
 

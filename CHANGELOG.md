@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Leave a possibly busy worker running when its startup check times out.
+
 - Let CLI session checks wait for a busy worker.
 
 - Report CLI worker cleanup failures after termination or server errors.

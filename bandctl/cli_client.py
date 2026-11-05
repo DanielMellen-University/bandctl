@@ -49,10 +49,16 @@ def ensure_session(iface: str | None, *, start: bool, socket_path: str = SOCKET_
                               start_new_session=True, close_fds=True)
     deadline = time.monotonic() + 5.0
     ready = False
+    readiness_timed_out = False
     lock_error = None
     try:
         while time.monotonic() < deadline:
-            active = _ping(socket_path, match_wildcard=match_wildcard)
+            try:
+                active = _ping(socket_path, match_wildcard=match_wildcard)
+            except TimeoutError:
+                # A connected worker may already be handling another request.
+                readiness_timed_out = True
+                raise
             if active is not None:
                 if active != chosen:
                     raise ValueError(f"active session uses interface {active}")
@@ -68,7 +74,7 @@ def ensure_session(iface: str | None, *, start: bool, socket_path: str = SOCKET_
             time.sleep(0.05)
         raise ValueError(lock_error or "CLI session did not start")
     finally:
-        if not ready and worker.poll() is None:
+        if not ready and not readiness_timed_out and worker.poll() is None:
             try:
                 worker.terminate()
                 worker.wait(timeout=3.0)
