@@ -108,6 +108,54 @@ class ScriptTests(unittest.TestCase):
             self.assertTrue(attempted.exists())
             self.assertNotIn("already exists", result.stderr)
 
+    def test_failed_install_keeps_previous_virtual_environment(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prefix, bindir, tools = root / "install", root / "bin", root / "tools"
+            (prefix / "venv").mkdir(parents=True)
+            bindir.mkdir()
+            tools.mkdir()
+            existing = prefix / "venv" / "existing"
+            existing.write_text("keep", encoding="utf-8")
+            python = tools / "python3"
+            python.write_text(
+                "#!/bin/sh\n"
+                "[ \"$1\" = -c ] && exit 0\n"
+                "mkdir -p \"$3/bin\"\n"
+                "printf '#!/bin/sh\\nexit 1\\n' > \"$3/bin/pip\"\n"
+                "chmod +x \"$3/bin/pip\"\n", encoding="utf-8")
+            python.chmod(0o755)
+            result = _run(["bash", str(INSTALL), "--prefix", str(prefix), "--bindir", str(bindir),
+                           "--skip-deps"], env=_quiet_ps(tools))
+            self.assertNotEqual(result.returncode, 0)
+            self.assertTrue(existing.exists())
+            self.assertEqual(existing.read_text(encoding="utf-8"), "keep")
+            self.assertEqual(list(prefix.glob(".venv-backup.*")), [])
+
+    def test_successful_install_discards_virtual_environment_backup(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prefix, bindir, tools = root / "install", root / "bin", root / "tools"
+            (prefix / "venv").mkdir(parents=True)
+            bindir.mkdir()
+            tools.mkdir()
+            (prefix / "venv" / "old").write_text("old", encoding="utf-8")
+            python = tools / "python3"
+            python.write_text(
+                "#!/bin/sh\n"
+                "[ \"$1\" = -c ] && exit 0\n"
+                "mkdir -p \"$3/bin\"\n"
+                "printf '#!/bin/sh\\nexit 0\\n' > \"$3/bin/pip\"\n"
+                "printf '#!/bin/sh\\nprintf test-version\\n' > \"$3/bin/bandctl\"\n"
+                "chmod +x \"$3/bin/pip\" \"$3/bin/bandctl\"\n", encoding="utf-8")
+            python.chmod(0o755)
+            result = _run(["bash", str(INSTALL), "--prefix", str(prefix), "--bindir", str(bindir),
+                           "--skip-deps"], env=_quiet_ps(tools))
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse((prefix / "venv" / "old").exists())
+            self.assertTrue((bindir / "bandctl").exists())
+            self.assertEqual(list(prefix.glob(".venv-backup.*")), [])
+
     def test_install_refuses_uninstall_wrapper_symlinks_before_replacing_venv(self):
         for exists in (False, True):
             with self.subTest(target_exists=exists), tempfile.TemporaryDirectory() as tmp:

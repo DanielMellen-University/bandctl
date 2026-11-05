@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Restore the previous virtual environment when an install fails.
+
 - Refuse symlinks at the uninstall wrapper before changing an install.
 
 - Check command conflicts before replacing an existing installation.

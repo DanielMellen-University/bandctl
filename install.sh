@@ -172,7 +172,32 @@ place_command() {
   ln -sfn "$PREFIX/venv/bin/bandctl" "$dest"
 }
 
-rm -rf "$PREFIX/venv"
+backup=""
+if [ -e "$PREFIX/venv" ] || [ -L "$PREFIX/venv" ]; then
+  backup=$(mktemp -d "$PREFIX/.venv-backup.XXXXXX")
+  rmdir "$backup"
+  mv -- "$PREFIX/venv" "$backup"
+fi
+install_complete=0
+restore_venv() {
+  local status=$?
+  trap - EXIT
+  if [ "$install_complete" -eq 0 ]; then
+    if ! rm -rf -- "$PREFIX/venv"; then
+      echo "bandctl install: could not remove the incomplete virtualenv" >&2
+      if [ -n "$backup" ]; then
+        echo "bandctl install: previous files remain at $backup" >&2
+      fi
+      exit "$status"
+    fi
+    if [ -n "$backup" ]; then
+      mv -- "$backup" "$PREFIX/venv" || echo "bandctl install: could not restore $backup" >&2
+    fi
+  fi
+  exit "$status"
+}
+trap restore_venv EXIT
+
 python3 -m venv "$PREFIX/venv" || die "could not create a virtualenv. On Debian or Ubuntu install python3-venv, or re-run without --skip-deps."
 "$PREFIX/venv/bin/pip" install --disable-pip-version-check "$SRC"
 
@@ -195,6 +220,11 @@ EOF
 chmod 644 "$PREFIX/install-stamp"
 
 version=$("$BINDIR/bandctl" --version)
+install_complete=1
+if [ -n "$backup" ]; then
+  rm -rf -- "$backup"
+fi
+trap - EXIT
 echo "Installed $version"
 echo "  sudo bandctl"
 echo "  sudo bandctl --iface wlan0"
