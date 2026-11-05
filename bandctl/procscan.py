@@ -45,7 +45,8 @@ class SockFlow:
 _UID_RE = re.compile(r"^Uid:[ \t]+([0-9]+)(?=[ \t\r\n]|$)", re.MULTILINE)
 
 
-def _valid_inode(raw: str) -> bool:
+def valid_socket_inode(raw: str) -> bool:
+    """Accept canonical unsigned 64-bit socket inode numbers."""
     return (bool(re.fullmatch(r"0|[1-9][0-9]{0,19}", raw))
             and int(raw) <= 0xFFFFFFFFFFFFFFFF)
 
@@ -72,7 +73,7 @@ def parse_socket_inodes(text: str) -> set[str]:
     inodes: set[str] = set()
     for line in text.splitlines()[1:]:
         parts = line.split()
-        if len(parts) >= 10 and _valid_inode(parts[9]):
+        if len(parts) >= 10 and valid_socket_inode(parts[9]):
             inodes.add(parts[9])
     return inodes
 
@@ -104,7 +105,7 @@ def parse_proc_net(text: str, proto: str, family: str, *, strict: bool = False,
         raise ValueError("truncated socket table")
     for line in lines[1:]:
         parts = line.split()
-        if len(parts) < 10 or not _valid_inode(parts[9]):
+        if len(parts) < 10 or not valid_socket_inode(parts[9]):
             if strict:
                 raise ValueError("invalid socket table row")
             continue

@@ -89,7 +89,7 @@ For the CLI, start the session with `sudo bandctl --match-wildcard limit <pid> -
 
 If bandctl cannot scan socket tables or process descriptors, or a socket table is malformed, it reports a warning and keeps the existing filters until a scan succeeds. New or closed connections may not be reflected until then. If sockets from different shares need the same filter, bandctl reports the conflicting PIDs and keeps the existing filters until the conflict resolves. An existing filter can still shape traffic from both processes. Members of one shared limit do not conflict. An apply or update that detects a conflict fails and rolls back. IPv4 TCP and UDP tables are required even on the first scan. IPv6 tables may be absent, but a table that was available must stay readable.
 
-Socket inode fields must use canonical unsigned decimal numbers within the 64-bit range. A malformed inode leaves the existing filters in place until a later scan succeeds.
+Socket inode fields and socket descriptor links must use canonical unsigned decimal numbers within the 64-bit range. A malformed inode leaves the existing filters in place until a later scan succeeds.
 
 `r` rescans `/proc` immediately. The table also refreshes every second. The selection stays on the same pid.
 

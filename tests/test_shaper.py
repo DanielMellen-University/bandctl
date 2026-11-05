@@ -2329,6 +2329,27 @@ class ApplyTests(unittest.TestCase):
                 self.assertIsNone(shaper.flow_warning)
                 self.assertEqual(shaper._flows, {})
 
+    def test_malformed_socket_descriptor_keeps_filters_until_retry(self):
+        for target in ("socket:[", "socket:[99", "socket:[099]", "socket:[x]",
+                       "socket:[18446744073709551616]"):
+            with self.subTest(target=target):
+                shaper, host = _shaper()
+                _open_socket(host)
+                shaper.apply(42, None, 10, None, 100_000_000)
+                existing = dict(shaper._flows)
+                self.assertTrue(existing)
+                host.links["/proc/42/fd/3"] = target
+                host.commands.clear()
+                shaper.sample()
+                self.assertIn("/proc/42/fd/3", shaper.flow_warning or "")
+                self.assertEqual(shaper._flows, existing)
+                self.assertFalse(any("filter del" in command and "flower" in command
+                                     for command in _joined(host)))
+                host.links.clear()
+                shaper.sample()
+                self.assertIsNone(shaper.flow_warning)
+                self.assertEqual(shaper._flows, {})
+
     def test_duplicate_inode_across_socket_tables_keeps_filters_until_retry(self):
         shaper, host = _shaper()
         _open_socket(host)

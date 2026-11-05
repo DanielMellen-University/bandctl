@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import Protocol
 
 from bandctl.groups import Group
-from bandctl.procscan import SockFlow, parse_proc_net, parse_start_ticks
+from bandctl.procscan import SockFlow, parse_proc_net, parse_start_ticks, valid_socket_inode
 from bandctl.rates import RateError, htb_plan, percent_to_bps
 
 IFB = "ifb-bandctl"
@@ -1613,9 +1613,11 @@ class Shaper:
                 continue
             except OSError as exc:
                 raise ShaperError(f"cannot read {fd_dir}/{name}: {exc}") from exc
-            if not (target.startswith("socket:[") and target.endswith("]")):
+            if not target.startswith("socket:["):
                 continue
             inode = target[len("socket:[") : -1]
+            if not target.endswith("]") or not valid_socket_inode(inode):
+                raise ShaperError(f"invalid socket descriptor {fd_dir}/{name}")
             flow = net.get(inode)
             if flow is None or inode in seen:
                 continue
