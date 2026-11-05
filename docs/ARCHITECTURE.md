@@ -28,6 +28,8 @@ The app reconciles scheduled ownership during refresh using the current local cl
 
 The TUI, CLI, and automatic rules pass the process start time from the scan to `Shaper.apply`. A start time must be an unsigned 64-bit decimal number in ASCII. The shaper checks it again before changing anything and rejects a missing or changed process. It also rejects an update if an existing verified share belongs to an older process instance. This check reduces the chance of acting on a reused PID; the process may still exit after the check.
 
+Before moving a process into a bandctl leaf, the shaper checks that it is still in the recorded original cgroup. If another manager moved it during setup, the operation fails instead of saving a stale restore destination. A process can still move after the check.
+
 Shares created with a verified start time are retired during sampling when that process exits or its PID is reused. The replacement PID is not moved to the old process's cgroup. If the start time cannot be read, the share is kept for a later check. A missing stat file counts as an exit only when the cgroup file is also missing. A new share is refused if its old leaf cgroup still has processes in it.
 
 A share is two optional integers, download and upload, each from 1 to 100. Blank means that direction is not enforced.

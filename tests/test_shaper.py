@@ -278,6 +278,25 @@ class SharedClassTests(unittest.TestCase):
         shaper.remove(43)
         self.assertFalse(shaper.shares)
 
+    def test_group_setup_restores_other_members_if_one_changes_cgroup(self):
+        shaper, host = self.group_shaper()
+        mkdir = host.mkdir
+        leaf = "/sys/fs/cgroup/bandctl/bandctl-43"
+
+        def move_during_setup(path):
+            mkdir(path)
+            if path == leaf:
+                host.files["/proc/43/cgroup"] = "0::/new.slice\n"
+
+        with patch.object(host, "mkdir", side_effect=move_during_setup):
+            with self.assertRaisesRegex(ShaperError, "cgroup.*changed"):
+                shaper.apply_group(Group("work", None, 20, (42, 43)),
+                                   {42: 100, 43: 100}, None, 100_000_000)
+        self.assertEqual(host.files["/proc/42/cgroup"], "0::/user.slice/user-1000.slice/session-1.scope\n")
+        self.assertEqual(host.files["/proc/43/cgroup"], "0::/new.slice\n")
+        self.assertNotIn(leaf + "/cgroup.procs", host.files)
+        self.assertFalse(shaper.shares)
+
     def test_add_member_uses_group_class_and_verifies_identity(self):
         shaper, host = self.group_shaper()
         shaper.apply_group(Group("work", 30, 20, (42,)), {42: 100}, 100_000_000, 100_000_000)
@@ -3116,6 +3135,24 @@ class CleanupTests(unittest.TestCase):
         shaper.apply(42, 10, None, 100_000_000, None, expected_start_ticks=100)
         self.assertEqual(recorded[0]["pids"]["42"], "/user.slice/user-1000.slice/session-1.scope")
         self.assertEqual(recorded[0]["start_ticks"]["42"], 100)
+
+    def test_apply_refuses_to_move_process_that_left_its_original_cgroup(self):
+        shaper, host = _shaper()
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        mkdir = host.mkdir
+        leaf = "/sys/fs/cgroup/bandctl/bandctl-42"
+
+        def move_during_setup(path):
+            mkdir(path)
+            if path == leaf:
+                host.files["/proc/42/cgroup"] = "0::/new.slice\n"
+
+        with patch.object(host, "mkdir", side_effect=move_during_setup):
+            with self.assertRaisesRegex(ShaperError, "cgroup.*changed"):
+                shaper.apply(42, 10, None, 100_000_000, None, expected_start_ticks=100)
+        self.assertNotIn(leaf + "/cgroup.procs", host.files)
+        self.assertEqual(host.files["/proc/42/cgroup"], "0::/new.slice\n")
+        self.assertNotIn(42, shaper.shares)
 
     def test_refuses_to_move_process_without_recovery_state(self):
         shaper, host = _shaper()

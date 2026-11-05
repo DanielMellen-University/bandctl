@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Refuse to move a process if it left its recorded cgroup during setup.
+
 ## 0.2.1 (2026-11-05)
 
 - Leave a possibly busy worker running when its startup check times out.
