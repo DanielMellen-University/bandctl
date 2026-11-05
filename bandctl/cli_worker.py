@@ -59,8 +59,15 @@ def run_worker(iface: str, *, lock_path: str = "/run/bandctl.lock", socket_path:
             session = CliSession(shaper, iface, capacity, processes, speed_source=speed_source)
             if not (stop_requested and stop_requested()):
                 serve(session, socket_path, on_stop=shaper.teardown, stop_requested=stop_requested)
+        except Exception as exc:
+            notes = shaper.teardown()
+            if notes:
+                raise ShaperError(f"{exc}; cleanup failed: {'; '.join(notes)}") from exc
+            raise
         finally:
-            shaper.teardown()
+            notes = shaper.teardown()
+            if notes:
+                raise ShaperError(f"cleanup failed: {'; '.join(notes)}")
 
 
 def _stop(signum, _frame) -> None:

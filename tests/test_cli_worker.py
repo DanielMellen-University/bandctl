@@ -79,6 +79,28 @@ class WorkerTests(unittest.TestCase):
                 pass
             self.assertNotIn("/run/bandctl.json", host.files)
 
+    def test_worker_reports_cleanup_failure_after_server_failure_or_termination(self):
+        for server_error in (False, True):
+            with self.subTest(server_error=server_error), tempfile.TemporaryDirectory() as directory:
+                _, host = _shaper()
+
+                def serve(session, *_args, **_kwargs):
+                    session.shaper.apply(42, None, 10, None, 100_000_000)
+                    host.fail_substr = "tc qdisc del dev eth0 root"
+                    if server_error:
+                        raise RuntimeError("server failed")
+
+                with patch("bandctl.cli_worker.serve", side_effect=serve):
+                    with self.assertRaisesRegex(ShaperError, "cleanup failed.*forced failure") as caught:
+                        run_worker("eth0", lock_path=str(Path(directory) / "lock"),
+                                   socket_path=str(Path(directory) / "socket"), host=host,
+                                   processes=lambda: [], detected_bps=100_000_000)
+                if server_error:
+                    self.assertIn("server failed", str(caught.exception))
+                self.assertIn("/run/bandctl.json", host.files)
+                with SessionLock(str(Path(directory) / "lock")):
+                    pass
+
     def test_termination_requests_cleanup_without_interrupting_the_stack(self):
         from bandctl import cli_worker
         with patch.object(cli_worker, "_stop_signum", None):

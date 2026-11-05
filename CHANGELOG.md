@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Report CLI worker cleanup failures after termination or server errors.
+
 - Recheck cgroup membership after verifying a process during removal and recovery.
 
 - Skip invalid socket owners so other traffic can still be sampled.
