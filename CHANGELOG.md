@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Test that a CLI client disconnect does not stop the session worker.
+
 - Keep a missing-interface error visible when other TUI warnings change.
 
 - Test CLI worker cleanup after a real SIGTERM during a request with a fake host.

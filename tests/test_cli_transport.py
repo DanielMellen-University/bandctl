@@ -69,6 +69,37 @@ class TransportTests(unittest.TestCase):
                 thread.join(timeout=3)
             self.assertFalse(thread.is_alive())
 
+    def test_client_disconnect_during_request_does_not_stop_server(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "session.sock")
+            entered = threading.Event()
+            release = threading.Event()
+            session = Mock()
+            session.iface = "eth0"
+
+            def limit(*_args):
+                entered.set()
+                self.assertTrue(release.wait(2))
+                return {"pid": 42}
+
+            session.limit.side_effect = limit
+            thread = threading.Thread(target=serve, args=(session, path), daemon=True)
+            thread.start()
+            wait_ready(path)
+            try:
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                    client.connect(path)
+                    client.sendall(b'{"command":"limit","target":"42","down":"30","up":null}\n')
+                    self.assertTrue(entered.wait(2))
+                release.set()
+                self.assertTrue(request(path, {"command": "ping"})["ok"])
+                self.assertTrue(request(path, {"command": "stop"})["ok"])
+            finally:
+                release.set()
+                thread.join(timeout=3)
+            session.limit.assert_called_once_with("42", "30", None)
+            self.assertFalse(thread.is_alive())
+
     def test_multiple_requests_in_one_read_are_rejected(self):
         connection = Mock()
         connection.gettimeout.return_value = None
