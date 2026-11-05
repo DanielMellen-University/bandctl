@@ -101,6 +101,19 @@ class WorkerTests(unittest.TestCase):
                 with SessionLock(str(Path(directory) / "lock")):
                     pass
 
+    def test_repeated_cleanup_failure_keeps_the_server_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch("bandctl.cli_worker.Shaper") as factory, \
+                 patch("bandctl.cli_worker.serve", side_effect=RuntimeError("server failed")):
+                factory.return_value.recovery_error = None
+                factory.return_value.teardown.side_effect = [["first cleanup failed"], ["retry failed"]]
+                with self.assertRaises(ShaperError) as caught:
+                    run_worker("eth0", lock_path=str(Path(directory) / "lock"),
+                               socket_path=str(Path(directory) / "socket"), detected_bps=100_000_000)
+            self.assertIn("server failed", str(caught.exception))
+            self.assertIn("first cleanup failed", str(caught.exception))
+            self.assertIn("retry failed", str(caught.exception))
+
     def test_termination_requests_cleanup_without_interrupting_the_stack(self):
         from bandctl import cli_worker
         with patch.object(cli_worker, "_stop_signum", None):

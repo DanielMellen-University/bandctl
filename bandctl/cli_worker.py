@@ -65,9 +65,13 @@ def run_worker(iface: str, *, lock_path: str = "/run/bandctl.lock", socket_path:
                 raise ShaperError(f"{exc}; cleanup failed: {'; '.join(notes)}") from exc
             raise
         finally:
+            pending = sys.exc_info()[1]
             notes = shaper.teardown()
             if notes:
-                raise ShaperError(f"cleanup failed: {'; '.join(notes)}")
+                detail = f"cleanup failed: {'; '.join(notes)}"
+                if pending is not None:
+                    detail = f"{pending}; {detail}"
+                raise ShaperError(detail) from pending
 
 
 def _stop(signum, _frame) -> None:
