@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.3 (2026-11-05)
+
 - Reject group PIDs outside the range supported by recovery.
 
 - Reject group start times outside the supported process counter range.
