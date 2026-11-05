@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Expire manual rule tracking for processes handled before the first scan.
+
 - Preserve manual rule overrides while a visible process has an unreadable start time.
 
 - Leave a starting CLI worker running after a startup deadline to protect concurrent requests.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import time
+from time import monotonic
 
 from bandctl.procscan import ProcessInfo
 from bandctl.schedule import DailyWindow
@@ -82,11 +83,12 @@ class RuleTracker:
                 self._retry_at.pop(key, None)
         return found
 
-    def applied(self, proc: ProcessInfo) -> None:
+    def applied(self, proc: ProcessInfo, *, now: float | None = None) -> None:
         if proc.start_ticks is not None:
             key = (proc.pid, proc.start_ticks)
             self._handled.add(key)
             self._retry_at.pop(key, None)
+            self._last_seen[key] = monotonic() if now is None else now
 
     def failed(self, proc: ProcessInfo, now: float) -> None:
         if proc.start_ticks is not None:

@@ -2,6 +2,7 @@
 
 import unittest
 from datetime import time
+from unittest.mock import patch
 
 from bandctl.procscan import ProcessInfo
 from bandctl.rules import AutoRule, RuleTracker, ScheduledOwnership, first_match
@@ -45,11 +46,11 @@ class RuleTests(unittest.TestCase):
         first = ProcessInfo(42, "steam", "steam", "user", 1, 100)
         unknown = ProcessInfo(43, "steam", "steam", "user", 1)
         self.assertEqual(tracker.candidates([first, unknown], [rule], set(), 1), [(first, rule)])
-        tracker.applied(first)
+        tracker.applied(first, now=1)
         self.assertEqual(tracker.candidates([first], [rule], set(), 2), [])
         tracker.released(first)
         self.assertEqual(tracker.candidates([first], [rule], set(), 2), [(first, rule)])
-        tracker.applied(first)
+        tracker.applied(first, now=2)
         replacement = ProcessInfo(42, "steam", "steam", "user", 1, 200)
         self.assertEqual(tracker.candidates([replacement], [rule], set(), 3), [(replacement, rule)])
         self.assertEqual(tracker.candidates([replacement], [rule], {42}, 4), [])
@@ -63,7 +64,7 @@ class RuleTests(unittest.TestCase):
         tracker.failed(proc, 10)
         self.assertEqual(tracker.candidates([proc], [rule], set(), 24), [])
         self.assertEqual(tracker.candidates([proc], [rule], set(), 25), [(proc, rule)])
-        tracker.applied(proc)
+        tracker.applied(proc, now=25)
         tracker.candidates([], [rule], set(), 400)
         self.assertEqual(tracker.candidates([proc], [rule], set(), 401), [(proc, rule)])
 
@@ -73,11 +74,31 @@ class RuleTests(unittest.TestCase):
         proc = ProcessInfo(42, "steam", "steam", "user", 1, 100)
         unknown = ProcessInfo(42, "steam", "steam", "user", 1, None)
         tracker.candidates([proc], [rule], set(), 1)
-        tracker.applied(proc)
+        tracker.applied(proc, now=1)
         self.assertEqual(tracker.candidates([unknown], [rule], set(), 302), [])
         self.assertEqual(tracker.candidates([proc], [rule], set(), 303), [])
         replacement = ProcessInfo(42, "steam", "steam", "user", 1, 200)
         self.assertEqual(tracker.candidates([replacement], [rule], set(), 304), [(replacement, rule)])
+
+    def test_manual_actions_before_first_scan_expire_after_processes_disappear(self):
+        tracker = RuleTracker()
+        processes = [ProcessInfo(pid, "steam", "steam", "user", 1, 100) for pid in range(1, 101)]
+        with patch("bandctl.rules.monotonic", return_value=1):
+            for proc in processes:
+                tracker.applied(proc)
+        tracker.candidates([], [], set(), 302)
+        rule = AutoRule("steam", None, 10)
+        self.assertEqual(tracker.candidates([processes[0]], [rule], set(), 303), [(processes[0], rule)])
+        self.assertEqual(len(tracker._handled), 0)
+
+    def test_manual_action_refreshes_last_seen_after_a_scan_gap(self):
+        tracker = RuleTracker()
+        rule = AutoRule("steam", None, 10)
+        proc = ProcessInfo(42, "steam", "steam", "user", 1, 100)
+        tracker.candidates([proc], [rule], set(), 1)
+        tracker.applied(proc, now=300)
+        tracker.candidates([], [rule], set(), 302)
+        self.assertEqual(tracker.candidates([proc], [rule], set(), 303), [])
 
     def test_scheduled_ownership_expires_and_preserves_manual_changes(self):
         owner = ScheduledOwnership()
