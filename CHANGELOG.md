@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Test recovery after recording root qdisc confirmation fails.
+
 - Exclude unrelated caller errors from CLI worker cleanup failures.
 
 - Keep the original CLI worker error when repeated cleanup also fails.

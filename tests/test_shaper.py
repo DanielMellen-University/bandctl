@@ -2041,6 +2041,46 @@ class ApplyTests(unittest.TestCase):
         self.assertNotIn("/run/bandctl.json", host.files)
         self.assertFalse(any("qdisc del dev eth0 root" in command for command in _joined(host)))
 
+    def test_uncertain_recovery_retries_when_recording_confirmation_fails(self):
+        shaper, host = _shaper()
+        leaf = "/sys/fs/cgroup/bandctl/bandctl-42"
+        host.dirs.update({"/sys/fs/cgroup/bandctl", leaf})
+        host.files[leaf + "/cgroup.procs"] = "42\n"
+        host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42\n"
+        host.files["/proc/42/stat"] = "42 (work) S " + "0 " * 18 + "100"
+        host.files["/run/bandctl.json"] = json.dumps({
+            "iface": "eth0", "qdisc": "fq_codel", "root_replaced": True,
+            "root_uncertain": True, "pids": {"42": "/original"}, "start_ticks": {"42": 100},
+            "nft_owned": True, "ifb_owned": False, "ingress_owned": False,
+        })
+        write_state = host.write_state
+        attempts = []
+
+        def fail_first_write(path, data):
+            attempts.append(path)
+            if len(attempts) == 1:
+                raise OSError("state write failed")
+            return write_state(path, data)
+
+        with patch.object(host, "write_state", side_effect=fail_first_write):
+            shaper.recover()
+
+        self.assertIn("state write failed", shaper.recovery_error)
+        self.assertEqual(host.files["/proc/42/cgroup"], "0::/original\n")
+        self.assertIn("nft delete table inet bandctl", _joined(host))
+        self.assertFalse(any(" dev eth0 root" in command for command in _joined(host)))
+        state = json.loads(host.files["/run/bandctl.json"])
+        self.assertTrue(state["root_uncertain"])
+        self.assertFalse(state["nft_owned"])
+
+        host.commands.clear()
+        retry = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+        retry.recover()
+        self.assertIsNone(retry.recovery_error)
+        self.assertNotIn("/run/bandctl.json", host.files)
+        self.assertNotIn("nft delete table inet bandctl", _joined(host))
+        self.assertFalse(any(" dev eth0 root" in command for command in _joined(host)))
+
     def test_recover_older_state_restores_saved_root_qdisc(self):
         shaper, host = _shaper()
         host.files["/run/bandctl.json"] = json.dumps({"iface": "eth0", "qdisc": "fq", "pids": {}})
