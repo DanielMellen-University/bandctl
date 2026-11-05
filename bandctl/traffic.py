@@ -244,7 +244,7 @@ def read_ss() -> str | None:
         )
     except (OSError, subprocess.TimeoutExpired):
         return None
-    if result.returncode != 0:
+    if result.returncode != 0 or (result.stdout and not result.stdout.endswith("\n")):
         return None
     return result.stdout
 

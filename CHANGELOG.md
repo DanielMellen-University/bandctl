@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reject truncated traffic samples to preserve socket counter baselines.
+
 - Ignore malformed socket identities to keep separate TCP counters apart.
 
 - Reject truncated fallback routing tables before choosing an interface.

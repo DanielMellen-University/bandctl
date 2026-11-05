@@ -137,6 +137,19 @@ class ParseTests(unittest.TestCase):
         with patch("bandctl.traffic.subprocess.run", return_value=result):
             self.assertIsNone(read_ss())
 
+    def test_read_ss_rejects_truncated_output(self):
+        output = ('ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 users:(("a",pid=5,fd=1)) sk:a\n'
+                  '\t bytes_received:2')
+        header = output.split("\n")[0] + "\n\t bytes_received:"
+        results = [SimpleNamespace(returncode=0, stdout=value)
+                   for value in (header + "100\n", output, header + "210\n")]
+        sampler = TrafficSampler()
+        with patch("bandctl.traffic.subprocess.run", side_effect=results):
+            sampler.rates(read_ss(), 1)
+            self.assertIsNone(read_ss())
+            self.assertEqual(sampler.rates(read_ss(), 3)[5], (440.0, 0.0))
+        self.assertEqual(sampler.totals[5], (110, 0))
+
     def test_read_ss_treats_missing_command_and_timeout_as_unavailable(self):
         for error in (FileNotFoundError("ss"), subprocess.TimeoutExpired("ss", 2)):
             with self.subTest(error=error), patch("bandctl.traffic.subprocess.run", side_effect=error) as run:
@@ -145,11 +158,11 @@ class ParseTests(unittest.TestCase):
 
     def test_read_ss_handles_non_utf8_process_names(self):
         def run(_args, **kwargs):
-            output = b'users:(("bad\xffname",pid=5,fd=1))'
+            output = b'users:(("bad\xffname",pid=5,fd=1))\n'
             return SimpleNamespace(returncode=0, stdout=output.decode("utf-8", errors=kwargs.get("errors") or "strict"))
 
         with patch("bandctl.traffic.subprocess.run", side_effect=run):
-            self.assertEqual(read_ss(), 'users:(("bad\ufffdname",pid=5,fd=1))')
+            self.assertEqual(read_ss(), 'users:(("bad\ufffdname",pid=5,fd=1))\n')
 
     def test_socket_counters_use_cookie_or_inode_and_keep_zero_baselines(self):
         text = (
