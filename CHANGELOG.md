@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reject uninstall prefixes that resolve to protected directories.
+
 - Preserve unrelated command files inside a custom install prefix.
 
 - Reject install prefixes that resolve to protected directories.

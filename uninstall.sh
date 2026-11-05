@@ -66,6 +66,13 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+resolved_prefix=$(readlink -m -- "$PREFIX") || die "cannot resolve prefix $PREFIX"
+case "$resolved_prefix" in
+  /|/usr|/usr/bin|/usr/local|/usr/local/bin|/opt|/bin|/sbin|/etc|/home|/root|/tmp|/var)
+    die "refusing to remove $resolved_prefix"
+    ;;
+esac
+
 if [ -f "$PREFIX/install-stamp" ]; then
   stamp_prefix=""
   stamp_bindir=""

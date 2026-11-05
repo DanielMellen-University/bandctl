@@ -133,6 +133,18 @@ class ScriptTests(unittest.TestCase):
                 self.assertIn("refusing", result.stderr)
                 self.assertFalse(attempted.exists())
 
+    def test_uninstall_rejects_prefix_resolving_to_a_protected_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            link = root / "prefix"
+            link.symlink_to("/tmp", target_is_directory=True)
+            for prefix in (str(link), "/tmp/.", f"{root}/.."):
+                with self.subTest(prefix=prefix):
+                    result = _run(["bash", str(UNINSTALL), "--prefix", prefix,
+                                   "--bindir", str(root / "bin")])
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("refusing", result.stderr)
+
     def test_install_allows_its_dangling_command_link_before_rebuilding_venv(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
