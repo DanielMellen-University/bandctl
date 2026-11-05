@@ -152,6 +152,19 @@ class ParseTests(unittest.TestCase):
 
 
 class ScanTests(unittest.TestCase):
+    def test_scan_reuses_failed_uid_lookups_and_retries_next_scan(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._pid(root, 7, "curl", b"curl\0", "Uid:\t1000\n", None)
+            self._pid(root, 8, "bash", b"bash\0", "Uid:\t1000\n", None)
+            with patch("bandctl.procscan.pwd.getpwuid", side_effect=KeyError) as lookup:
+                first = scan_processes(root, skip_pid=0)
+                self.assertEqual(lookup.call_count, 1)
+                second = scan_processes(root, skip_pid=0)
+                self.assertEqual(lookup.call_count, 2)
+        self.assertEqual({proc.user for proc in first}, {"1000"})
+        self.assertEqual({proc.user for proc in second}, {"1000"})
+
     def test_scan_resolves_each_uid_once_and_refreshes_names_next_scan(self):
         from types import SimpleNamespace
 

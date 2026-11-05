@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reuse failed user lookups within a process scan to avoid repeated database calls.
+
 - Test that a CLI client disconnect does not stop the session worker.
 
 - Keep a missing-interface error visible when other TUI warnings change.
