@@ -945,6 +945,8 @@ class Shaper:
             raise ShaperError(f"cannot read cgroup for pid {pid}: file missing") from exc
         except OSError as exc:
             raise ShaperError(f"cannot read cgroup for pid {pid}: {exc}") from exc
+        if not text.endswith("\n"):
+            raise ShaperError(f"invalid cgroup entry for pid {pid}: truncated record")
         path = None
         for line in text.removesuffix("\n").split("\n"):
             # The unified hierarchy is last in the kernel's root list. A line

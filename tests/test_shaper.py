@@ -3402,6 +3402,47 @@ class CleanupTests(unittest.TestCase):
             self.assertEqual(path.read_text(), original)
             self.assertEqual(list(Path(directory).iterdir()), [path])
 
+    def test_truncated_original_cgroup_is_rejected_before_move(self):
+        shaper, host = _shaper()
+        host.files["/proc/42/cgroup"] = "0::/user.slice/session"
+        with self.assertRaisesRegex(ShaperError, "invalid cgroup"):
+            shaper.apply(42, None, 10, None, 100_000_000)
+        self.assertEqual(shaper.shares, {})
+        self.assertNotIn("/run/bandctl.json", host.files)
+        self.assertEqual(host.commands, [])
+
+    def test_removal_retries_truncated_process_cgroup(self):
+        shaper, host = _shaper()
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+        host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42"
+        with self.assertRaisesRegex(ShaperError, "invalid cgroup"):
+            shaper.remove(42)
+        self.assertIn(42, shaper.shares)
+        self.assertIn("/run/bandctl.json", host.files)
+        host.files["/proc/42/cgroup"] += "\n"
+        shaper.remove(42)
+        self.assertNotIn(42, shaper.shares)
+        self.assertEqual(host.files["/proc/42/cgroup"], "0::/user.slice/user-1000.slice/session-1.scope\n")
+
+    def test_recovery_retries_truncated_process_cgroup(self):
+        shaper, host = _shaper()
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+        host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42"
+        original = "/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs"
+        again = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+        again.recover()
+        self.assertIn("invalid cgroup", again.recovery_error)
+        self.assertIn("/run/bandctl.json", host.files)
+        self.assertNotIn(original, host.files)
+        host.files["/proc/42/cgroup"] += "\n"
+        retry = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+        retry.recover()
+        self.assertIsNone(retry.recovery_error)
+        self.assertEqual(host.files[original], "42\n")
+        self.assertNotIn("/run/bandctl.json", host.files)
+
     def test_unrestorable_original_cgroup_is_rejected_before_move(self):
         for original in ("", "/../other", "/a/../other", "relative", "/bad\x00path", "/bad\ud800path"):
             with self.subTest(original=original):

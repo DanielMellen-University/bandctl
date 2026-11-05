@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reject truncated process cgroup records before moving or restoring a process.
+
 - Ignore stale group selections after the group table changes.
 
 - Ignore delayed highlights that no longer match the table cursor.
