@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep CLI background warnings after a slow or interrupted refresh.
+
 - Wait 15 seconds after slow CLI rule failures before retrying.
 
 - Expire manual rule tracking for processes handled before the first scan.

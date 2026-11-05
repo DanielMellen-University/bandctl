@@ -87,13 +87,48 @@ class CliSessionTests(unittest.TestCase):
     def test_warnings_outlive_one_refresh_then_expire(self):
         from datetime import time
         from unittest.mock import patch
-        with patch.object(self.shaper, "_sync_flows", side_effect=ShaperError("filter failed")):
-            self.session.refresh(now=1, current=time(10))
-        self.assertTrue(self.session.warnings)
-        self.session.refresh(now=20, current=time(10))
-        self.assertTrue(any("filter failed" in warning for warning in self.session.warnings))
-        self.session.refresh(now=70, current=time(10))
+        clock = [1]
+        with patch("bandctl.cli_session.time.monotonic", side_effect=lambda: clock[0]):
+            with patch.object(self.shaper, "_sync_flows", side_effect=ShaperError("filter failed")):
+                self.session.refresh(now=1, current=time(10))
+            self.assertTrue(self.session.warnings)
+            clock[0] = 20
+            self.session.refresh(now=20, current=time(10))
+            self.assertTrue(any("filter failed" in warning for warning in self.session.warnings))
+            clock[0] = 70
+            self.session.refresh(now=70, current=time(10))
         self.assertEqual(self.session.warnings, [])
+
+    def test_warnings_from_slow_refresh_are_retained_after_completion(self):
+        from datetime import time
+        from unittest.mock import patch
+
+        for interrupted in (False, True):
+            with self.subTest(interrupted=interrupted):
+                shaper, _host = _shaper()
+                clock = [1.0]
+
+                def processes():
+                    clock[0] = 70.0
+                    if interrupted:
+                        raise OSError("process scan failed")
+                    return []
+
+                session = CliSession(shaper, "eth0", 100_000_000, processes)
+                with patch("bandctl.cli_session.time.monotonic", side_effect=lambda: clock[0]), \
+                     patch.object(shaper, "_sync_flows", side_effect=ShaperError("filter failed")):
+                    if interrupted:
+                        with self.assertRaises(OSError) as error:
+                            session.refresh(now=1, current=time(10))
+                        session.record_refresh_failure(error.exception)
+                    else:
+                        session.refresh(now=1, current=time(10))
+                self.assertIn("flow refresh: filter failed", session.warnings)
+                clock[0] = 71.0
+                session.processes = lambda: []
+                with patch("bandctl.cli_session.time.monotonic", side_effect=lambda: clock[0]):
+                    session.refresh(now=71, current=time(10))
+                self.assertIn("flow refresh: filter failed", session.warnings)
 
     def test_repeated_warning_moves_to_most_recent_position(self):
         first = "flow refresh: first"

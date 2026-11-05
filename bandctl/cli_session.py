@@ -75,7 +75,7 @@ class CliSession:
         try:
             self._refresh(now, current, messages)
         finally:
-            self._remember_warnings(messages, now)
+            self._remember_warnings(messages, time.monotonic())
         return messages
 
     def _refresh(self, now, current, messages) -> None:
