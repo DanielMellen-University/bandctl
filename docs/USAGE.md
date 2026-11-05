@@ -168,7 +168,7 @@ A crash skips that path. The next start reads `/run/bandctl.json` and finishes i
 
 The root TUI also attempts recovery when no default route is available, using the interface recorded in the recovery file. Apply and Remove stay disabled until you start a session with a usable interface. The interface error stays in the status line; other warnings remain in the log.
 
-If a root qdisc replacement could not be confirmed, recovery checks the current qdisc first. If its kind differs from the saved original, recovery leaves the qdisc and recovery file in place. It still tries to restore processes and remove other owned resources.
+If a root qdisc replacement could not be confirmed, recovery checks the current qdisc first. If its kind differs from the saved original, or the saved original is missing, recovery leaves the qdisc and recovery file in place. It still tries to restore processes and remove other owned resources.
 
 If recovery fails, the TUI keeps that error in the status line. Other warnings remain available in the log. After the TUI closes, it prints the recovery error and exits with a failure status.
 

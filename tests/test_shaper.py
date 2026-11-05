@@ -1980,6 +1980,34 @@ class ApplyTests(unittest.TestCase):
         self.assertFalse(any("qdisc del dev eth0" in command for command in _joined(host)))
         self.assertNotIn("nft delete table inet bandctl", _joined(host))
 
+    def test_uncertain_recovery_without_saved_qdisc_keeps_state_and_cleans_other_resources(self):
+        shaper, host = _shaper()
+        leaf = "/sys/fs/cgroup/bandctl/bandctl-42"
+        host.dirs.update({"/sys/fs/cgroup/bandctl", leaf})
+        host.files[leaf + "/cgroup.procs"] = "42\n"
+        host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42\n"
+        host.files["/proc/42/stat"] = "42 (work) S " + "0 " * 18 + "100"
+        host.ifb_exists = True
+        host.files["/run/bandctl.json"] = json.dumps({
+            "iface": "eth0", "root_replaced": True, "root_uncertain": True,
+            "pids": {"42": "/original"}, "start_ticks": {"42": 100},
+            "nft_owned": True, "ifb_owned": True, "ingress_owned": True,
+        })
+
+        shaper.recover()
+
+        self.assertIn("cannot verify root qdisc", shaper.recovery_error)
+        self.assertEqual(host.files["/proc/42/cgroup"], "0::/original\n")
+        self.assertFalse(host.ifb_exists)
+        self.assertIn("nft delete table inet bandctl", _joined(host))
+        self.assertIn("tc qdisc del dev eth0 ingress", _joined(host))
+        self.assertFalse(any(" dev eth0 root" in command for command in _joined(host)))
+        state = json.loads(host.files["/run/bandctl.json"])
+        self.assertTrue(state["root_uncertain"])
+        self.assertFalse(state["nft_owned"])
+        self.assertFalse(state["ingress_owned"])
+        self.assertFalse(state["ifb_owned"])
+
     def test_recovery_clears_uncertainty_if_original_root_qdisc_is_present(self):
         shaper, host = _shaper()
         host.files["/run/bandctl.json"] = json.dumps({

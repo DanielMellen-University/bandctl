@@ -777,7 +777,9 @@ class Shaper:
             root_error: str | None = None
             if state and state.get("root_uncertain"):
                 try:
-                    if self._root_kind(state["iface"]) != state.get("qdisc", "fq_codel"):
+                    if "qdisc" not in state:
+                        raise ShaperError("cannot verify root qdisc: saved original is missing")
+                    if self._root_kind(state["iface"]) != state["qdisc"]:
                         raise ShaperError("cannot verify root qdisc after failed replacement")
                     self._record_recovery_fields(root_replaced=False, root_uncertain=False)
                 except ShaperError as exc:

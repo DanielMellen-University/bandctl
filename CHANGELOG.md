@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep uncertain root qdisc recovery state when the saved original is missing.
+
 - Keep CLI background warnings after a slow or interrupted refresh.
 
 - Wait 15 seconds after slow CLI rule failures before retrying.
