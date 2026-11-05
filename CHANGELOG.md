@@ -13,7 +13,7 @@ Highlights:
 - Control characters and invalid Unicode in process names, paths, and errors are made safe before they reach the terminal.
 - 633 unit tests, all runnable without root.
 
-Changes since 0.2.5:
+Changes since 0.2.x:
 
 - Refuse to reuse a cgroup when its process list is malformed.
 - Keep class counter baselines when `tc` output is truncated.
