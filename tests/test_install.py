@@ -110,6 +110,36 @@ class ScriptTests(unittest.TestCase):
             self.assertEqual(command.read_text(encoding="utf-8"), "foreign command")
             self.assertFalse(attempted.exists())
 
+    def test_install_refuses_symlinks_at_managed_files(self):
+        for name in ("uninstall.sh", "install-stamp"):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                prefix, bindir, tools = root / "install", root / "bin", root / "tools"
+                (prefix / "venv").mkdir(parents=True)
+                bindir.mkdir()
+                tools.mkdir()
+                existing = prefix / "venv" / "existing"
+                existing.write_text("keep", encoding="utf-8")
+                target = root / "foreign"
+                target.write_text("keep", encoding="utf-8")
+                (prefix / name).symlink_to(target)
+                attempted = root / "venv-attempted"
+                python = tools / "python3"
+                python.write_text(
+                    f"#!/bin/sh\n[ \"$1\" = -c ] && exit 0\ntouch {attempted}\n"
+                    "mkdir -p \"$3/bin\"\n"
+                    "printf '#!/bin/sh\\nexit 0\\n' > \"$3/bin/pip\"\n"
+                    "printf '#!/bin/sh\\nprintf test-version\\n' > \"$3/bin/bandctl\"\n"
+                    "chmod +x \"$3/bin/pip\" \"$3/bin/bandctl\"\n", encoding="utf-8")
+                python.chmod(0o755)
+                result = _run(["bash", str(INSTALL), "--prefix", str(prefix), "--bindir", str(bindir),
+                               "--skip-deps"], env=_quiet_ps(tools))
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("symlink", result.stderr)
+                self.assertEqual(target.read_text(encoding="utf-8"), "keep")
+                self.assertEqual(existing.read_text(encoding="utf-8"), "keep")
+                self.assertFalse(attempted.exists())
+
     def test_install_rejects_prefix_resolving_to_a_protected_directory(self):
         for alias in ("symlink", "dot", "parent"):
             with self.subTest(alias=alias), tempfile.TemporaryDirectory() as tmp:

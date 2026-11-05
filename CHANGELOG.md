@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Refuse symlinks at installer-managed files inside the prefix.
+
 - Reject uninstall prefixes that resolve to protected directories.
 
 - Preserve unrelated command files inside a custom install prefix.

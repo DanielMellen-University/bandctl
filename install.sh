@@ -137,8 +137,16 @@ check_wrapper_destination() {
   fi
 }
 
+check_managed_files() {
+  local path
+  for path in "$PREFIX/uninstall.sh" "$PREFIX/install-stamp"; do
+    [ ! -L "$path" ] || die "$path is a symlink"
+  done
+}
+
 check_command_destination "$BINDIR/bandctl"
 check_wrapper_destination "$BINDIR/bandctl-uninstall"
+check_managed_files
 
 need_deps() {
   command -v python3 >/dev/null 2>&1 || return 0
@@ -209,6 +217,7 @@ python3 -m venv "$PREFIX/venv" || die "could not create a virtualenv. On Debian 
 "$PREFIX/venv/bin/pip" install --disable-pip-version-check "$SRC"
 
 place_command "$BINDIR/bandctl"
+check_managed_files
 cp "$SRC/uninstall.sh" "$PREFIX/uninstall.sh"
 chmod 755 "$PREFIX/uninstall.sh"
 
@@ -220,6 +229,7 @@ exec "$PREFIX/uninstall.sh" --prefix "$PREFIX" --bindir "$BINDIR" "\$@"
 EOF
 chmod 755 "$wrapper"
 
+check_managed_files
 cat > "$PREFIX/install-stamp" << EOF
 PREFIX=$PREFIX
 BINDIR=$BINDIR
