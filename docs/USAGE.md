@@ -81,6 +81,8 @@ Apply requires a complete process stat record with the expected PID and a readab
 
 Before moving a process into a bandctl cgroup, bandctl also checks that it is still in the recorded original cgroup. If it moved elsewhere during setup, the operation fails. A process can still move or exit after the last check.
 
+bandctl refuses to reuse an old process cgroup if its process list is not empty or cannot be verified.
+
 The status line and the log confirm the share, for example `pid 4242 download 30%, upload 10%`. Limited rows are orange. The selected row stays green. The bars compare the selected process's estimated TCP rate with the ceiling and turn orange near the cap. `u` or Remove clears the share and puts the process back in its old cgroup if it is still in the bandctl cgroup. If it has moved elsewhere, bandctl leaves it there. Removal checks the selected process identity and refuses a limit that changed during the request. If the identity cannot be verified, rescan and try again. If the cgroup cannot be read or the write fails while the process is still running, the share stays in place and the log shows the error. If the process has exited, the share is dropped during refresh.
 
 Table rates, bars, and graphs use non-loopback TCP socket counters from `ss`, including traffic on other interfaces. They do not show UDP traffic, although bandctl can shape it. A UDP-only process may be hidden by the 1% filter; press `n` or search to find it. These estimates can differ from the actual throughput of the shaped class.

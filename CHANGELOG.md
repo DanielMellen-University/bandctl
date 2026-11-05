@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Refuse to reuse a cgroup when its process list is malformed.
+
 - Keep class counter baselines when tc output is truncated.
 
 - Fall back when ip route output is truncated to avoid selecting a partial interface name.

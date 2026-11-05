@@ -927,6 +927,20 @@ class ApplyTests(unittest.TestCase):
         self.assertEqual(host.commands, [])
         self.assertFalse(shaper.shares)
 
+    def test_new_share_refuses_unverifiable_old_leaf_membership(self):
+        for members in ("\n", " \n", "\t"):
+            with self.subTest(members=repr(members)):
+                shaper, host = _shaper()
+                leaf = "/sys/fs/cgroup/bandctl/bandctl-42/cgroup.procs"
+                host.files[leaf] = members
+                with patch.object(host, "write", wraps=host.write) as write:
+                    with self.assertRaisesRegex(ShaperError, "cannot verify cgroup"):
+                        shaper.apply(42, None, 10, None, 100_000_000)
+                write.assert_not_called()
+                self.assertEqual(host.files[leaf], members)
+                self.assertEqual(host.commands, [])
+                self.assertFalse(shaper.shares)
+
     def test_remove_does_not_move_reused_pid_even_when_sync_fails(self):
         shaper, host = _shaper()
         stat = "/proc/42/stat"

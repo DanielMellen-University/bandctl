@@ -986,6 +986,8 @@ class Shaper:
             return
         except OSError as exc:
             raise ShaperError(f"cannot inspect cgroup for pid {pid}") from exc
+        if members and not members.strip():
+            raise ShaperError(f"cannot verify cgroup for pid {pid}: invalid process list")
         if members.strip():
             raise ShaperError(f"cgroup for pid {pid} still contains processes")
 
