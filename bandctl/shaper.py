@@ -1123,8 +1123,11 @@ class Shaper:
             self._run(
                 ["tc", "qdisc", "replace", "dev", IFB, "root", "handle", "1:", "htb", "default", "999"]
             )
-        except ShaperError:
-            self._destroy_ifb(remove_ingress=added_ingress, remove_ifb=created_ifb)
+        except ShaperError as setup_error:
+            try:
+                self._destroy_ifb(remove_ingress=added_ingress, remove_ifb=created_ifb)
+            except ShaperError as cleanup_error:
+                raise ShaperError(f"{setup_error}; download cleanup failed: {cleanup_error}") from setup_error
             raise
         self._ifb = True
 

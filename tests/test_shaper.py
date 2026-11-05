@@ -2469,6 +2469,28 @@ class CleanupTests(unittest.TestCase):
         self.assertNotIn("tc qdisc del dev eth0 ingress", _joined(host))
         self.assertFalse(host.ifb_exists)
 
+    def test_download_setup_reports_original_and_cleanup_failures(self):
+        shaper, host = _shaper()
+        run = host.run
+        cleanup_attempts = 0
+
+        def fail_setup_and_first_cleanup(args, input_text=None):
+            nonlocal cleanup_attempts
+            if args[:3] == ["tc", "filter", "add"] and "matchall" in args:
+                raise ShaperError("setup failed")
+            if args == ["tc", "qdisc", "del", "dev", "eth0", "ingress"]:
+                cleanup_attempts += 1
+                if cleanup_attempts == 1:
+                    raise ShaperError("cleanup failed")
+            return run(args, input_text)
+
+        with patch.object(host, "run", side_effect=fail_setup_and_first_cleanup):
+            with self.assertRaisesRegex(ShaperError, "setup failed.*cleanup failed"):
+                shaper.apply(42, 10, None, 100_000_000, None)
+        self.assertEqual(cleanup_attempts, 2)
+        self.assertFalse(host.ifb_exists)
+        self.assertFalse(shaper.shares)
+
     def test_remove_reports_root_qdisc_restoration_failure(self):
         shaper, host = _shaper()
         shaper.apply(42, None, 10, None, 100_000_000)

@@ -135,6 +135,8 @@ If download shares (or upload shares) add up to more than 100%, each process sti
 
 A failed share or group update or removal is rolled back where possible. If rollback fails, the error reports that it is incomplete and the active ceiling may differ from the listed share. A failed new share is rolled back, and its empty cgroup is removed. If the process cannot be restored, the error reports an incomplete rollback and the share stays listed so you can try Remove. Its ceiling may not be active. The error text from `tc`, `nft`, or the cgroup write is in the log. bandctl refuses to use an existing `inet bandctl` table or replace an HTB root qdisc. A download share also requires that the interface has no existing ingress qdisc and that `ifb-bandctl` does not already exist.
 
+If download setup fails and its cleanup also fails, the error includes both failures.
+
 When cleanup of an exited process fails, bandctl tries to restore the previous class plan and retries cleanup on the next refresh. The warning reports an incomplete rollback if restoring the plan also fails.
 
 bandctl checks a process identity again after reading its cgroup and before restoring it. If a PID changes or cannot be verified during removal rollback, bandctl leaves it alone and reports an incomplete rollback. The share stays tracked for cleanup.

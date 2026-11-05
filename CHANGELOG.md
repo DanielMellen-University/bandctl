@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep the download setup error when its cleanup also fails.
+
 - Bound read-only network queries so a stalled command cannot block a session indefinitely.
 
 - Clarify that displayed rates cover TCP across interfaces, not class throughput.
