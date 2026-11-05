@@ -114,6 +114,20 @@ class WorkerTests(unittest.TestCase):
             self.assertIn("first cleanup failed", str(caught.exception))
             self.assertIn("retry failed", str(caught.exception))
 
+    def test_cleanup_failure_does_not_report_a_callers_handled_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch("bandctl.cli_worker.Shaper") as factory, patch("bandctl.cli_worker.serve"):
+                factory.return_value.recovery_error = None
+                factory.return_value.teardown.return_value = ["cleanup failed"]
+                try:
+                    raise ValueError("unrelated caller error")
+                except ValueError:
+                    with self.assertRaises(ShaperError) as caught:
+                        run_worker("eth0", lock_path=str(Path(directory) / "lock"),
+                                   socket_path=str(Path(directory) / "socket"), detected_bps=100_000_000)
+            self.assertNotIn("unrelated caller error", str(caught.exception))
+            self.assertIn("cleanup failed", str(caught.exception))
+
     def test_termination_requests_cleanup_without_interrupting_the_stack(self):
         from bandctl import cli_worker
         with patch.object(cli_worker, "_stop_signum", None):

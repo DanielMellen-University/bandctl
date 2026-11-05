@@ -50,6 +50,7 @@ def run_worker(iface: str, *, lock_path: str = "/run/bandctl.lock", socket_path:
     with SessionLock(lock_path):
         _remove_stale_socket(socket_path)
         shaper = Shaper(iface, host=host, match_wildcard=match_wildcard)
+        completed = False
         try:
             shaper.recover()
             if shaper.recovery_error:
@@ -59,13 +60,14 @@ def run_worker(iface: str, *, lock_path: str = "/run/bandctl.lock", socket_path:
             session = CliSession(shaper, iface, capacity, processes, speed_source=speed_source)
             if not (stop_requested and stop_requested()):
                 serve(session, socket_path, on_stop=shaper.teardown, stop_requested=stop_requested)
+            completed = True
         except Exception as exc:
             notes = shaper.teardown()
             if notes:
                 raise ShaperError(f"{exc}; cleanup failed: {'; '.join(notes)}") from exc
             raise
         finally:
-            pending = sys.exc_info()[1]
+            pending = None if completed else sys.exc_info()[1]
             notes = shaper.teardown()
             if notes:
                 detail = f"cleanup failed: {'; '.join(notes)}"

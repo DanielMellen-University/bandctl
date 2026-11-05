@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Exclude unrelated caller errors from CLI worker cleanup failures.
+
 - Keep the original CLI worker error when repeated cleanup also fails.
 
 - Test that TCP rates and totals resume after individual counters reset.
