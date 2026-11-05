@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Test CLI worker cleanup after a real SIGTERM during a request with a fake host.
+
 - Clarify that cleanup restores only the previous root qdisc kind and default settings.
 
 - Report a failed TUI recovery after exit and return a failure status.
