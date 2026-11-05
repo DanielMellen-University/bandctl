@@ -560,6 +560,8 @@ class Shaper:
                     raise ShaperError(f"{exc}; rollback incomplete: cannot verify pid {pid}") from exc
                 if restored:
                     try:
+                        if self._read_cgroup(pid) != share.original_cgroup:
+                            raise ShaperError(f"pid {pid} left its original cgroup during rollback")
                         self._move_to_leaf(share)
                     except (OSError, ShaperError) as rollback_exc:
                         problems.append(str(rollback_exc))

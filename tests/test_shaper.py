@@ -1045,6 +1045,29 @@ class ApplyTests(unittest.TestCase):
                     self.assertIn("cannot verify pid 42", shaper.flow_warning)
                     self.assertFalse(any("flower" in cmd and "filter add" in cmd for cmd in _joined(host)))
 
+    def test_failed_remove_does_not_move_process_that_left_original_cgroup(self):
+        shaper, host = _shaper()
+        host.files["/proc/42/stat"] = "42 (work) S " + "0 " * 18 + "100"
+        shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+        sync = shaper._sync
+        attempts = 0
+
+        def fail_after_external_move():
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                host.files["/proc/42/cgroup"] = "0::/other.slice\n"
+                raise ShaperError("sync failed")
+            return sync()
+
+        with patch.object(shaper, "_sync", side_effect=fail_after_external_move), \
+             patch.object(shaper, "_move_to_leaf", wraps=shaper._move_to_leaf) as move:
+            with self.assertRaisesRegex(ShaperError, "sync failed.*rollback incomplete.*cgroup"):
+                shaper.remove(42)
+        move.assert_not_called()
+        self.assertEqual(host.files["/proc/42/cgroup"], "0::/other.slice\n")
+        self.assertIn(42, shaper.shares)
+
     def test_sample_keeps_share_when_identity_is_unreadable(self):
         shaper, host = _shaper()
         stat = "/proc/42/stat"

@@ -137,6 +137,8 @@ When cleanup of an exited process fails, bandctl tries to restore the previous c
 
 bandctl checks a process identity again after reading its cgroup and before restoring it. If a PID changes or cannot be verified during removal rollback, bandctl leaves it alone and reports an incomplete rollback. The share stays tracked for cleanup.
 
+If a process leaves its original cgroup during removal rollback, bandctl leaves it there and reports an incomplete rollback.
+
 ## Exit
 
 `q`, Ctrl+C, or SIGTERM starts cleanup. On SIGTERM, an in-progress TUI operation finishes first.
