@@ -169,7 +169,8 @@ def format_cmdline(raw: bytes, comm: str, limit: int = 80) -> str:
     return text
 
 
-def user_from_status(status_text: str, fallback_uid: int | None = None) -> str:
+def user_from_status(status_text: str, fallback_uid: int | None = None,
+                     *, cache: dict[int, str] | None = None) -> str:
     match = _UID_RE.search(status_text)
     raw_uid = match.group(1) if match else ""
     uid = int(raw_uid) if raw_uid and len(raw_uid) <= 10 else fallback_uid
@@ -177,10 +178,15 @@ def user_from_status(status_text: str, fallback_uid: int | None = None) -> str:
         uid = fallback_uid
     if uid is None:
         return "?"
+    if cache is not None and uid in cache:
+        return cache[uid]
     try:
-        return pwd.getpwuid(uid).pw_name
+        name = pwd.getpwuid(uid).pw_name
     except (KeyError, OSError, OverflowError):
         return str(uid)
+    if cache is not None:
+        cache[uid] = name
+    return name
 
 
 def scan_processes(proc_root: str | Path = "/proc", *, skip_pid: int | None = None) -> list[ProcessInfo]:
@@ -190,6 +196,7 @@ def scan_processes(proc_root: str | Path = "/proc", *, skip_pid: int | None = No
         skip_pid = os.getpid()
     inodes = _collect_inodes(root)
     found: list[ProcessInfo] = []
+    users: dict[int, str] = {}
     try:
         entries = list(root.iterdir())
     except OSError:
@@ -200,7 +207,7 @@ def scan_processes(proc_root: str | Path = "/proc", *, skip_pid: int | None = No
         pid = int(entry.name)
         if pid == skip_pid:
             continue
-        info = _one(entry, inodes)
+        info = _one(entry, inodes, users)
         if info is not None:
             found.append(info)
     return found
@@ -219,7 +226,7 @@ def _collect_inodes(root: Path) -> set[str]:
     return inodes
 
 
-def _one(entry: Path, inodes: set[str]) -> ProcessInfo | None:
+def _one(entry: Path, inodes: set[str], users: dict[int, str]) -> ProcessInfo | None:
     try:
         start_ticks = _start_ticks(entry)
         comm = (entry / "comm").read_text(encoding="utf-8", errors="replace").removesuffix("\n") or "?"
@@ -236,7 +243,7 @@ def _one(entry: Path, inodes: set[str]) -> ProcessInfo | None:
         pid=int(entry.name),
         comm=comm,
         cmdline=cmdline,
-        user=user_from_status(status, uid),
+        user=user_from_status(status, uid, cache=users),
         sockets=sockets,
         start_ticks=start_ticks,
     )

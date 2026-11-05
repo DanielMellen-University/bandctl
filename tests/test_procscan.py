@@ -147,6 +147,21 @@ class ParseTests(unittest.TestCase):
 
 
 class ScanTests(unittest.TestCase):
+    def test_scan_resolves_each_uid_once_and_refreshes_names_next_scan(self):
+        from types import SimpleNamespace
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._pid(root, 7, "curl", b"curl\0", "Uid:\t1000\n", None)
+            self._pid(root, 8, "bash", b"bash\0", "Uid:\t1000\n", None)
+            with patch("bandctl.procscan.pwd.getpwuid", side_effect=[
+                    SimpleNamespace(pw_name="first"), SimpleNamespace(pw_name="second")]) as lookup:
+                first = scan_processes(root, skip_pid=0)
+                second = scan_processes(root, skip_pid=0)
+        self.assertEqual({proc.user for proc in first}, {"first"})
+        self.assertEqual({proc.user for proc in second}, {"second"})
+        self.assertEqual(lookup.call_count, 2)
+
     def test_scan_skips_non_ascii_numeric_directory_names(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

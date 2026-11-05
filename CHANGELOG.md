@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reuse successful user lookups within each process scan.
+
 - Treat link speeds outside the supported capacity range as unknown.
 
 - Refuse symlinks at installer-managed files inside the prefix.
