@@ -97,7 +97,9 @@ def main(argv=None) -> int:
         run_worker(args.iface, match_wildcard=args.match_wildcard,
                    stop_requested=lambda: _stop_signum is not None)
     except (IfaceError, SessionLockError, ShaperError, OSError, RuntimeError) as exc:
-        print(f"bandctl: {exc}", file=sys.stderr)
+        encoding = sys.stderr.encoding or "utf-8"
+        detail = str(exc).encode(encoding, errors="backslashreplace").decode(encoding)
+        print(f"bandctl: {detail}", file=sys.stderr)
         return 1
     return 128 + _stop_signum if _stop_signum is not None else 0
 

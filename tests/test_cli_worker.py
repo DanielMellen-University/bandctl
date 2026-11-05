@@ -134,6 +134,38 @@ class WorkerTests(unittest.TestCase):
             cli_worker._stop(15, None)
             self.assertEqual(cli_worker._stop_signum, 15)
 
+    def test_worker_reports_recovery_errors_safely_on_utf8_stderr(self):
+        import contextlib
+        import io
+        from bandctl import cli_worker
+
+        buffer = io.BytesIO()
+        stderr = io.TextIOWrapper(buffer, encoding="utf-8", errors="strict")
+        with contextlib.redirect_stderr(stderr), \
+             patch("bandctl.cli_worker.os.geteuid", return_value=0), \
+             patch("bandctl.cli_worker.signal.signal"), \
+             patch("bandctl.cli_worker.check_iface"), \
+             patch("bandctl.cli_worker.run_worker", side_effect=ShaperError("bad\ud800\x1bkey")):
+            self.assertEqual(cli_worker.main(["--iface", "eth0"]), 1)
+        stderr.flush()
+        self.assertIn(b"bad\\ud800\x1bkey", buffer.getvalue())
+
+    def test_worker_reports_non_ascii_errors_on_ascii_stderr(self):
+        import contextlib
+        import io
+        from bandctl import cli_worker
+
+        buffer = io.BytesIO()
+        stderr = io.TextIOWrapper(buffer, encoding="ascii", errors="strict")
+        with contextlib.redirect_stderr(stderr), \
+             patch("bandctl.cli_worker.os.geteuid", return_value=0), \
+             patch("bandctl.cli_worker.signal.signal"), \
+             patch("bandctl.cli_worker.check_iface"), \
+             patch("bandctl.cli_worker.run_worker", side_effect=ShaperError("échec")):
+            self.assertEqual(cli_worker.main(["--iface", "eth0"]), 1)
+        stderr.flush()
+        self.assertIn(b"\\xe9chec", buffer.getvalue())
+
     def test_worker_main_reports_termination_after_cleanup(self):
         from bandctl import cli_worker
 

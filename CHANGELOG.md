@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Report worker startup errors that the error stream cannot encode.
+
 - Replace unpaired surrogates in terminal output to keep error reporting usable.
 
 - Reject empty or oversized CLI requests before starting a session.
