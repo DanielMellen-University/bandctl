@@ -41,11 +41,17 @@ def _read_line(connection: socket.socket, *, limit: int = _MAX_MESSAGE) -> bytes
     return bytes(data[:-1])
 
 
-def request(path: str, payload: dict, *, timeout: float = 3.0) -> dict:
-    """Send one request and read one bounded response."""
+def _encode_request(payload: dict) -> bytes:
+    """Encode and check the size before starting or contacting a session."""
     encoded = json.dumps(payload, allow_nan=False).encode("utf-8") + b"\n"
     if len(encoded) > _MAX_MESSAGE:
         raise ValueError("request is too large")
+    return encoded
+
+
+def request(path: str, payload: dict, *, timeout: float = 3.0) -> dict:
+    """Send one request and read one bounded response."""
+    encoded = _encode_request(payload)
     with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
         connection.settimeout(timeout)
         connection.connect(path)

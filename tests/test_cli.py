@@ -116,6 +116,21 @@ class LimitInputTests(unittest.TestCase):
 
 
 class WarningTests(unittest.TestCase):
+    def test_invalid_limit_target_does_not_start_a_session(self):
+        from bandctl.__main__ import main
+
+        for target, error in (("   ", "enter a PID or process name"), ("x" * 20000, "request is too large"),
+                              ("\x01" * 3000, "request is too large")):
+            with self.subTest(length=len(target)):
+                with patch("os.geteuid", return_value=0), \
+                     patch("bandctl.cli_client.ensure_session") as ensure, \
+                     patch("bandctl.cli_transport.request", return_value={"ok": False, "error": "worker rejection"}) as request, \
+                     contextlib.redirect_stderr(io.StringIO()) as stderr:
+                    self.assertEqual(main(["limit", target, "--down", "30"]), 1)
+                ensure.assert_not_called()
+                request.assert_not_called()
+                self.assertIn(error, stderr.getvalue())
+
     def test_import_rejects_invalid_group_before_starting_session(self):
         import tempfile
         from pathlib import Path

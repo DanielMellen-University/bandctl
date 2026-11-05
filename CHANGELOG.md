@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reject empty or oversized CLI requests before starting a session.
+
 ## 0.2.4 (2026-11-05)
 
 - Preserve unrelated uninstall wrappers that mention the install path.

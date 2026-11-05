@@ -59,7 +59,7 @@ def run_command(args) -> int:
     import os
     import sys
     from bandctl.cli_client import ensure_session, wait_for_stop
-    from bandctl.cli_transport import request
+    from bandctl.cli_transport import _encode_request, request
     from bandctl.cli_worker import SOCKET_PATH
     from bandctl.iface import IfaceError
     from bandctl.settings import read_settings
@@ -68,6 +68,8 @@ def run_command(args) -> int:
     try:
         if os.geteuid() != 0:
             raise ValueError("root is required for this command")
+        if args.command in ("limit", "remove") and not args.target.strip():
+            raise ValueError("enter a PID or process name")
         if args.command == "limit":
             limit_percentages(args.down, args.up)
             payload = {"command": "limit", "target": args.target, "down": args.down, "up": args.up}
@@ -77,6 +79,7 @@ def run_command(args) -> int:
             payload = {"command": args.command, "path": os.path.abspath(args.path)}
         else:
             payload = {"command": "stop"}
+        _encode_request(payload)
         iface = args.iface
         if args.command == "import":
             saved = read_settings(payload["path"])
