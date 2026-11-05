@@ -26,6 +26,8 @@ def parse_ip_route(text: str) -> str | None:
 
 def parse_proc_route(text: str) -> str | None:
     """Interface on the lowest-metric active IPv4 default route."""
+    if not text.endswith("\n"):
+        return None
     best: tuple[int, str] | None = None
     for line in text.split("\n")[1:]:
         parts = re.split(r"[ \t]+", line.strip(" \t\r"))

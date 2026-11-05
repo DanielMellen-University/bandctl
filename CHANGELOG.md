@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reject truncated fallback routing tables before choosing an interface.
+
 - Reject truncated process stat records before using their start times.
 
 - Reject truncated process cgroup records before moving or restoring a process.

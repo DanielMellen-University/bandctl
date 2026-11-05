@@ -61,6 +61,12 @@ class ParseTests(unittest.TestCase):
                 self.assertIsNone(parse_proc_route(header + bad))
                 self.assertEqual(parse_proc_route(header + bad + good), "eth0")
 
+    def test_proc_route_rejects_truncated_table(self):
+        header = "Iface Destination Gateway Flags RefCnt Use Metric Mask\n"
+        good = "eth0 00000000 00000000 0001 0 0 100 00000000\n"
+        truncated = "eth1 00000000 00000000 0001 0 0 1 00000000"
+        self.assertIsNone(parse_proc_route(header + good + truncated))
+
 
 class LookupTests(unittest.TestCase):
     def test_ip_wins(self):
