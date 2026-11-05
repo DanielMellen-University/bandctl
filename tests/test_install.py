@@ -265,6 +265,82 @@ class ScriptTests(unittest.TestCase):
             self.assertTrue(attempted.exists())
             self.assertNotIn("already exists", result.stderr)
 
+    def test_upgrade_accepts_command_under_symlinked_prefix_parent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            actual, alias, bindir, tools = root / "actual", root / "alias", root / "bin", root / "tools"
+            actual.mkdir()
+            alias.symlink_to(actual, target_is_directory=True)
+            prefix = alias / "bandctl"
+            (prefix / "venv" / "bin").mkdir(parents=True)
+            bindir.mkdir()
+            tools.mkdir()
+            (prefix / "install-stamp").write_text(f"PREFIX={prefix}\nBINDIR={bindir}\n", encoding="utf-8")
+            (bindir / "bandctl").symlink_to(prefix / "venv" / "bin" / "bandctl")
+            python = tools / "python3"
+            python.write_text(
+                "#!/bin/sh\n"
+                '[ "$1" = -c ] && exit 0\n'
+                'mkdir -p "$3/bin"\n'
+                'printf "#!/bin/sh\\nexit 0\\n" > "$3/bin/pip"\n'
+                'printf "#!/bin/sh\\necho test-version\\n" > "$3/bin/bandctl"\n'
+                'chmod +x "$3/bin/pip" "$3/bin/bandctl"\n', encoding="utf-8")
+            python.chmod(0o755)
+
+            result = _run(["bash", str(INSTALL), "--prefix", str(prefix), "--bindir", str(bindir),
+                           "--skip-deps"], env=_quiet_ps(tools))
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("test-version", result.stdout)
+
+    def test_uninstall_removes_command_under_symlinked_prefix_parent(self):
+        for executable_exists in (False, True):
+            with self.subTest(executable_exists=executable_exists), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                actual, alias, bindir, tools = root / "actual", root / "alias", root / "bin", root / "tools"
+                actual.mkdir()
+                alias.symlink_to(actual, target_is_directory=True)
+                prefix = alias / "bandctl"
+                (prefix / "venv").mkdir(parents=True)
+                bindir.mkdir()
+                tools.mkdir()
+                (prefix / "install-stamp").write_text(f"PREFIX={prefix}\nBINDIR={bindir}\n", encoding="utf-8")
+                command_target = prefix / "venv" / "bin" / "bandctl"
+                if executable_exists:
+                    command_target.parent.mkdir()
+                    command_target.write_text("installed command", encoding="utf-8")
+                command = bindir / "bandctl"
+                command.symlink_to(command_target)
+                env = _quiet_ps(tools)
+                (tools / "id").write_text("#!/bin/sh\nprintf '1000\\n'\n", encoding="utf-8")
+
+                result = _run(["bash", str(UNINSTALL), "--prefix", str(prefix), "--bindir", str(bindir)], env=env)
+
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertFalse(command.is_symlink())
+                self.assertFalse(prefix.exists())
+
+    def test_uninstall_keeps_command_link_to_another_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prefix, bindir, tools = root / "install", root / "bin", root / "tools"
+            prefix.mkdir()
+            bindir.mkdir()
+            tools.mkdir()
+            (prefix / "install-stamp").write_text(f"PREFIX={prefix}\nBINDIR={bindir}\n", encoding="utf-8")
+            other = root / "install-other" / "bandctl"
+            command = bindir / "bandctl"
+            command.symlink_to(other)
+            env = _quiet_ps(tools)
+            (tools / "id").write_text("#!/bin/sh\nprintf '1000\\n'\n", encoding="utf-8")
+
+            result = _run(["bash", str(UNINSTALL), "--prefix", str(prefix), "--bindir", str(bindir)], env=env)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(command.is_symlink())
+            self.assertEqual(command.readlink(), other)
+            self.assertIn("not this install", result.stderr)
+
     def test_failed_install_keeps_previous_virtual_environment(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

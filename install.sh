@@ -123,7 +123,7 @@ check_command_destination() {
     [ -L "$dest" ] || die "$dest already exists and is not a bandctl install"
     current=$(readlink -m "$dest" 2>/dev/null || true)
     case "$current" in
-      "$PREFIX"/*) ;;
+      "$resolved_prefix"/*) ;;
       *) die "$dest already exists and is not a bandctl install" ;;
     esac
   fi

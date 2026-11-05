@@ -117,12 +117,13 @@ if bandctl_is_running; then
 fi
 
 remove_install() {
-local PREFIX=$1 BINDIR=$2 link current wrapper
+local PREFIX=$1 BINDIR=$2 link current wrapper canonical_prefix
+canonical_prefix=$(readlink -m -- "$PREFIX") || return 1
 link="$BINDIR/bandctl"
 if [ -L "$link" ]; then
-  current=$(readlink -f "$link" 2>/dev/null || true)
+  current=$(readlink -m "$link" 2>/dev/null || true)
   case "$current" in
-    "$PREFIX"/*) rm -f "$link" ;;
+    "$canonical_prefix"/*) rm -f "$link" ;;
     *) echo "bandctl uninstall: left $link in place (it is not this install)" >&2 ;;
   esac
 elif [ -e "$link" ]; then
