@@ -97,7 +97,7 @@ Socket inode fields and socket descriptor links must use canonical unsigned deci
 
 The header shows the detected link speed from `/sys/class/net/<iface>/speed`. That file is in megabits per second. `-1` or `0` (typical for Wi-Fi and some virtual devices) is shown as `unknown`, and the capacity line says `unset` until you type a budget.
 
-A speed too large to fit in the supported capacity range is also treated as unknown.
+A malformed speed or one too large to fit in the supported capacity range is also treated as unknown.
 
 When `ip route` is unavailable, times out, or returns invalid UTF-8, bandctl picks the active IPv4 default route with the lowest metric from `/proc/net/route`. If the fallback table is not valid UTF-8, pass a valid interface with `--iface`. Interface names must be valid UTF-8 and cannot contain whitespace or control characters, so recovery can safely read them.
 

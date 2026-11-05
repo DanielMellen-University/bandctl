@@ -45,8 +45,11 @@ def parse_proc_route(text: str) -> str | None:
 
 def parse_speed_mbps(text: str) -> int | None:
     """Sysfs ``speed`` is megabits per second, or ``-1`` when the driver does not know."""
+    raw = text.strip()
+    if not re.fullmatch(r"[0-9]+", raw):
+        return None
     try:
-        value = int(text.strip())
+        value = int(raw)
     except ValueError:
         return None
     if value <= 0:

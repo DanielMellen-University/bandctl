@@ -45,6 +45,11 @@ class ParseTests(unittest.TestCase):
         self.assertIsNone(parse_speed_mbps("-1\n"))
         self.assertIsNone(parse_speed_mbps("nope"))
 
+    def test_speed_rejects_non_decimal_sysfs_values(self):
+        for value in ("1_000", "+1000", "١٠٠٠"):
+            with self.subTest(value=value):
+                self.assertIsNone(parse_speed_mbps(value))
+
     def test_proc_route_skips_invalid_flags_and_metrics(self):
         header = "Iface Destination Gateway Flags RefCnt Use Metric Mask\n"
         good = "eth0 00000000 00000000 0001 0 0 100 00000000\n"

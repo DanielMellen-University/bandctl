@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Treat malformed link speeds as unknown instead of using an incorrect capacity.
+
 - Keep cgroup recovery state when a leaf contains malformed process IDs.
 
 - Test class rate recovery after a malformed counter without interrupting other classes.
