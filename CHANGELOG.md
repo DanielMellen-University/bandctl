@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reject group start times outside the supported process counter range.
+
 - Reject empty groups before starting a CLI session for a settings import.
 
 - Test that session lock acquisition failures close their file descriptors.

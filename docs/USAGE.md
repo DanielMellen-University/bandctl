@@ -121,6 +121,8 @@ Press `x`, enter a path, and choose Export to write a JSON settings file. Leadin
 
 Choose Import to load a regular file. Import and export accept files up to 1 MiB. An oversized export fails without replacing the destination. bandctl validates all fields before changing settings. Imported rules, budgets, and groups replace the current ones. Individual limits remain; an imported group cannot claim a process with an individual limit. Group members are identified by PID, start time, and boot ID. If a member has exited, its PID was reused, or the machine has rebooted, the import is refused. The interface in the file must match the current interface. To start with the saved interface and explicitly import the file, run `sudo bandctl --config settings.json`. An explicit `--iface` must match the saved interface. A shaper error can prevent import; if rollback also fails, the error reports that it is incomplete. Settings are never loaded automatically.
 
+Group start times must fit in the unsigned 64-bit range used by the process scanner.
+
 ## Auto-apply rules
 
 Press `t` to open the rule editor. Enter part of a process name and one or both percentages, then press Enter or choose Add. Rules match process names without regard to case. They do not match command arguments. The editor needs root, like Apply. The first active matching rule wins. Select a rule and choose Delete to remove it, or Close to return to the process list. Rules last until bandctl exits.

@@ -90,6 +90,14 @@ class SettingsTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "group .* has no members"):
             loads(json.dumps(data))
 
+    def test_rejects_group_start_time_outside_proc_counter_range(self):
+        data = json.loads(dumps(self.settings()))
+        data["groups"][0]["members"][0]["start_ticks"] = 2**64 - 1
+        self.assertEqual(loads(json.dumps(data)).groups[0].starts[0], 2**64 - 1)
+        data["groups"][0]["members"][0]["start_ticks"] = 2**64
+        with self.assertRaisesRegex(ValueError, "valid process start times"):
+            loads(json.dumps(data))
+
 
 class SettingsFileTests(unittest.TestCase):
     def test_import_rejects_fifo_without_waiting_for_a_writer(self):
