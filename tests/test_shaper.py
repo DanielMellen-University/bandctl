@@ -1320,6 +1320,19 @@ class ApplyTests(unittest.TestCase):
             self.assertEqual(shaper.sample()[42][1], 0.0)
             self.assertEqual(shaper.sample()[42][1], 800.0)
 
+    def test_truncated_class_output_keeps_counter_baseline(self):
+        shaper, host = _shaper()
+        shaper.apply(42, None, 50, None, 100_000_000)
+        header = "class htb 1:10 parent 1:1\n Sent "
+        with patch.object(shaper, "_sync_flows"), \
+             patch("bandctl.shaper.time.monotonic", side_effect=[1.0, 2.0, 3.0]):
+            host.class_show["eth0"] = header + "100 bytes 1 pkt\n"
+            self.assertEqual(shaper.sample()[42][1], 0.0)
+            host.class_show["eth0"] = header + "200 bytes 1 pkt\nclass htb 1:"
+            self.assertEqual(shaper.sample()[42][1], 0.0)
+            host.class_show["eth0"] = header + "300 bytes 1 pkt\n"
+            self.assertEqual(shaper.sample()[42][1], 800.0)
+
     def test_invalid_class_counter_preserves_baseline_and_other_class_rates(self):
         shaper, host = _shaper()
         shaper.apply(42, None, 50, None, 100_000_000)

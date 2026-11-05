@@ -1451,6 +1451,8 @@ class Shaper:
             text = self._run(["tc", "-s", "class", "show", "dev", dev])
         except ShaperError:
             return {}
+        if text and not text.endswith("\n"):
+            return {}
         return parse_class_bytes(text)
 
     def _delta_bps(self, kind: str, minor: int, total: int | None, now: float) -> float:

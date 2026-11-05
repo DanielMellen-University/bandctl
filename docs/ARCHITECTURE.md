@@ -153,6 +153,8 @@ Sizes come from the resize event, because `App.size` can still be the old size w
 
 The on-screen rate is each socket's counter delta times 8, divided by its sample interval, summed by PID. The first `ss` sample is a baseline and shows zero. `ss -tinpeH` supplies socket identities; a socket first seen later starts at zero. Upload uses sent bytes when acknowledged bytes are unavailable. A switch between these counters starts a new baseline so their different totals do not create a spike. The shaper also samples class byte counters, but the TUI does not use them for its rates.
 
+If class counter output is truncated, the shaper skips that sample and keeps its previous counter baselines.
+
 Read-only qdisc, class counter, and IFB queries time out after two seconds. Commands that change kernel state have no such timeout because a timed-out change could already have taken effect.
 
 Before replacing a root qdisc, recovery state records the intended replacement as uncertain. A successful command clears the uncertainty. If the command fails and a follow-up query confirms the original qdisc kind is still present, the state clears the ownership flag. An inconclusive query leaves it uncertain.

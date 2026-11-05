@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep class counter baselines when tc output is truncated.
+
 - Fall back when ip route output is truncated to avoid selecting a partial interface name.
 
 - Reject invalid numeric PIDs before starting a CLI session.
