@@ -130,6 +130,20 @@ class PlanTests(unittest.TestCase):
                 self.assertEqual(default, 1)
                 self.assertEqual(ceils, [capacity // 1000] * 3)
 
+    def test_minimum_rates_preserve_tie_order(self):
+        rates, ceils, default = htb_plan([10_000, 10_000] + [1_000] * 6, 10_000)
+        self.assertEqual(rates, [1, 2, 1, 1, 1, 1, 1, 1])
+        self.assertEqual(ceils, [10, 10, 1, 1, 1, 1, 1, 1])
+        self.assertEqual(default, 1)
+
+    def test_many_overcommitted_classes_keep_their_minimum_rates(self):
+        count = 5000
+        capacity = (count + 1) * 1000
+        rates, ceils, default = htb_plan([capacity] * 50 + [capacity // 100] * (count - 50), capacity)
+        self.assertEqual(rates, [1] * count)
+        self.assertEqual(ceils, [count + 1] * 50 + [51] * (count - 50))
+        self.assertEqual(default, 1)
+
     def test_over_commit_message(self):
         self.assertIsNone(over_commit_message("download", [30, 20]))
         text = over_commit_message("download", [60, 50])

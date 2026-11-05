@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Speed up rate planning for many overcommitted classes.
+
 - Reject truncated traffic samples to preserve socket counter baselines.
 
 - Ignore malformed socket identities to keep separate TCP counters apart.

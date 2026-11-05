@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation, localcontext
 from enum import Enum
+import heapq
 import sys
 
 MAX_BUDGET_BPS = int(sys.float_info.max)
@@ -156,11 +157,16 @@ def htb_plan(ceil_bps: list[int], parent_bps: int) -> tuple[list[int], list[int]
         for index, rate in enumerate(rates):
             if rate < 1 and ceils[index] > 0:
                 rates[index] = 1
-        while sum(rates) > budget:
-            index = max(range(len(rates)), key=lambda i: rates[i])
-            if rates[index] <= 1:
-                break
-            rates[index] -= 1
+        excess = sum(rates) - budget
+        if excess > 0:
+            largest = [(-rate, index) for index, rate in enumerate(rates) if rate > 1]
+            heapq.heapify(largest)
+            while excess > 0 and largest:
+                _rate, index = heapq.heappop(largest)
+                rates[index] -= 1
+                excess -= 1
+                if rates[index] > 1:
+                    heapq.heappush(largest, (-rates[index], index))
         leftover = budget - sum(rates)
         order = sorted(
             range(len(rates)),
