@@ -29,22 +29,27 @@ class ParseTests(unittest.TestCase):
     def test_start_ticks_with_spaces_and_parentheses_in_name(self):
         text = "42 (worker ) name) S " + "0 " * 18 + "12345 0 0\n"
         self.assertEqual(parse_start_ticks(text), 12345)
-        self.assertIsNone(parse_start_ticks("42 (bad) S 0"))
-        self.assertIsNone(parse_start_ticks("42 (bad) S " + "0 " * 18 + "oops"))
+        self.assertIsNone(parse_start_ticks("42 (bad) S 0\n"))
+        self.assertIsNone(parse_start_ticks("42 (bad) S " + "0 " * 18 + "oops 0\n"))
+
+    def test_start_ticks_rejects_a_truncated_record(self):
+        prefix = "42 (worker) S " + "0 " * 18
+        self.assertIsNone(parse_start_ticks(prefix + "123"))
+        self.assertEqual(parse_start_ticks(prefix + "123 0\n"), 123)
 
     def test_start_ticks_reject_malformed_stat_headers(self):
         for header in ("42 worker)", "not-a-pid (worker)", "42(worker)", "42 (worker"):
             with self.subTest(header=header):
-                self.assertIsNone(parse_start_ticks(header + " S " + "0 " * 18 + "100"))
+                self.assertIsNone(parse_start_ticks(header + " S " + "0 " * 18 + "100 0\n"))
         for state in ("", "SS", "1"):
             with self.subTest(state=state):
-                self.assertIsNone(parse_start_ticks("42 (worker) " + state + " " + "0 " * 18 + "100"))
+                self.assertIsNone(parse_start_ticks("42 (worker) " + state + " " + "0 " * 18 + "100 0\n"))
 
     def test_start_ticks_reject_non_kernel_numbers(self):
         for ticks in ("+100", "1_00", "١٠٠", "18446744073709551616", "9" * 100):
             with self.subTest(ticks=ticks[:24]):
-                self.assertIsNone(parse_start_ticks("42 (work) S " + "0 " * 18 + ticks))
-        self.assertEqual(parse_start_ticks("42 (work) S " + "0 " * 18 + "18446744073709551615"),
+                self.assertIsNone(parse_start_ticks("42 (work) S " + "0 " * 18 + ticks + " 0\n"))
+        self.assertEqual(parse_start_ticks("42 (work) S " + "0 " * 18 + "18446744073709551615 0\n"),
                          18446744073709551615)
 
     def test_inodes(self):
@@ -239,6 +244,14 @@ class ScanTests(unittest.TestCase):
             self._pid(root, 7, "curl", b"curl\0", "Uid:\t1000\n", None)
             with patch("bandctl.procscan._start_ticks", return_value=None):
                 found = scan_processes(root, skip_pid=0)
+        self.assertEqual([(proc.pid, proc.start_ticks) for proc in found], [(7, None)])
+
+    def test_scan_does_not_verify_a_truncated_stat_record(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._pid(root, 7, "curl", b"curl\0", "Uid:\t1000\n", None)
+            (root / "7" / "stat").write_text("7 (curl) S " + "0 " * 18 + "123")
+            found = scan_processes(root, skip_pid=0)
         self.assertEqual([(proc.pid, proc.start_ticks) for proc in found], [(7, None)])
 
     def test_scan_does_not_verify_a_stat_record_for_a_different_pid(self):

@@ -280,7 +280,7 @@ class SharedClassTests(unittest.TestCase):
     def group_shaper(self):
         shaper, host = _shaper()
         for pid in (42, 43):
-            host.files[f"/proc/{pid}/stat"] = f"{pid} (work) S " + "0 " * 18 + "100"
+            host.files[f"/proc/{pid}/stat"] = f"{pid} (work) S " + "0 " * 18 + "100 0\n"
         return shaper, host
 
     def test_install_and_remove_group_members(self):
@@ -489,7 +489,7 @@ class ImportGroupTests(unittest.TestCase):
         shaper, host = _shaper()
         host.files["/proc/sys/kernel/random/boot_id"] = self.BOOT
         for pid in (42, 43, 44):
-            host.files[f"/proc/{pid}/stat"] = f"{pid} (work) S " + "0 " * 18 + "100"
+            host.files[f"/proc/{pid}/stat"] = f"{pid} (work) S " + "0 " * 18 + "100 0\n"
             host.files[f"/proc/{pid}/cgroup"] = "0::/user.slice/session.scope\n"
         return shaper, host
 
@@ -543,12 +543,12 @@ class ImportGroupTests(unittest.TestCase):
     def test_preflight_rejects_reused_pid_and_individual_limits(self):
         shaper, host = self.setup_shaper()
         settings = self.settings([Group("new", 30, None, (42, 43))])
-        host.files["/proc/43/stat"] = "43 (new) S " + "0 " * 18 + "101"
+        host.files["/proc/43/stat"] = "43 (new) S " + "0 " * 18 + "101 0\n"
         with self.assertRaisesRegex(ShaperError, "changed"):
             shaper.replace_groups(settings, 100_000_000, None)
         self.assertFalse(shaper.shares)
         self.assertEqual(host.commands, [])
-        host.files["/proc/43/stat"] = "43 (work) S " + "0 " * 18 + "100"
+        host.files["/proc/43/stat"] = "43 (work) S " + "0 " * 18 + "100 0\n"
         shaper.apply(42, None, 10, None, 100_000_000)
         with self.assertRaisesRegex(ShaperError, "individual"):
             shaper.replace_groups(settings, 100_000_000, 100_000_000)
@@ -606,7 +606,7 @@ class ImportGroupTests(unittest.TestCase):
         def replace_second_member(path, data):
             original_write(path, data)
             if path.endswith("/bandctl-42/cgroup.procs"):
-                host.files["/proc/43/stat"] = "43 (other) S " + "0 " * 18 + "200"
+                host.files["/proc/43/stat"] = "43 (other) S " + "0 " * 18 + "200 0\n"
                 host.files["/proc/43/cgroup"] = "0::/other.slice\n"
 
         with patch.object(host, "write", side_effect=replace_second_member) as write:
@@ -671,7 +671,7 @@ class ImportGroupTests(unittest.TestCase):
     def test_import_rollback_keeps_reused_pid_in_old_leaf(self):
         shaper, host = self.setup_shaper()
         shaper.apply_group(Group("old", 20, None, (42, 43)), {42: 100, 43: 100}, 100_000_000, None)
-        host.files["/proc/42/stat"] = "42 (other) S " + "0 " * 18 + "200"
+        host.files["/proc/42/stat"] = "42 (other) S " + "0 " * 18 + "200 0\n"
         host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42\n"
         host.files["/sys/fs/cgroup/bandctl/bandctl-42/cgroup.procs"] = "42\n"
 
@@ -719,13 +719,13 @@ class ImportGroupTests(unittest.TestCase):
 class ApplyTests(unittest.TestCase):
     def test_apply_rechecks_identity_after_creating_cgroup(self):
         shaper, host = _shaper()
-        host.files["/proc/42/stat"] = "42 (work) S " + "0 " * 18 + "100"
+        host.files["/proc/42/stat"] = "42 (work) S " + "0 " * 18 + "100 0\n"
         original_mkdir = host.mkdir
 
         def replace_after_mkdir(path):
             original_mkdir(path)
             if path.endswith("/bandctl-42"):
-                host.files["/proc/42/stat"] = "42 (other) S " + "0 " * 18 + "200"
+                host.files["/proc/42/stat"] = "42 (other) S " + "0 " * 18 + "200 0\n"
                 host.files["/proc/42/cgroup"] = "0::/other.slice\n"
 
         with patch.object(host, "mkdir", side_effect=replace_after_mkdir), \
@@ -930,9 +930,9 @@ class ApplyTests(unittest.TestCase):
     def test_remove_does_not_move_reused_pid_even_when_sync_fails(self):
         shaper, host = _shaper()
         stat = "/proc/42/stat"
-        host.files[stat] = "42 (steam) S " + "0 " * 18 + "100"
+        host.files[stat] = "42 (steam) S " + "0 " * 18 + "100 0\n"
         shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
-        host.files[stat] = "42 (other) S " + "0 " * 18 + "200"
+        host.files[stat] = "42 (other) S " + "0 " * 18 + "200 0\n"
         host.files["/proc/42/cgroup"] = "0::/other.slice\n"
         with patch.object(shaper, "_sync", side_effect=ShaperError("sync failed")):
             with patch.object(host, "write", wraps=host.write) as write:
@@ -1012,9 +1012,9 @@ class ApplyTests(unittest.TestCase):
     def test_sample_retires_reused_pid_without_moving_replacement(self):
         shaper, host = _shaper()
         stat = "/proc/42/stat"
-        host.files[stat] = "42 (steam) S " + "0 " * 18 + "100"
+        host.files[stat] = "42 (steam) S " + "0 " * 18 + "100 0\n"
         shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
-        host.files[stat] = "42 (other) S " + "0 " * 18 + "200"
+        host.files[stat] = "42 (other) S " + "0 " * 18 + "200 0\n"
         host.files["/proc/42/cgroup"] = "0::/other.slice\n"
         original = "/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs"
         self.assertNotIn(original, host.files)
@@ -1027,10 +1027,10 @@ class ApplyTests(unittest.TestCase):
         for operation in ("teardown", "remove", "sample"):
             with self.subTest(operation=operation):
                 shaper, host = _shaper()
-                host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+                host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100 0\n"
                 shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
                 shaper.apply(43, None, 10, None, 100_000_000)
-                host.files["/proc/42/stat"] = "42 (other) S " + "0 " * 18 + "200"
+                host.files["/proc/42/stat"] = "42 (other) S " + "0 " * 18 + "200 0\n"
                 host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42\n"
                 host.files["/sys/fs/cgroup/bandctl/bandctl-42/cgroup.procs"] = "42\n"
 
@@ -1050,7 +1050,7 @@ class ApplyTests(unittest.TestCase):
     def test_sample_retires_exited_process(self):
         shaper, host = _shaper()
         stat = "/proc/42/stat"
-        host.files[stat] = "42 (steam) S " + "0 " * 18 + "100"
+        host.files[stat] = "42 (steam) S " + "0 " * 18 + "100 0\n"
         shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
         host.files.pop(stat)
         host.files.pop("/proc/42/cgroup")
@@ -1060,7 +1060,7 @@ class ApplyTests(unittest.TestCase):
 
     def test_failed_retirement_restores_previous_class_plan(self):
         shaper, host = _shaper()
-        host.files["/proc/42/stat"] = "42 (work) S " + "0 " * 18 + "100"
+        host.files["/proc/42/stat"] = "42 (work) S " + "0 " * 18 + "100 0\n"
         shaper.apply(42, None, 60, None, 100_000_000, expected_start_ticks=100)
         shaper.apply(43, None, 60, None, 100_000_000)
         host.files.pop("/proc/42/stat")
@@ -1095,7 +1095,7 @@ class ApplyTests(unittest.TestCase):
 
     def test_failed_retirement_reports_incomplete_rollback(self):
         shaper, host = _shaper()
-        host.files["/proc/42/stat"] = "42 (work) S " + "0 " * 18 + "100"
+        host.files["/proc/42/stat"] = "42 (work) S " + "0 " * 18 + "100 0\n"
         shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
         host.files.pop("/proc/42/stat")
         host.files.pop("/proc/42/cgroup")
@@ -1108,11 +1108,11 @@ class ApplyTests(unittest.TestCase):
         self.assertIn(42, shaper.shares)
 
     def test_failed_remove_does_not_move_changed_or_unverified_pid_back(self):
-        for new_stat in ("42 (other) S " + "0 " * 18 + "200", "malformed", None):
+        for new_stat in ("42 (other) S " + "0 " * 18 + "200 0\n", "malformed", None):
             with self.subTest(new_stat=new_stat):
                 shaper, host = _shaper()
                 path = "/proc/42/stat"
-                host.files[path] = "42 (work) S " + "0 " * 18 + "100"
+                host.files[path] = "42 (work) S " + "0 " * 18 + "100 0\n"
                 shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
 
                 def fail_after_restore():
@@ -1138,7 +1138,7 @@ class ApplyTests(unittest.TestCase):
 
     def test_failed_remove_does_not_move_process_that_left_original_cgroup(self):
         shaper, host = _shaper()
-        host.files["/proc/42/stat"] = "42 (work) S " + "0 " * 18 + "100"
+        host.files["/proc/42/stat"] = "42 (work) S " + "0 " * 18 + "100 0\n"
         shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
         sync = shaper._sync
         attempts = 0
@@ -1162,7 +1162,7 @@ class ApplyTests(unittest.TestCase):
     def test_sample_keeps_share_when_identity_is_unreadable(self):
         shaper, host = _shaper()
         stat = "/proc/42/stat"
-        host.files[stat] = "42 (steam) S " + "0 " * 18 + "100"
+        host.files[stat] = "42 (steam) S " + "0 " * 18 + "100 0\n"
         shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
         host.files[stat] = "not a stat record"
         shaper.sample()
@@ -1174,9 +1174,9 @@ class ApplyTests(unittest.TestCase):
     def test_expected_start_time_is_checked_before_changing_anything(self):
         shaper, host = _shaper()
         stat_path = "/proc/42/stat"
-        for stat in (None, "42 (curl) S " + "0 " * 18 + "99", "invalid",
-                     "42 curl) S " + "0 " * 18 + "100",
-                     "43 (curl) S " + "0 " * 18 + "100"):
+        for stat in (None, "42 (curl) S " + "0 " * 18 + "99 0\n", "invalid",
+                     "42 curl) S " + "0 " * 18 + "100 0\n",
+                     "43 (curl) S " + "0 " * 18 + "100 0\n"):
             if stat is None:
                 host.files.pop(stat_path, None)
             else:
@@ -1187,7 +1187,7 @@ class ApplyTests(unittest.TestCase):
             self.assertEqual(host.files, before)
             self.assertEqual(host.commands, [])
             self.assertEqual(shaper.shares, {})
-        host.files[stat_path] = "42 (curl) S " + "0 " * 18 + "100"
+        host.files[stat_path] = "42 (curl) S " + "0 " * 18 + "100 0\n"
         shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
         self.assertIn(42, shaper.shares)
 
@@ -1195,7 +1195,7 @@ class ApplyTests(unittest.TestCase):
         for ticks in ("+100", "1_00", "١٠٠"):
             with self.subTest(ticks=ticks):
                 shaper, host = _shaper()
-                host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + ticks
+                host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + ticks + " 0\n"
                 before = dict(host.files)
                 with self.assertRaises(ShaperError):
                     shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
@@ -1555,9 +1555,9 @@ class ApplyTests(unittest.TestCase):
 
     def test_recover_does_not_restore_a_reused_pid_outside_the_leaf(self):
         shaper, host = _shaper()
-        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100 0\n"
         shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
-        host.files["/proc/42/stat"] = "42 (other) S " + "0 " * 18 + "200"
+        host.files["/proc/42/stat"] = "42 (other) S " + "0 " * 18 + "200 0\n"
         host.files["/proc/42/cgroup"] = "0::/other.slice\n"
         host.files["/sys/fs/cgroup/bandctl/bandctl-42/cgroup.procs"] = ""
         again = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
@@ -1607,7 +1607,7 @@ class ApplyTests(unittest.TestCase):
                                     "start_ticks": starts})
                 host.files["/run/bandctl.json"] = state
                 host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42\n"
-                host.files["/proc/42/stat"] = "42 (other) S " + "0 " * 18 + "200"
+                host.files["/proc/42/stat"] = "42 (other) S " + "0 " * 18 + "200 0\n"
                 host.files["/sys/fs/cgroup/bandctl/bandctl-42/cgroup.procs"] = "42\n"
 
                 notes = shaper.recover()
@@ -1619,11 +1619,24 @@ class ApplyTests(unittest.TestCase):
                 self.assertNotIn("/sys/fs/cgroup/cgroup.procs", host.files)
                 self.assertEqual(host.commands, [])
 
+    def test_recovery_keeps_state_if_start_time_field_is_truncated(self):
+        shaper, host = _shaper()
+        stat = "/proc/42/stat"
+        host.files[stat] = "42 (work) S " + "0 " * 18 + "100 0\n"
+        shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+        host.files[stat] = "42 (replacement) S " + "0 " * 18 + "100"
+        original = "/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs"
+        recovery = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+        recovery.recover()
+        self.assertIn("cannot verify pid 42", recovery.recovery_error)
+        self.assertNotIn(original, host.files)
+        self.assertIn("/run/bandctl.json", host.files)
+
     def test_recover_checks_start_time_even_if_reused_pid_is_in_leaf(self):
         shaper, host = _shaper()
-        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100 0\n"
         shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
-        host.files["/proc/42/stat"] = "42 (other) S " + "0 " * 18 + "200"
+        host.files["/proc/42/stat"] = "42 (other) S " + "0 " * 18 + "200 0\n"
         host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42\n"
         host.files["/sys/fs/cgroup/bandctl/bandctl-42/cgroup.procs"] = "42\n"
         again = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
@@ -1642,9 +1655,9 @@ class ApplyTests(unittest.TestCase):
 
     def test_recover_keeps_pid_when_stat_names_another_process(self):
         shaper, host = _shaper()
-        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100 0\n"
         shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
-        host.files["/proc/42/stat"] = "43 (curl) S " + "0 " * 18 + "100"
+        host.files["/proc/42/stat"] = "43 (curl) S " + "0 " * 18 + "100 0\n"
         host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42\n"
         host.files["/sys/fs/cgroup/bandctl/bandctl-42/cgroup.procs"] = "42\n"
         again = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
@@ -1657,7 +1670,7 @@ class ApplyTests(unittest.TestCase):
 
     def test_recover_restores_verified_pid_in_its_leaf(self):
         shaper, host = _shaper()
-        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100 0\n"
         shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
         host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42\n"
         again = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
@@ -1667,7 +1680,7 @@ class ApplyTests(unittest.TestCase):
 
     def test_recover_leaves_process_that_moves_during_identity_check(self):
         shaper, host = _shaper()
-        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100 0\n"
         shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
         host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42\n"
         original = "/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs"
@@ -1688,7 +1701,7 @@ class ApplyTests(unittest.TestCase):
 
     def test_recover_keeps_state_when_second_cgroup_read_fails(self):
         shaper, host = _shaper()
-        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100 0\n"
         shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
         host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42\n"
         read = host.read
@@ -1714,7 +1727,7 @@ class ApplyTests(unittest.TestCase):
         for operation in ("remove", "recover"):
             with self.subTest(operation=operation):
                 shaper, host = _shaper()
-                host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+                host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100 0\n"
                 shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
                 leaf = "/sys/fs/cgroup/bandctl/bandctl-42"
                 host.files[leaf + "/cgroup.procs"] = "42\n"
@@ -1728,7 +1741,7 @@ class ApplyTests(unittest.TestCase):
                     if path == "/proc/42/cgroup":
                         cgroup_reads += 1
                         if cgroup_reads == 2:
-                            host.files["/proc/42/stat"] = "42 (other) S " + "0 " * 18 + "200"
+                            host.files["/proc/42/stat"] = "42 (other) S " + "0 " * 18 + "200 0\n"
                     return result
 
                 with patch.object(host, "read", side_effect=reuse_after_cgroup_read):
@@ -1765,7 +1778,7 @@ class ApplyTests(unittest.TestCase):
 
     def test_recover_does_not_restore_when_start_time_cannot_be_read(self):
         shaper, host = _shaper()
-        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100 0\n"
         shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
         host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42\n"
         del host.files["/proc/42/stat"]
@@ -1779,7 +1792,7 @@ class ApplyTests(unittest.TestCase):
 
     def test_recover_retries_when_process_cgroup_cannot_be_read(self):
         shaper, host = _shaper()
-        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100 0\n"
         shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
         host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42\n"
         host.files["/sys/fs/cgroup/bandctl/bandctl-42/cgroup.procs"] = "42\n"
@@ -1994,7 +2007,7 @@ class ApplyTests(unittest.TestCase):
         host.dirs.update({"/sys/fs/cgroup/bandctl", leaf})
         host.files[leaf + "/cgroup.procs"] = "42\n"
         host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42\n"
-        host.files["/proc/42/stat"] = "42 (work) S " + "0 " * 18 + "100"
+        host.files["/proc/42/stat"] = "42 (work) S " + "0 " * 18 + "100 0\n"
         host.ifb_exists = True
         host.qdisc = "qdisc cake 0: root refcnt 2\n"
         host.files["/run/bandctl.json"] = json.dumps({
@@ -2033,7 +2046,7 @@ class ApplyTests(unittest.TestCase):
         host.dirs.update({"/sys/fs/cgroup/bandctl", leaf})
         host.files[leaf + "/cgroup.procs"] = "42\n"
         host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42\n"
-        host.files["/proc/42/stat"] = "42 (work) S " + "0 " * 18 + "100"
+        host.files["/proc/42/stat"] = "42 (work) S " + "0 " * 18 + "100 0\n"
         host.ifb_exists = True
         host.files["/run/bandctl.json"] = json.dumps({
             "iface": "eth0", "qdisc": "fq_codel", "root_replaced": True,
@@ -2076,7 +2089,7 @@ class ApplyTests(unittest.TestCase):
         host.dirs.update({"/sys/fs/cgroup/bandctl", leaf})
         host.files[leaf + "/cgroup.procs"] = "42\n"
         host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42\n"
-        host.files["/proc/42/stat"] = "42 (work) S " + "0 " * 18 + "100"
+        host.files["/proc/42/stat"] = "42 (work) S " + "0 " * 18 + "100 0\n"
         host.ifb_exists = True
         host.files["/run/bandctl.json"] = json.dumps({
             "iface": "eth0", "root_replaced": True, "root_uncertain": True,
@@ -2137,7 +2150,7 @@ class ApplyTests(unittest.TestCase):
         host.dirs.update({"/sys/fs/cgroup/bandctl", leaf})
         host.files[leaf + "/cgroup.procs"] = "42\n"
         host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42\n"
-        host.files["/proc/42/stat"] = "42 (work) S " + "0 " * 18 + "100"
+        host.files["/proc/42/stat"] = "42 (work) S " + "0 " * 18 + "100 0\n"
         host.files["/run/bandctl.json"] = json.dumps({
             "iface": "eth0", "qdisc": "fq_codel", "root_replaced": True,
             "root_uncertain": True, "pids": {"42": "/original"}, "start_ticks": {"42": 100},
@@ -2334,7 +2347,7 @@ class ApplyTests(unittest.TestCase):
     def test_reused_pid_during_socket_scan_keeps_existing_filters(self):
         shaper, host = _shaper()
         stat = "/proc/42/stat"
-        host.files[stat] = "42 (old) S " + "0 " * 18 + "100"
+        host.files[stat] = "42 (old) S " + "0 " * 18 + "100 0\n"
         _open_socket(host)
         shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
         existing = dict(shaper._flows)
@@ -2342,7 +2355,7 @@ class ApplyTests(unittest.TestCase):
         host.commands.clear()
 
         def scan_replacement(pid, net):
-            host.files[stat] = "42 (new) S " + "0 " * 18 + "200"
+            host.files[stat] = "42 (new) S " + "0 " * 18 + "200 0\n"
             return [SockFlow("tcp", "ip", "10.0.0.8", 40001, "1.2.3.4", 443)]
 
         with patch.object(shaper, "_pid_flows", side_effect=scan_replacement):
@@ -2599,7 +2612,7 @@ class ApplyTests(unittest.TestCase):
     def test_group_members_can_share_a_socket_filter(self):
         shaper, host = _shaper()
         for pid in (42, 43):
-            host.files[f"/proc/{pid}/stat"] = f"{pid} (work) S " + "0 " * 18 + "100"
+            host.files[f"/proc/{pid}/stat"] = f"{pid} (work) S " + "0 " * 18 + "100 0\n"
         shaper.apply_group(Group("work", 30, 10, (42, 43)), {42: 100, 43: 100},
                            100_000_000, 100_000_000)
         _open_socket(host)
@@ -3097,7 +3110,7 @@ class CleanupTests(unittest.TestCase):
                 host.files[leaf + "/cgroup.procs"] = f"43\n{invalid}\n"
                 for pid in (42, 43):
                     host.files[f"/proc/{pid}/cgroup"] = "0::/bandctl/bandctl-42\n"
-                    host.files[f"/proc/{pid}/stat"] = f"{pid} (child) S " + "0 " * 18 + "100"
+                    host.files[f"/proc/{pid}/stat"] = f"{pid} (child) S " + "0 " * 18 + "100 0\n"
                 host.files["/run/bandctl.json"] = json.dumps({
                     "iface": "eth0", "root_replaced": False, "nft_owned": False,
                     "ifb_owned": False, "ingress_owned": False, "pids": {},
@@ -3126,7 +3139,7 @@ class CleanupTests(unittest.TestCase):
                 host.files[leaf + "/cgroup.procs"] = contents
                 for pid in (42, 43):
                     host.files[f"/proc/{pid}/cgroup"] = "0::/bandctl/bandctl-42\n"
-                    host.files[f"/proc/{pid}/stat"] = f"{pid} (child) S " + "0 " * 18 + "100"
+                    host.files[f"/proc/{pid}/stat"] = f"{pid} (child) S " + "0 " * 18 + "100 0\n"
                 host.files["/run/bandctl.json"] = json.dumps({
                     "iface": "eth0", "root_replaced": False, "nft_owned": False,
                     "ifb_owned": False, "ingress_owned": False, "pids": {},
@@ -3152,7 +3165,7 @@ class CleanupTests(unittest.TestCase):
         host.dirs.update({"/sys/fs/cgroup/bandctl", leaf})
         host.files[leaf + "/cgroup.procs"] = "42\n43"
         host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42\n"
-        host.files["/proc/42/stat"] = "42 (parent) S " + "0 " * 18 + "100"
+        host.files["/proc/42/stat"] = "42 (parent) S " + "0 " * 18 + "100 0\n"
         host.files["/proc/43/cgroup"] = "0::/bandctl/bandctl-42\n"
         host.files["/run/bandctl.json"] = json.dumps({
             "iface": "eth0", "root_replaced": False, "nft_owned": False,
@@ -3211,7 +3224,7 @@ class CleanupTests(unittest.TestCase):
         shaper.apply(42, None, 10, None, 100_000_000)
         leaf = "/sys/fs/cgroup/bandctl/bandctl-42"
         host.files[leaf + "/cgroup.procs"] = "43\n"
-        host.files["/proc/43/stat"] = "43 (child) S " + "0 " * 18 + "100"
+        host.files["/proc/43/stat"] = "43 (child) S " + "0 " * 18 + "100 0\n"
         del host.files["/proc/43/cgroup"]
 
         notes = shaper.teardown()
@@ -3240,7 +3253,7 @@ class CleanupTests(unittest.TestCase):
         self.assertIn("/run/bandctl.json", host.files)
         self.assertNotIn("/sys/fs/cgroup/cgroup.procs", host.files)
 
-        host.files["/proc/43/stat"] = "43 (child) S " + "0 " * 18 + "100"
+        host.files["/proc/43/stat"] = "43 (child) S " + "0 " * 18 + "100 0\n"
         retry = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
         retry.recover()
         self.assertIsNone(retry.recovery_error)
@@ -3263,7 +3276,7 @@ class CleanupTests(unittest.TestCase):
         leaf = "/sys/fs/cgroup/bandctl/bandctl-42"
         host.files[leaf + "/cgroup.procs"] = "43\n"
         host.files["/proc/43/cgroup"] = "0::/bandctl/bandctl-42\n"
-        host.files["/proc/43/stat"] = "43 (child) S " + "0 " * 18 + "100"
+        host.files["/proc/43/stat"] = "43 (child) S " + "0 " * 18 + "100 0\n"
         rmdir = host.rmdir
         write = host.write
 
@@ -3291,7 +3304,7 @@ class CleanupTests(unittest.TestCase):
         leaf = "/sys/fs/cgroup/bandctl/bandctl-42/cgroup.procs"
         host.files[leaf] = "43\n"  # A child inherited the leaf cgroup.
         host.files["/proc/43/cgroup"] = "0::/bandctl/bandctl-42\n"
-        host.files["/proc/43/stat"] = "43 (child) S " + "0 " * 18 + "100"
+        host.files["/proc/43/stat"] = "43 (child) S " + "0 " * 18 + "100 0\n"
         root = "/sys/fs/cgroup/cgroup.procs"
         write = host.write
 
@@ -3317,7 +3330,7 @@ class CleanupTests(unittest.TestCase):
 
     def test_failed_process_restore_keeps_original_cgroup_for_recovery(self):
         shaper, host = _shaper()
-        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100 0\n"
         shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
         host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42\n"
         leaf = "/sys/fs/cgroup/bandctl/bandctl-42/cgroup.procs"
@@ -3413,7 +3426,7 @@ class CleanupTests(unittest.TestCase):
 
     def test_removal_retries_truncated_process_cgroup(self):
         shaper, host = _shaper()
-        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100 0\n"
         shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
         host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42"
         with self.assertRaisesRegex(ShaperError, "invalid cgroup"):
@@ -3427,7 +3440,7 @@ class CleanupTests(unittest.TestCase):
 
     def test_recovery_retries_truncated_process_cgroup(self):
         shaper, host = _shaper()
-        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100 0\n"
         shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
         host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42"
         original = "/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs"
@@ -3550,7 +3563,7 @@ class CleanupTests(unittest.TestCase):
 
     def test_records_original_cgroup_before_moving_process(self):
         shaper, host = _shaper()
-        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100 0\n"
         original_write = host.write
         recorded = []
 
@@ -3566,7 +3579,7 @@ class CleanupTests(unittest.TestCase):
 
     def test_apply_refuses_to_move_process_that_left_its_original_cgroup(self):
         shaper, host = _shaper()
-        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100 0\n"
         mkdir = host.mkdir
         leaf = "/sys/fs/cgroup/bandctl/bandctl-42"
 
@@ -3584,7 +3597,7 @@ class CleanupTests(unittest.TestCase):
 
     def test_apply_refuses_pid_reused_during_last_cgroup_read(self):
         shaper, host = _shaper()
-        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100 0\n"
         read = host.read
         cgroup_reads = 0
         leaf = "/sys/fs/cgroup/bandctl/bandctl-42"
@@ -3595,7 +3608,7 @@ class CleanupTests(unittest.TestCase):
             if path == "/proc/42/cgroup":
                 cgroup_reads += 1
                 if cgroup_reads == 2:
-                    host.files["/proc/42/stat"] = "42 (other) S " + "0 " * 18 + "200"
+                    host.files["/proc/42/stat"] = "42 (other) S " + "0 " * 18 + "200 0\n"
             return result
 
         with patch.object(host, "read", side_effect=reuse_after_cgroup_read):
@@ -3641,9 +3654,9 @@ class CleanupTests(unittest.TestCase):
 
     def test_update_rejects_a_new_process_with_an_old_share(self):
         shaper, host = _shaper()
-        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100 0\n"
         shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
-        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "200"
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "200 0\n"
         with self.assertRaisesRegex(ShaperError, "changed"):
             shaper.apply(42, None, 20, None, 100_000_000, expected_start_ticks=200)
         self.assertEqual(shaper.shares[42].up_pct, 10)
@@ -3734,7 +3747,7 @@ class CleanupTests(unittest.TestCase):
 
     def test_remove_does_not_move_a_process_that_left_its_leaf(self):
         shaper, host = _shaper()
-        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100 0\n"
         shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
         host.files["/proc/42/cgroup"] = "0::/new.slice\n"
 
@@ -3749,14 +3762,14 @@ class CleanupTests(unittest.TestCase):
             with self.subTest(operation=operation):
                 shaper, host = _shaper()
                 stat = "/proc/42/stat"
-                host.files[stat] = "42 (old) S " + "0 " * 18 + "100"
+                host.files[stat] = "42 (old) S " + "0 " * 18 + "100 0\n"
                 shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
                 read = host.read
 
                 def replace_after_cgroup(path):
                     value = read(path)
                     if path == "/proc/42/cgroup":
-                        host.files[stat] = "42 (new) S " + "0 " * 18 + "200"
+                        host.files[stat] = "42 (new) S " + "0 " * 18 + "200 0\n"
                     return value
 
                 with patch.object(host, "read", side_effect=replace_after_cgroup):
@@ -3774,7 +3787,7 @@ class CleanupTests(unittest.TestCase):
         for operation in ("remove", "teardown"):
             with self.subTest(operation=operation):
                 shaper, host = _shaper()
-                host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+                host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100 0\n"
                 shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
                 read = host.read
                 stat_reads = 0
@@ -3798,7 +3811,7 @@ class CleanupTests(unittest.TestCase):
 
     def test_teardown_does_not_move_a_process_that_left_its_leaf(self):
         shaper, host = _shaper()
-        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100 0\n"
         shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
         host.files["/proc/42/cgroup"] = "0::/new.slice\n"
 
@@ -3810,7 +3823,7 @@ class CleanupTests(unittest.TestCase):
 
     def test_remove_keeps_a_share_when_its_cgroup_cannot_be_read(self):
         shaper, host = _shaper()
-        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100 0\n"
         shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
         read = host.read
 
@@ -3828,7 +3841,7 @@ class CleanupTests(unittest.TestCase):
         for operation in ("remove", "teardown", "recover"):
             with self.subTest(operation=operation):
                 shaper, host = _shaper()
-                host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+                host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100 0\n"
                 shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
                 original_cgroup = host.files["/proc/42/cgroup"]
                 del host.files["/proc/42/cgroup"]
@@ -3857,7 +3870,7 @@ class CleanupTests(unittest.TestCase):
         for operation in ("remove", "sample", "teardown"):
             with self.subTest(operation=operation):
                 shaper, host = _shaper()
-                stat = "42 (curl) S " + "0 " * 18 + "100"
+                stat = "42 (curl) S " + "0 " * 18 + "100 0\n"
                 host.files["/proc/42/stat"] = stat
                 shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
                 del host.files["/proc/42/stat"]
@@ -3889,7 +3902,7 @@ class CleanupTests(unittest.TestCase):
             for operation in ("remove", "sample", "teardown", "recover"):
                 with self.subTest(missing=missing, operation=operation):
                     shaper, host = _shaper()
-                    host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+                    host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100 0\n"
                     shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
                     read = host.read
                     inaccessible = "cgroup" if missing == "stat" else "stat"
@@ -3929,7 +3942,7 @@ class CleanupTests(unittest.TestCase):
 
     def test_remove_keeps_share_when_process_liveness_is_unreadable(self):
         shaper, host = _shaper()
-        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100 0\n"
         shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
         state = host.files["/run/bandctl.json"]
         read = host.read

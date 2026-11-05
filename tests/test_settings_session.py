@@ -18,7 +18,7 @@ class SettingsSessionTests(unittest.TestCase):
         self.shaper, self.host = _shaper()
         self.host.files["/proc/sys/kernel/random/boot_id"] = "12345678-1234-4234-8234-123456789abc"
         for pid in (42, 43, 44):
-            self.host.files[f"/proc/{pid}/stat"] = f"{pid} (work) S " + "0 " * 18 + "100"
+            self.host.files[f"/proc/{pid}/stat"] = f"{pid} (work) S " + "0 " * 18 + "100 0\n"
             self.host.files[f"/proc/{pid}/cgroup"] = "0::/user.slice/session.scope\n"
         self.procs = [ProcessInfo(pid, "work", "work", "user", 0, 100) for pid in (42, 43, 44)]
 

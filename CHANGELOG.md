@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reject truncated process stat records before using their start times.
+
 - Reject truncated process cgroup records before moving or restoring a process.
 
 - Ignore stale group selections after the group table changes.

@@ -14,7 +14,7 @@ from test_shaper import _shaper
 class CliSessionTests(unittest.TestCase):
     def setUp(self):
         self.shaper, self.host = _shaper()
-        self.host.files["/proc/42/stat"] = "42 (firefox) S " + "0 " * 18 + "100"
+        self.host.files["/proc/42/stat"] = "42 (firefox) S " + "0 " * 18 + "100 0\n"
         self.procs = [ProcessInfo(42, "firefox", "firefox --secret", "user", 0, 100)]
         self.session = CliSession(self.shaper, "eth0", 100_000_000, lambda: self.procs)
 
@@ -31,7 +31,7 @@ class CliSessionTests(unittest.TestCase):
             self.session.limit("42", "30", None)
         self.assertFalse(self.shaper.shares)
         self.session.detected_bps = 100_000_000
-        self.host.files["/proc/42/stat"] = "42 (other) S " + "0 " * 18 + "101"
+        self.host.files["/proc/42/stat"] = "42 (other) S " + "0 " * 18 + "101 0\n"
         with self.assertRaisesRegex(ShaperError, "changed"):
             self.session.limit("42", "30", None)
         self.assertFalse(self.shaper.shares)

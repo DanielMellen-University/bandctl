@@ -75,7 +75,7 @@ ASCII and C1 control characters in process names, command lines, and user names 
 Those characters in rule and group names also appear as `?` in their tables and the group detail line. The stored names do not change.
 Control characters in status and log messages, startup errors, cleanup errors printed after exit, and uninstall recovery messages also appear as `?`. Unpaired Unicode surrogates in these bandctl messages are also replaced with `?`.
 
-Apply requires a valid process stat header with the expected PID, a readable start time, and an original cgroup path that can be restored. Paths with newlines or invalid UTF-8 bytes and truncated or malformed cgroup entries are rejected because they cannot be read safely. bandctl checks the start time again before changing the limit. If the process has exited or its PID was reused, rescan and select the intended process.
+Apply requires a complete process stat record with the expected PID and a readable start time, plus an original cgroup path that can be restored. Paths with newlines or invalid UTF-8 bytes and truncated or malformed cgroup entries are rejected because they cannot be read safely. bandctl checks the start time again before changing the limit. If the process has exited or its PID was reused, rescan and select the intended process.
 
 Before moving a process into a bandctl cgroup, bandctl also checks that it is still in the recorded original cgroup. If it moved elsewhere during setup, the operation fails. A process can still move or exit after the last check.
 

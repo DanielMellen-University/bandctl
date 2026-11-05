@@ -22,7 +22,7 @@ class CliIntegrationTests(unittest.TestCase):
         for enabled in (False, True):
             with self.subTest(enabled=enabled), tempfile.TemporaryDirectory() as directory:
                 _, host = _shaper()
-                host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+                host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100 0\n"
                 host.files["/proc/net/udp"] = (
                     "sl local_address rem_address st tx_queue rx_queue tr tm->when retrnsmt uid timeout inode\n"
                     "0: 00000000:14E9 00000000:0000 07 0 0 0 0 0 99\n"
@@ -58,7 +58,7 @@ class CliIntegrationTests(unittest.TestCase):
 
     def test_commands_use_one_session_and_clean_up(self):
         _, host = _shaper()
-        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100 0\n"
         processes = [ProcessInfo(42, "curl", "curl", "user", 0, 100)]
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

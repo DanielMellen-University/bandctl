@@ -42,7 +42,7 @@ class WorkerTests(unittest.TestCase):
 
     def test_worker_holds_lock_and_cleans_up_after_stop(self):
         _, host = _shaper()
-        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100 0\n"
         procs = [ProcessInfo(42, "curl", "curl", "user", 0, 100)]
         with tempfile.TemporaryDirectory() as directory:
             lock_path, socket_path = str(Path(directory) / "lock"), str(Path(directory) / "socket")
@@ -207,7 +207,7 @@ class WorkerTests(unittest.TestCase):
         from bandctl import cli_worker
 
         _, host = _shaper()
-        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100 0\n"
         procs = [ProcessInfo(42, "curl", "curl", "user", 0, 100)]
         run = host.run
 

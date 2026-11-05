@@ -16,7 +16,7 @@ from test_shaper import _shaper
 def group_app():
     shaper, host = _shaper()
     for pid in (42, 43):
-        host.files[f"/proc/{pid}/stat"] = f"{pid} (work) S " + "0 " * 18 + "100"
+        host.files[f"/proc/{pid}/stat"] = f"{pid} (work) S " + "0 " * 18 + "100 0\n"
     processes = [ProcessInfo(42, "work", "work", "user", 1, 100),
                  ProcessInfo(43, "game", "game", "user", 1, 100)]
     app = BandctlApp(iface="eth0", shaper=shaper, processes=lambda: processes,

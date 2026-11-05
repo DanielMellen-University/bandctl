@@ -53,6 +53,8 @@ def valid_socket_inode(raw: str) -> bool:
 
 def parse_start_ticks(text: str, *, expected_pid: int | None = None) -> int | None:
     """Read field 22 from /proc/<pid>/stat, including names with parentheses."""
+    if not text.endswith("\n"):
+        return None
     header = re.match(r"([1-9][0-9]*) \(", text)
     end = text.rfind(")")
     if (header is None or end < header.end() or text[end + 1:end + 2] != " "
