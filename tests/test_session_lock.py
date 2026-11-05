@@ -3,6 +3,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from bandctl.session_lock import SessionLock, SessionLockError
 
@@ -53,6 +54,30 @@ class SessionLockTests(unittest.TestCase):
                     raise ValueError("failed")
             with SessionLock(path):
                 pass
+
+    def test_failed_inspection_or_lock_closes_the_descriptor(self):
+        for operation, error in (("os.fstat", OSError("failed")),
+                                 ("fcntl.flock", OSError("failed")),
+                                 ("fcntl.flock", BlockingIOError("busy"))):
+            with self.subTest(operation=operation, error=type(error).__name__), tempfile.TemporaryDirectory() as directory:
+                path = str(Path(directory) / "lock")
+                lock = SessionLock(path)
+                real_close = os.close
+                closed = []
+
+                def record_close(fd):
+                    closed.append(fd)
+                    real_close(fd)
+
+                with patch("bandctl.session_lock." + operation, side_effect=error), \
+                     patch("bandctl.session_lock.os.close", side_effect=record_close):
+                    with self.assertRaises(SessionLockError):
+                        lock.acquire()
+                self.assertEqual(len(closed), 1)
+                with self.assertRaises(OSError):
+                    os.fstat(closed[0])
+                with lock:
+                    pass
 
 
 class MainLockTests(unittest.TestCase):
