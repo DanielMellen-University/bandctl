@@ -1,5 +1,26 @@
 # Usage
 
+This guide covers every screen, key, and command. The [README](../README.md) is the short version, and [ARCHITECTURE.md](ARCHITECTURE.md) explains what each action does to the system.
+
+Contents:
+
+- [Install and start](#install-and-start)
+- [Uninstall](#uninstall)
+- [The screen](#the-screen)
+- [Keys](#keys)
+- [Not root](#not-root)
+- [Setting a share](#setting-a-share)
+- [Rates, graphs, and totals](#rates-graphs-and-totals)
+- [Capacity and budgets](#capacity-and-budgets)
+- [Auto-apply rules](#auto-apply-rules)
+- [Shared limits](#shared-limits)
+- [Import and export settings](#import-and-export-settings)
+- [Command line](#command-line)
+- [While it is running](#while-it-is-running)
+- [Exit and crash recovery](#exit-and-crash-recovery)
+- [Safety checks and edge cases](#safety-checks-and-edge-cases)
+- [Screenshots](#screenshots)
+
 ## Install and start
 
 ```
@@ -15,13 +36,7 @@ sudo bandctl --iface wlan0
 
 Host packages the limits need: `iproute2`, `nftables`, and the `ifb` module (`modprobe ifb` needs to work, which it does on a normal desktop kernel).
 
-To remove it, quit any open bandctl (`q` drops the limits), then:
-
-```
-sudo bandctl-uninstall
-```
-
-Uninstall removes the installed virtual environment, scripts, and commands. It removes `/opt/bandctl` if empty and leaves other files in place. Move those files before reinstalling to the same directory. It also tries to clear a crashed run's qdisc, nft table, and cgroup. Root uninstall holds the session lock until it finishes removing files and stops if another session owns it. A non-root uninstall of a custom install skips recovery and the root session lock. If the installed Python is missing, root uninstall needs `python3` to take the lock and skips recovery. It also skips recovery if the installed session lock cannot be imported, using a fallback lock. Uninstall warns when it skips recovery or cleanup fails, and keeps any recovery file. Reinstall bandctl and start it as root to retry cleanup. `iproute2` and `nftables` stay.
+The install directory must be empty or contain a matching bandctl install stamp, so the installer never overwrites an unrelated directory.
 
 A checkout can skip the installer:
 
@@ -34,6 +49,125 @@ sudo .venv/bin/python -m bandctl
 `sudo python -m bandctl` often fails because `sudo` resets `PATH` and picks a Python that does not have Textual. The installed `bandctl` command does not have that problem. A checkout has to name the venv interpreter.
 
 `--iface` is the device whose root qdisc will be replaced while an upload share exists, and whose ingress is redirected while a download share exists. The default is the device on the IPv4 default route. If no default route is found, the TUI shows an error and disables Apply and Remove. Restart with `--iface` to select a device. The name has to match a device in `/sys/class/net`. If it does not, bandctl exits before the UI opens and lists the usable devices it found, for example `no network interface named 'eth9'. Interfaces here: eth0, lo, wlan0.`
+
+## Uninstall
+
+To remove it, quit any open bandctl (`q` drops the limits), then:
+
+```
+sudo bandctl-uninstall
+```
+
+Uninstall removes the installed virtual environment, scripts, and commands. It removes `/opt/bandctl` if empty and leaves other files in place. Move those files before reinstalling to the same directory. It also tries to clear a crashed run's qdisc, nft table, and cgroup. Root uninstall holds the session lock until it finishes removing files and stops if another session owns it. A non-root uninstall of a custom install skips recovery and the root session lock. If the installed Python is missing, root uninstall needs `python3` to take the lock and skips recovery. It also skips recovery if the installed session lock cannot be imported, using a fallback lock. Uninstall warns when it skips recovery or cleanup fails, and keeps any recovery file. Reinstall bandctl and start it as root to retry cleanup. `iproute2` and `nftables` stay.
+
+## The screen
+
+The window needs at least 60 columns and 18 rows. Below that, bandctl asks you to make the terminal bigger.
+
+| Size | Layout |
+| --- | --- |
+| 108 columns or more | Meters sit beside the percent fields. |
+| Under 108 columns | Meters sit under the percent fields. |
+| Under 80 columns | Shorter header and a tighter footer. The TCP total, user, and socket columns go first when space runs out. |
+| Under 32 rows | Inputs and buttons take one row each, with a colored edge instead of a box, so the table keeps more rows. |
+| Under 22 rows | The log shows two lines. |
+| 42 rows or more | The log shows more lines. |
+
+The process table always fits the width instead of scrolling sideways. When space is tight, the percent headers become `Dn%` and `Up%`. The table, the percent fields, the meters, the log, and the status line stay on screen at every supported size.
+
+A 120 by 36 terminal. `curl` has a 30% download share and is at its cap, so its meter is orange. `rsync` has a 10% upload share, so its row is orange.
+
+![Main screen at 120x36](screenshots/main-120x36.png)
+
+## Keys
+
+| Key | Action |
+| --- | --- |
+| Up/Down, click | Select a process |
+| `/` | Filter the table |
+| Esc | Leave the filter and go back to the table |
+| Enter, `a`, Apply | Apply both percent fields |
+| `u`, Remove | Remove the share |
+| `r` | Rescan processes |
+| `n` | Show every process, or go back to processes above 1% |
+| `s` | Cycle sort: name, pid, download, upload |
+| `b` | Toggle Mbit/s and MB/s |
+| `t` | Edit auto-apply rules |
+| `g` | Edit shared limits |
+| `x` | Import or export settings |
+| `q` | Quit and remove every rule this process installed |
+
+## Not root
+
+The window still opens. A dialog shows the `sudo` command, including the interface, settings file, and wildcard option when supplied. After you dismiss it, the process list works. Apply and Remove are disabled. No cgroup, nft table, or qdisc is created.
+
+![Not-root dialog at 100x30](screenshots/not-root-100x30.png)
+
+## Setting a share
+
+1. Select a process. The table starts with processes above 1% of the link (or of the traffic measured right now, when the link speed is unknown). Loopback sockets are not counted. `n` shows every process, and a process that already has a share stays listed either way. Arrow keys or a click. `/` filters by name, command line, pid, or user, and a search covers every process, not only the ones above 1%. Command lines are truncated to 80 characters before searching. Esc returns to the table. `s` cycles the sort: name (sockets first), pid, download rate, upload rate.
+2. Type a whole number from 1 to 100 in `down %`, `up %`, or both. A blank field means that direction is not capped.
+3. Press Enter in either percent field, press `a`, or click Apply.
+
+The status line and the log confirm the share, for example `pid 4242 download 30%, upload 10%`. Limited rows are orange. The selected row stays green. The bars compare the selected process's estimated TCP rate with the ceiling and turn orange near the cap. `u` or Remove clears the share and puts the process back in its old cgroup if it is still in the bandctl cgroup. If it has moved elsewhere, bandctl leaves it there. Removal checks the selected process identity and refuses a limit that changed during the request. If the identity cannot be verified, rescan and try again. If the cgroup cannot be read or the write fails while the process is still running, the share stays in place and the log shows the error. If the process has exited, the share is dropped during refresh.
+
+`r` requests a `/proc` rescan. If a refresh is already running, no extra scan is started. The table also refreshes every second. The selection stays on the same pid. If PID reuse is detected or the selected process changes, pending percent edits are cleared.
+
+## Rates, graphs, and totals
+
+Table rates, bars, and graphs use non-loopback TCP socket counters from `ss`, including traffic on other interfaces. They do not show UDP traffic, although bandctl can shape it. A UDP-only process may be hidden by the 1% filter; press `n` or search to find it. These estimates can differ from the actual throughput of the shaped class.
+
+The graphs beside the bars show the selected process's download and upload rates over the last 60 seconds, with the newest sample on the right. Each graph scales to its own peak. When the graph is narrower than 60 characters, each character shows the highest rate in its group of seconds. Blank spaces indicate spans with no samples. History is kept while the process remains in the list and is discarded when it exits or its PID is reused, when the process start time is available.
+
+`TCP total` shows estimated downloaded plus uploaded bytes observed since bandctl started. The selected process always shows it in the detail line; the table includes it when there is room. `--` means no owned TCP socket with byte counters has been observed. Byte counts do not change when rate units change. The first sample sets a baseline for existing sockets. A socket first seen later contributes its counters from zero, which can include earlier traffic. Sockets that open and close between samples, UDP, loopback, and sockets whose owner is not reported are not counted. A missing byte counter is skipped until it is available again. Its next rate is averaged over the gap. If it was missing from a socket seen in the initial sample, its first reading sets a baseline, even if neither counter was available initially. A socket shared by several processes is counted for each owner. These totals are estimates, not billing records.
+
+Upload uses acknowledged bytes when available, and sent bytes otherwise. When a socket switches between these counters, bandctl sets a new baseline and skips that interval's upload bytes.
+
+## Capacity and budgets
+
+The header shows the detected link speed from `/sys/class/net/<iface>/speed`. That file is in megabits per second. `-1` or `0` (typical for Wi-Fi and some virtual devices) is shown as `unknown`, and the capacity line says `unset` until you type a budget.
+
+The two budget fields are in the unit shown in the header. `b` flips between Mbit/s and MB/s and rewrites a budget you already typed so the underlying bit rate stays the same. Apply reads those fields, and so does Enter while the cursor is in one of them. Empty means "use the detected speed again". If updating active limits fails, the previous submitted budgets are retained and the error is shown. If rollback also fails, class rates may not match those budgets. The fields keep your edits so you can retry. If a detected speed becomes unknown while a limit is active, the previous capacity remains in use and bandctl retries the update. Enter a budget to set a known capacity.
+
+Example. The link is unknown. You are in Mbit/s and type `100` as the download budget. A 30% download share then ceilings at 30 Mbit/s. Press `b` and the same budget reads `12.5`, which is 100 Mbit/s expressed in MB/s.
+
+A budget must be a finite number that represents at least 1 bit/s and fits in a finite floating-point value in bits per second. Imported budgets follow the same limit.
+
+HTB rates use whole kilobits per second. A limit needs a ceiling of at least 1 kbit/s, and the capacity needs at least 1 kbit/s for each limited class plus 1 kbit/s for unmarked traffic. bandctl rejects a limit or budget update that cannot fit those rates. Capacities and ceilings are rounded up to whole kbit/s, and guaranteed rates may be scaled down.
+
+## Auto-apply rules
+
+Press `t` to open the rule editor. Enter part of a process name and one or both percentages, then press Enter or choose Add. Rules match process names without regard to case. They do not match command arguments. The editor needs root, like Apply. The first active matching rule wins. Select a rule and choose Delete to remove it, or Close to return to the process list. Rules last until bandctl exits.
+
+For a daily schedule, enter both start and end in 24-hour `HH:MM` local time. The start is included and the end is excluded. An end earlier than the start crosses midnight. Leave both fields blank for an always-active rule. A scheduled limit is removed when its window ends or its rule is deleted, and can apply again in the next window. A limit from an always-active rule stays in place if that rule is deleted. A manual apply or remove takes precedence for that process instance.
+
+Rules apply to matching processes already running and to new matches found in later scans. A process that already has a limit is left alone. Removing its limit manually prevents automatic reapplication to that instance. A rule needs a known process start time so bandctl can check that the PID still refers to the scanned process. A failed application appears in the log and is retried after 15 seconds. Rules use the detected link speed or the last submitted budgets. Process scans pause while the editor is open.
+
+If a PID is reused while its old limit is still being retired, a matching rule can apply to the new process after that limit is removed.
+
+The rule editor with two rules: `steam` gets 20% down and 5% up from 18:00 to 23:00, and `discord` gets 10% up all day.
+
+![Rule editor at 80x24](screenshots/rules-80x24.png)
+
+## Shared limits
+
+Press `g` to open shared limits. Enter a name, a comma-separated list of running PIDs, and a download percent, upload percent, or both. Choose Create. The combined traffic of those processes shares one ceiling per direction. Each PID must be verified and have no existing limit. Select a group row to fill its name and percentages. Change the percentages and choose Update to change the shared ceiling. To add a running process with no limit, enter its PID and choose Add. The list of processes is scanned when the editor opens. Close it and rescan if a PID is missing.
+
+To remove one member, close the editor, select that process in the main table, and press `u` or Remove. The other members keep their shared ceiling. The group disappears when its last member is removed. A process must leave its group before it can receive an individual limit. The selected process's detail line names its group. Its bars compare that process's measured rate with the group's ceiling; they do not show the group's combined rate. Groups last until bandctl exits.
+
+`downloads` gives `curl` and `steam` one 40% download ceiling, and `backup` caps `rsync` at 15% upload.
+
+![Shared limits at 80x24](screenshots/groups-80x24.png)
+
+## Import and export settings
+
+Press `x`, enter a path, and choose Export to write a JSON settings file. Leading and trailing spaces are part of the path. Submit any budget edits first. The file contains the interface, budgets in bits per second, auto-apply rules and schedules, and group definitions. It does not contain process command lines or individual limits. Export replaces the destination with a file readable only by its owner.
+
+Choose Import to load a regular file. Import and export accept files up to 1 MiB. An oversized export fails without replacing the destination. bandctl validates all fields before changing settings. Imported rules, budgets, and groups replace the current ones. Individual limits remain; an imported group cannot claim a process with an individual limit. Group members are identified by PID, start time, and boot ID. If a member has exited, its PID was reused, or the machine has rebooted, the import is refused. The interface in the file must match the current interface. To start with the saved interface and explicitly import the file, run `sudo bandctl --config settings.json`. An explicit `--iface` must match the saved interface. A shaper error can prevent import; if rollback also fails, the error reports that it is incomplete. Settings are never loaded automatically.
+
+Group PIDs must be from 1 to 2147483647. Start times must fit in the unsigned 64-bit range used by the process scanner.
+
+![Settings file at 80x24](screenshots/settings-80x24.png)
 
 ## Command line
 
@@ -61,37 +195,11 @@ CLI session checks and requests allow up to 30 seconds for a response from a bus
 
 Worker startup errors are limited to the first 4096 bytes when reported by the CLI.
 
-## Not root
+## While it is running
 
-The window still opens. A dialog shows the `sudo` command, including the interface, settings file, and wildcard option when supplied. After you dismiss it, the process list works. Apply and Remove are disabled. No cgroup, nft table, or qdisc is created.
+Unmarked traffic is not capped. It uses a default HTB class whose ceil is the whole capacity.
 
-## Setting a share
-
-The window needs at least 60 columns and 18 rows. At 108 columns or more the meters sit beside the percent fields. Under 32 rows the inputs and buttons shrink to one row each so the table keeps its space. The README has the full list of size steps.
-
-1. Select a process. The table starts with processes above 1% of the link (or of the traffic measured right now, when the link speed is unknown). Loopback sockets are not counted. `n` shows every process, and a process that already has a share stays listed either way. Arrow keys or a click. `/` filters by name, command line, pid, or user, and a search covers every process, not only the ones above 1%. Command lines are truncated to 80 characters before searching. Esc returns to the table. `s` cycles the sort: name (sockets first), pid, download rate, upload rate.
-2. Type a whole number from 1 to 100 in `down %`, `up %`, or both. A blank field means that direction is not capped.
-3. Press Enter in either percent field, press `a`, or click Apply.
-
-ASCII and C1 control characters in process names, command lines, and user names appear as `?` in the table and detail line.
-Those characters in rule and group names also appear as `?` in their tables and the group detail line. The stored names do not change.
-Control characters in status and log messages, startup errors, cleanup errors printed after exit, and uninstall recovery messages also appear as `?`. Unpaired Unicode surrogates in these bandctl messages are also replaced with `?`.
-
-Apply requires a complete process stat record with the expected PID and a readable start time, plus an original cgroup path that can be restored. Paths with newlines or invalid UTF-8 bytes and truncated or malformed cgroup entries are rejected because they cannot be read safely. bandctl checks the start time again before changing the limit. If the process has exited or its PID was reused, rescan and select the intended process.
-
-Before moving a process into a bandctl cgroup, bandctl also checks that it is still in the recorded original cgroup. If it moved elsewhere during setup, the operation fails. A process can still move or exit after the last check.
-
-bandctl refuses to reuse an old process cgroup if its process list is not empty or cannot be verified.
-
-The status line and the log confirm the share, for example `pid 4242 download 30%, upload 10%`. Limited rows are orange. The selected row stays green. The bars compare the selected process's estimated TCP rate with the ceiling and turn orange near the cap. `u` or Remove clears the share and puts the process back in its old cgroup if it is still in the bandctl cgroup. If it has moved elsewhere, bandctl leaves it there. Removal checks the selected process identity and refuses a limit that changed during the request. If the identity cannot be verified, rescan and try again. If the cgroup cannot be read or the write fails while the process is still running, the share stays in place and the log shows the error. If the process has exited, the share is dropped during refresh.
-
-Table rates, bars, and graphs use non-loopback TCP socket counters from `ss`, including traffic on other interfaces. They do not show UDP traffic, although bandctl can shape it. A UDP-only process may be hidden by the 1% filter; press `n` or search to find it. These estimates can differ from the actual throughput of the shaped class.
-
-Malformed socket byte counters and counters outside the unsigned 64-bit range are ignored until a valid value is available. Socket owners with invalid process IDs are skipped.
-
-If `ss` output ends mid-line, bandctl skips that sample and keeps the previous socket counter baselines.
-
-Malformed socket cookies and inodes are ignored when identifying TCP sockets. bandctl falls back to the inode or the socket endpoints when available.
+If download shares (or upload shares) add up to more than 100%, each process still cannot cross its own percent. The rates HTB guarantees are scaled so they fit in the parent class. The status line reports the total.
 
 The kernel does not move an existing socket into the new cgroup, so bandctl also matches the process's open connections by address and port. A connected UDP socket's filter takes priority over an unconnected socket's filter on the same address and port. By default, an existing UDP socket bound to `0.0.0.0` or `::` is not reliably matched by this filter. Start the TUI with `sudo bandctl --match-wildcard` to match those UDP sockets by local port within their address family. This can also shape traffic from other processes sharing that port. Filters for specifically bound sockets take priority over the wildcard port match. The wildcard match ignores the remote address and port for connected wildcard-bound UDP sockets. TCP and UDP sockets bound to a specific local address keep their normal matching. A socket opened later is marked by the cgroup rule as soon as it exists, and the address list catches up within about a second.
 
@@ -99,77 +207,13 @@ For the CLI, start the session with `sudo bandctl --match-wildcard limit <pid> -
 
 If bandctl cannot scan socket tables or process descriptors, or a socket table is malformed, it reports a warning and keeps the existing filters until a scan succeeds. New or closed connections may not be reflected until then. If sockets from different shares need the same filter, bandctl reports the conflicting PIDs and keeps the existing filters until the conflict resolves. An existing filter can still shape traffic from both processes. Members of one shared limit do not conflict. An apply or update that detects a conflict fails and rolls back. IPv4 TCP and UDP tables are required even on the first scan. IPv6 tables may be absent, but a table that was available must stay readable.
 
-Socket inode fields and socket descriptor links must use canonical unsigned decimal numbers within the 64-bit range. A malformed socket descriptor or inode leaves the existing filters in place until a later scan succeeds.
-
-`r` requests a `/proc` rescan. If a refresh is already running, no extra scan is started. The table also refreshes every second. The selection stays on the same pid. If PID reuse is detected or the selected process changes, pending percent edits are cleared.
-
-## Capacity
-
-The header shows the detected link speed from `/sys/class/net/<iface>/speed`. That file is in megabits per second. `-1` or `0` (typical for Wi-Fi and some virtual devices) is shown as `unknown`, and the capacity line says `unset` until you type a budget.
-
-A malformed speed or one too large to fit in the supported capacity range is also treated as unknown.
-
-When `ip route` is unavailable, times out, or returns truncated or invalid UTF-8 output, bandctl picks the active IPv4 default route with the lowest metric from `/proc/net/route`. If the fallback table is not valid UTF-8, pass a valid interface with `--iface`. Interface names must be valid UTF-8 and cannot contain whitespace or control characters, so recovery can safely read them.
-
-If the fallback routing table is truncated, bandctl does not choose an interface from it. Pass a valid interface with `--iface`.
-
-The two budget fields are in the unit shown in the header. `b` flips between Mbit/s and MB/s and rewrites a budget you already typed so the underlying bit rate stays the same. Apply reads those fields, and so does Enter while the cursor is in one of them. Empty means "use the detected speed again". If updating active limits fails, the previous submitted budgets are retained and the error is shown. If rollback also fails, class rates may not match those budgets. The fields keep your edits so you can retry. If a detected speed becomes unknown while a limit is active, the previous capacity remains in use and bandctl retries the update. Enter a budget to set a known capacity.
-
-The graphs beside the bars show the selected process's download and upload rates over the last 60 seconds, with the newest sample on the right. Each graph scales to its own peak. When the graph is narrower than 60 characters, each character shows the highest rate in its group of seconds. Blank spaces indicate spans with no samples. History is kept while the process remains in the list and is discarded when it exits or its PID is reused, when the process start time is available.
-
-`TCP total` shows estimated downloaded plus uploaded bytes observed since bandctl started. The selected process always shows it in the detail line; the table includes it when there is room. `--` means no owned TCP socket with byte counters has been observed. Byte counts do not change when rate units change. The first sample sets a baseline for existing sockets. A socket first seen later contributes its counters from zero, which can include earlier traffic. Sockets that open and close between samples, UDP, loopback, and sockets whose owner is not reported are not counted. A missing byte counter is skipped until it is available again. Its next rate is averaged over the gap. If it was missing from a socket seen in the initial sample, its first reading sets a baseline, even if neither counter was available initially. A socket shared by several processes is counted for each owner. These totals are estimates, not billing records.
-
-Upload uses acknowledged bytes when available, and sent bytes otherwise. When a socket switches between these counters, bandctl sets a new baseline and skips that interval's upload bytes.
-
-## Shared limits
-
-Press `g` to open shared limits. Enter a name, a comma-separated list of running PIDs, and a download percent, upload percent, or both. Choose Create. The combined traffic of those processes shares one ceiling per direction. Each PID must be verified and have no existing limit. Select a group row to fill its name and percentages. Change the percentages and choose Update to change the shared ceiling. To add a running process with no limit, enter its PID and choose Add. The list of processes is scanned when the editor opens. Close it and rescan if a PID is missing.
-
-To remove one member, close the editor, select that process in the main table, and press `u` or Remove. The other members keep their shared ceiling. The group disappears when its last member is removed. A process must leave its group before it can receive an individual limit. The selected process's detail line names its group. Its bars compare that process's measured rate with the group's ceiling; they do not show the group's combined rate. Groups last until bandctl exits.
-
-## Import and export settings
-
-Press `x`, enter a path, and choose Export to write a JSON settings file. Leading and trailing spaces are part of the path. Submit any budget edits first. The file contains the interface, budgets in bits per second, auto-apply rules and schedules, and group definitions. It does not contain process command lines or individual limits. Export replaces the destination with a file readable only by its owner.
-
-Choose Import to load a regular file. Import and export accept files up to 1 MiB. An oversized export fails without replacing the destination. bandctl validates all fields before changing settings. Imported rules, budgets, and groups replace the current ones. Individual limits remain; an imported group cannot claim a process with an individual limit. Group members are identified by PID, start time, and boot ID. If a member has exited, its PID was reused, or the machine has rebooted, the import is refused. The interface in the file must match the current interface. To start with the saved interface and explicitly import the file, run `sudo bandctl --config settings.json`. An explicit `--iface` must match the saved interface. A shaper error can prevent import; if rollback also fails, the error reports that it is incomplete. Settings are never loaded automatically.
-
-Group PIDs must be from 1 to 2147483647. Start times must fit in the unsigned 64-bit range used by the process scanner.
-
-## Auto-apply rules
-
-Press `t` to open the rule editor. Enter part of a process name and one or both percentages, then press Enter or choose Add. Rules match process names without regard to case. They do not match command arguments. The editor needs root, like Apply. The first active matching rule wins. Select a rule and choose Delete to remove it, or Close to return to the process list. Rules last until bandctl exits.
-
-For a daily schedule, enter both start and end in 24-hour `HH:MM` local time. The start is included and the end is excluded. An end earlier than the start crosses midnight. Leave both fields blank for an always-active rule. A scheduled limit is removed when its window ends or its rule is deleted, and can apply again in the next window. A limit from an always-active rule stays in place if that rule is deleted. A manual apply or remove takes precedence for that process instance.
-
-Rules apply to matching processes already running and to new matches found in later scans. A process that already has a limit is left alone. Removing its limit manually prevents automatic reapplication to that instance. A rule needs a known process start time so bandctl can check that the PID still refers to the scanned process. A failed application appears in the log and is retried after 15 seconds. Rules use the detected link speed or the last submitted budgets. Process scans pause while the editor is open.
-
-If a PID is reused while its old limit is still being retired, a matching rule can apply to the new process after that limit is removed.
-
-A budget must be a finite number that represents at least 1 bit/s and fits in a finite floating-point value in bits per second. Imported budgets follow the same limit.
-
-HTB rates use whole kilobits per second. A limit needs a ceiling of at least 1 kbit/s, and the capacity needs at least 1 kbit/s for each limited class plus 1 kbit/s for unmarked traffic. bandctl rejects a limit or budget update that cannot fit those rates. Capacities and ceilings are rounded up to whole kbit/s, and guaranteed rates may be scaled down.
-
-Example. The link is unknown. You are in Mbit/s and type `100` as the download budget. A 30% download share then ceilings at 30 Mbit/s. Press `b` and the same budget reads `12.5`, which is 100 Mbit/s expressed in MB/s.
-
-## While it is running
-
-Unmarked traffic is not capped. It uses a default HTB class whose ceil is the whole capacity.
-
-If download shares (or upload shares) add up to more than 100%, each process still cannot cross its own percent. The rates HTB guarantees are scaled so they fit in the parent class. The status line reports the total.
-
 A failed share or group update or removal is rolled back where possible. If rollback fails, the error reports that it is incomplete and the active ceiling may differ from the listed share. A failed new share is rolled back, and its empty cgroup is removed. If the process cannot be restored, the error reports an incomplete rollback and the share stays listed so you can try Remove. Its ceiling may not be active. The error text from `tc`, `nft`, or the cgroup write is in the log. bandctl refuses to use an existing `inet bandctl` table or replace an HTB root qdisc. A download share also requires that the interface has no existing ingress qdisc and that `ifb-bandctl` does not already exist.
 
 If download setup fails and its cleanup also fails, the error includes both failures.
 
 When cleanup of an exited process fails, bandctl tries to restore the previous class plan and retries cleanup on the next refresh. The warning reports an incomplete rollback if restoring the plan also fails.
 
-bandctl checks a process identity again after reading its cgroup before moving or restoring it. If a PID changes or cannot be verified during removal rollback, bandctl leaves it alone and reports an incomplete rollback. The share stays tracked for cleanup. A process can still exit or move after the last check.
-
-If a process leaves its original cgroup during removal rollback, bandctl leaves it there and reports an incomplete rollback.
-
-The same applies when a group member moves elsewhere during settings import rollback.
-
-## Exit
+## Exit and crash recovery
 
 `q`, Ctrl+C, or SIGTERM starts cleanup. On SIGTERM, an in-progress TUI operation finishes first.
 
@@ -195,3 +239,74 @@ Cleanup restores recorded processes to their original cgroups before inspecting 
 Cleanup also verifies the identity of a process that inherited a bandctl cgroup before moving it to the root cgroup. If its identity cannot be verified, cleanup keeps the recovery file and retries on the next start.
 
 Removal and recovery check cgroup membership again after verifying a saved process identity. A process that moved elsewhere is left there. A process can still move or exit after the last check.
+
+
+## Safety checks and edge cases
+
+bandctl changes kernel state that other tools also own, so it checks a lot before it acts. These are the rules it follows.
+
+### Process identity
+
+Apply requires a complete process stat record with the expected PID and a readable start time, plus an original cgroup path that can be restored. Paths with newlines or invalid UTF-8 bytes and truncated or malformed cgroup entries are rejected because they cannot be read safely. bandctl checks the start time again before changing the limit. If the process has exited or its PID was reused, rescan and select the intended process.
+
+Before moving a process into a bandctl cgroup, bandctl also checks that it is still in the recorded original cgroup. If it moved elsewhere during setup, the operation fails. A process can still move or exit after the last check.
+
+bandctl refuses to reuse an old process cgroup if its process list is not empty or cannot be verified.
+
+bandctl checks a process identity again after reading its cgroup before moving or restoring it. If a PID changes or cannot be verified during removal rollback, bandctl leaves it alone and reports an incomplete rollback. The share stays tracked for cleanup. A process can still exit or move after the last check.
+
+If a process leaves its original cgroup during removal rollback, bandctl leaves it there and reports an incomplete rollback.
+
+The same applies when a group member moves elsewhere during settings import rollback.
+
+### Untrusted text
+
+ASCII and C1 control characters in process names, command lines, and user names appear as `?` in the table and detail line.
+Those characters in rule and group names also appear as `?` in their tables and the group detail line. The stored names do not change.
+Control characters in status and log messages, startup errors, cleanup errors printed after exit, and uninstall recovery messages also appear as `?`. Unpaired Unicode surrogates in these bandctl messages are also replaced with `?`.
+
+### Socket and traffic data
+
+Malformed socket byte counters and counters outside the unsigned 64-bit range are ignored until a valid value is available. Socket owners with invalid process IDs are skipped.
+
+If `ss` output ends mid-line, bandctl skips that sample and keeps the previous socket counter baselines.
+
+Malformed socket cookies and inodes are ignored when identifying TCP sockets. bandctl falls back to the inode or the socket endpoints when available.
+
+Socket inode fields and socket descriptor links must use canonical unsigned decimal numbers within the 64-bit range. A malformed socket descriptor or inode leaves the existing filters in place until a later scan succeeds.
+
+### Interfaces and routes
+
+A malformed speed or one too large to fit in the supported capacity range is also treated as unknown.
+
+When `ip route` is unavailable, times out, or returns truncated or invalid UTF-8 output, bandctl picks the active IPv4 default route with the lowest metric from `/proc/net/route`. If the fallback table is not valid UTF-8, pass a valid interface with `--iface`. Interface names must be valid UTF-8 and cannot contain whitespace or control characters, so recovery can safely read them.
+
+If the fallback routing table is truncated, bandctl does not choose an interface from it. Pass a valid interface with `--iface`.
+
+## Screenshots
+
+More sizes and screens. Every screenshot in these docs uses fake processes and is rendered headlessly by [tools/screenshots.py](../tools/screenshots.py).
+
+80 by 24. Under 32 rows the inputs and buttons take one row each, and each meter fits on one line.
+
+![Compact layout at 80x24](screenshots/compact-80x24.png)
+
+77 by 38. Narrow and tall. The meters sit under the percent fields and the header gets shorter.
+
+![Narrow layout at 77x38](screenshots/narrow-77x38.png)
+
+60 by 20, close to the smallest size bandctl supports.
+
+![Small layout at 60x20](screenshots/small-60x20.png)
+
+The two rules from the rule editor, at 19:30. `steam` is inside its window, so both processes picked up their limits on their own. The selected `steam` row shows 20% and 5%, the `discord` row is orange, and the log says which rule did what.
+
+![Auto-apply rules in effect at 120x36](screenshots/auto-rules-120x36.png)
+
+A search for `resolve` finds `systemd-resolved` even though it is idle and below the 1% cutoff.
+
+![Search at 100x30](screenshots/search-100x30.png)
+
+Started with `--config` on a link with unknown speed. The saved 80 and 20 Mbit/s budgets are filled in, and the saved `steam` rule applied itself.
+
+![Startup with settings at 80x24](screenshots/startup-config-80x24.png)

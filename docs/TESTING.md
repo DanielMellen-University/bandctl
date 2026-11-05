@@ -2,7 +2,7 @@
 
 ## Unit tests
 
-No root, no `tc`, no network namespace.
+633 tests. No root, no `tc`, no network namespace. A full run takes about a minute.
 
 ```
 python3 -m venv .venv
@@ -40,7 +40,18 @@ python3 -m venv .venv
 | `tests/test_app.py` | Headless Textual pilot. The table starts at processes above 1%, `n` shows the rest, a share stays visible after traffic drops, names display literally, filter, sort, unit toggle, apply, remove, a bad percent, a narrow resize that drops the user column and keeps the table inside the window, a tiny terminal that asks for 60 by 18, the footer key colors, and the not-root dialog. A layout pass at 60x18, 60x20, 64x24, 80x24, 100x30, 107x31, 108x32, 120x40, 160x50, 77x38, 87x44, and 200x60 checks that the title, capacity row, filter, table (header plus five rows or more), percent fields, buttons, meters, log (two lines or more), status line, and footer are all on screen without overlapping, that no button label wraps, and that the table has no horizontal scrollbar. The size classes are checked at each step, and so is the not-root dialog at 60x20. |
 | `tests/test_install.py` | `install.sh` and `uninstall.sh` syntax, the sudo re-exec, and an uninstall against a fake prefix. No apt and no qdisc. |
 
-CI (`.github/workflows/ci.yml`) runs the same command on Ubuntu for Python 3.10 and 3.12.
+CI (`.github/workflows/ci.yml`) runs the same command on Ubuntu for Python 3.10 and 3.12. On 3.12 it also installs bandctl under a temporary prefix with `install.sh --skip-deps`, runs `bandctl --version`, checks the installed theme file, and uninstalls again.
+
+## Screenshots
+
+The PNGs in `docs/screenshots` come from `tools/screenshots.py`. It drives the real app headlessly with the Textual pilot, using fake processes and the fake shapers from the unit tests, and saves each screen as an SVG. With `--png` it converts them with headless Chrome or Chromium.
+
+```
+.venv/bin/python tools/screenshots.py --png           # every screen
+.venv/bin/python tools/screenshots.py --png groups    # one screen
+```
+
+Screen names: `main`, `compact`, `narrow`, `small`, `notroot`, `rules`, `auto`, `search`, `groups`, `settings`, `startup`. Rerun it after a change to the layout or theme.
 
 ## Manual check, needs root
 

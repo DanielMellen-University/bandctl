@@ -26,4 +26,4 @@ The suite does not need root and does not install a qdisc. It will read `/proc` 
 - One logical change per commit. The message says what changed and why.
 - Run the tests before pushing.
 
-The version is `__version__` in `bandctl/__init__.py`. When it changes, add a [CHANGELOG](CHANGELOG.md) entry and update the status line in the README.
+The version is `__version__` in `bandctl/__init__.py`. When it changes, add a [CHANGELOG](CHANGELOG.md) entry. If the layout or theme changes, regenerate the screenshots with `tools/screenshots.py` (see [docs/TESTING.md](docs/TESTING.md)).

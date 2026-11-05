@@ -2,9 +2,41 @@
 
 bandctl is a Textual app in front of one `Shaper` object. `shaper.py` runs the shaping commands and writes cgroup files. Interface discovery in `iface.py` also runs `ip route`, and traffic sampling in `traffic.py` runs `ss`.
 
+## Overview
+
+```
+  app.py (TUI)                         cli.py ──► cli_client.py
+     │                                               │ private local socket
+     │                                               ▼
+     │                                 cli_worker.py ──► cli_session.py
+     │                                                      │
+     └──────────────► rules, schedule, groups, settings ◄───┘
+                                     │
+                                     ▼
+                       shaper.py  (holds session_lock.py)
+                                     │
+        ┌──────────────┬─────────────┼──────────────┬────────────────────┐
+        ▼              ▼             ▼              ▼                    ▼
+  cgroup v2 leaf   nft table    HTB on IFACE   ingress, IFB,       /run/bandctl.json
+  per process      inet bandctl  (upload)      HTB (download)      (recovery state)
+
+  Read side: procscan.py (/proc), traffic.py (ss), iface.py (ip route, sysfs),
+             history.py (graphs), rates.py (units and HTB math)
+```
+
+The TUI and the CLI worker are two front ends for the same shaper. Only one of them can hold the session lock, so only one controls shaping at a time. Pure logic (rate math, rule matching, schedules, settings validation, group plans) lives in small modules with no system access, which is why most of the test suite runs without root. Every change to kernel state goes through a `Host` object in `shaper.py`, and the tests swap in a fake host that records commands and serves fake files.
+
 ## Command line
 
-`cli.py` formats a process scan as text or JSON without process arguments. `bandctl list` does not start the TUI or the shaper. The CLI also validates share inputs and resolves a PID or exact process name, refusing ambiguous names and unknown start times. `cli_session.py` uses the shaper for verified limit and remove requests and commits imported settings after validation. Its refresh updates detected link capacity, retries failed capacity updates, and reconciles the same automatic-rule and schedule trackers used by the TUI. `cli_protocol.py` validates and dispatches structured requests to that session. `cli_transport.py` serves bounded requests over a private local socket and removes only the socket it created. `cli_worker.py` holds the exclusive session lock, recovers stale state, runs the socket server, and tears down shaping on exit. `cli_client.py` finds the running session, or starts a worker for a limit or import, and waits for cleanup after `stop`. The worker is a separate process, so limits stay active after the command that created them exits. `session_lock.py` provides a nonblocking exclusive lock for ownership of host shaping state; the root TUI holds it until cleanup completes. The CLI worker holds the same lock while it owns shaping state.
+The command line is a thin client in front of a background worker. The worker is a separate process, so limits stay active after the command that created them exits.
+
+- `cli.py` formats a process scan as text or JSON without process arguments. `bandctl list` does not start the TUI or the shaper. It also validates share inputs and resolves a PID or exact process name, refusing ambiguous names and unknown start times.
+- `cli_client.py` finds the running session, or starts a worker for a limit or import, and waits for cleanup after `stop`.
+- `cli_transport.py` serves bounded requests over a private local socket and removes only the socket it created.
+- `cli_protocol.py` validates and dispatches structured requests to the session.
+- `cli_session.py` uses the shaper for verified limit and remove requests and commits imported settings after validation. Its refresh updates detected link capacity, retries failed capacity updates, and reconciles the same automatic-rule and schedule trackers used by the TUI.
+- `cli_worker.py` holds the exclusive session lock, recovers stale state, runs the socket server, and tears down shaping on exit.
+- `session_lock.py` provides a nonblocking exclusive lock for ownership of host shaping state. The root TUI holds it until cleanup completes, and the CLI worker holds it while it owns shaping state.
 
 ## Settings interchange
 
@@ -132,6 +164,16 @@ Before moving a process or replacing a root qdisc, the shaper records the recove
 
 For a recorded PID with a saved start time, removal and recovery check its cgroup again after the identity check and leave it alone if it moved. If that second cgroup read fails for a live process, cleanup keeps the leaf and state for a retry.
 
+### Uncertain qdisc changes
+
+If class counter output is truncated, the shaper skips that sample and keeps its previous counter baselines.
+
+Read-only qdisc, class counter, and IFB queries time out after two seconds. Commands that change kernel state have no such timeout because a timed-out change could already have taken effect.
+
+Before replacing a root qdisc, recovery state records the intended replacement as uncertain. A successful command clears the uncertainty. If the command fails and a follow-up query confirms the original qdisc kind is still present, the state clears the ownership flag. An inconclusive query leaves it uncertain.
+
+An unconfirmed replacement blocks further upload setup and keeps recovery state through rollback and exit. Shutdown reports the uncertainty without changing the root qdisc. On the next start, recovery clears the flag if exactly one root qdisc is reported and it has the saved original kind. If the query is ambiguous or the saved kind is missing or differs, recovery reports the uncertainty and leaves the state and root qdisc alone, while still restoring processes and cleaning other owned resources.
+
 ## UI
 
 If user lookup fails, the process scan shows the numeric UID and continues.
@@ -152,14 +194,6 @@ The screen gets size classes that `theme.tcss` keys off:
 Sizes come from the resize event, because `App.size` can still be the old size while that handler runs.
 
 The on-screen rate is each socket's counter delta times 8, divided by its sample interval, summed by PID. The first `ss` sample is a baseline and shows zero. `ss -tinpeH` supplies socket identities; a socket first seen later starts at zero. Upload uses sent bytes when acknowledged bytes are unavailable. A switch between these counters starts a new baseline so their different totals do not create a spike. The shaper also samples class byte counters, but the TUI does not use them for its rates.
-
-If class counter output is truncated, the shaper skips that sample and keeps its previous counter baselines.
-
-Read-only qdisc, class counter, and IFB queries time out after two seconds. Commands that change kernel state have no such timeout because a timed-out change could already have taken effect.
-
-Before replacing a root qdisc, recovery state records the intended replacement as uncertain. A successful command clears the uncertainty. If the command fails and a follow-up query confirms the original qdisc kind is still present, the state clears the ownership flag. An inconclusive query leaves it uncertain.
-
-An unconfirmed replacement blocks further upload setup and keeps recovery state through rollback and exit. Shutdown reports the uncertainty without changing the root qdisc. On the next start, recovery clears the flag if exactly one root qdisc is reported and it has the saved original kind. If the query is ambiguous or the saved kind is missing or differs, recovery reports the uncertainty and leaves the state and root qdisc alone, while still restoring processes and cleaning other owned resources.
 
 `traffic.parse_ss_sockets` can identify individual TCP sockets by the `ss` socket cookie, then inode, then endpoint pair. This keeps counters for separate sockets distinct. Shared sockets are attributed to each listed process.
 
