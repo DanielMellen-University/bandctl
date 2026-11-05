@@ -28,6 +28,18 @@ ESTAB 0 0 192.168.1.97:10 9.9.9.9:443 users:(("old",pid=4,fd=1))
 
 
 class ParseTests(unittest.TestCase):
+    def test_out_of_range_counters_are_ignored(self):
+        header = 'ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 users:(("a",pid=5,fd=1)) sk:a\n'
+        for invalid in (str(2**64), "9" * 5000):
+            with self.subTest(length=len(invalid)):
+                text = header + f'\t bytes_received:{invalid} bytes_acked:20\n'
+                self.assertEqual(parse_ss(text), {5: (0, 20)})
+                self.assertEqual(parse_ss_sockets(text), {(5, "sk:a"): (0, 20)})
+                sampler = TrafficSampler()
+                sampler.rates(header + '\t bytes_received:10 bytes_acked:10\n', 1)
+                self.assertEqual(sampler.rates(text, 2)[5], (0.0, 80.0))
+                self.assertEqual(sampler.rates(header + '\t bytes_received:30 bytes_acked:30\n', 3)[5], (80.0, 80.0))
+
     def test_process_name_does_not_supply_socket_identity(self):
         text = (
             'ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 users:(("sk:bad",pid=5,fd=1)) ino:42 sk:a\n'

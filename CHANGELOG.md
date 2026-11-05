@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Ignore out-of-range socket counters instead of failing rate sampling.
+
 - Clean other owned resources while an unconfirmed root qdisc remains untouched.
 
 - Leave an unconfirmed root qdisc untouched during recovery.

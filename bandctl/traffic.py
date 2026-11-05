@@ -17,9 +17,9 @@ _QUOTED_RE = re.compile(r'"(?:\\.|[^"\\])*"')
 _SOCKET_COOKIE_RE = re.compile(r"\bsk:([0-9a-fA-F]+)\b")
 _SOCKET_INODE_RE = re.compile(r"\bino:(\d+)\b")
 _FIELD_RE = {
-    "bytes_received": re.compile(r"bytes_received:(\d+)"),
-    "bytes_acked": re.compile(r"bytes_acked:(\d+)"),
-    "bytes_sent": re.compile(r"bytes_sent:(\d+)"),
+    "bytes_received": re.compile(r"bytes_received:([0-9]+)"),
+    "bytes_acked": re.compile(r"bytes_acked:([0-9]+)"),
+    "bytes_sent": re.compile(r"bytes_sent:([0-9]+)"),
 }
 
 
@@ -241,7 +241,11 @@ def _field(line: str, name: str) -> int | None:
     match = _FIELD_RE[name].search(line)
     if match is None:
         return None
-    return int(match.group(1))
+    digits = match.group(1)
+    if len(digits) > 20:
+        return None
+    value = int(digits)
+    return value if value <= 0xFFFFFFFFFFFFFFFF else None
 
 
 def _socket_pids(line: str) -> list[int]:
