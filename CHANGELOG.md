@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.2 (2026-11-05)
+
 - Leave a possibly busy CLI worker running after an uncertain startup check.
 
 - Recheck process identity after the final cgroup read during removal and recovery.
