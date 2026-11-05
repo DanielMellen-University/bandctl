@@ -144,10 +144,22 @@ class TrafficSampler:
     def totals(self) -> dict[int, tuple[int, int]]:
         return dict(self._totals)
 
-    def forget_total(self, pid: int) -> None:
-        """Discard a process total while retaining its latest socket baselines."""
+    def forget_total(self, pid: int, *, keep_observed: bool = True) -> None:
+        """Discard a reused PID's total and stale socket baselines."""
         self._totals.pop(pid, None)
         self._seen_pids.pop(pid, None)
+        if self._prev is not None:
+            for key, value in list(self._prev.items()):
+                if key[0] != pid:
+                    continue
+                if not keep_observed or value[4] != self._prev_at:
+                    del self._prev[key]
+                    continue
+                received, acked, down_at, up_at, seen_at, source = value
+                self._prev[key] = (received if down_at == self._prev_at else None,
+                                   acked if up_at == self._prev_at else None,
+                                   down_at, up_at, seen_at,
+                                   source if up_at == self._prev_at else None)
 
     def retain_processes(self, live_pids: set[int], now: float) -> None:
         """Keep totals for live processes and discard long-absent ones."""

@@ -533,7 +533,7 @@ class BandctlApp(App):
                 previous = self._process_starts.get(proc.pid)
                 if previous is not None and proc.start_ticks is not None and previous != proc.start_ticks:
                     self._history.forget(proc.pid)
-                    self._sampler.forget_total(proc.pid)
+                    self._sampler.forget_total(proc.pid, keep_observed=self._rates_source is None and not self._ss_failed)
                     usage.pop(proc.pid, None)
                 if proc.start_ticks is not None or proc.pid not in self._process_starts:
                     self._process_starts[proc.pid] = proc.start_ticks

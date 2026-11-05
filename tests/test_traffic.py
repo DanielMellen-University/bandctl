@@ -312,6 +312,40 @@ class ParseTests(unittest.TestCase):
         sampler.forget_total(5)
         self.assertNotIn(5, sampler.totals)
 
+    def test_pid_reuse_discards_old_unseen_socket_baselines(self):
+        old = ('ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 users:(("x",pid=5,fd=1))\n'
+               '\t bytes_received:100 bytes_acked:20\n')
+        current = ('ESTAB 0 0 10.0.0.2:2 1.1.1.1:443 users:(("x",pid=5,fd=2))\n'
+                   '\t bytes_received:200 bytes_acked:30\n')
+        sampler = TrafficSampler()
+        sampler.rates(old, 1)
+        sampler.rates(current, 2)
+        sampler.forget_total(5)
+        later = current.replace('received:200', 'received:210').replace('acked:30', 'acked:40')
+        rates = sampler.rates(later + old.replace('received:100', 'received:120'), 3)
+        self.assertEqual(rates[5], (1040.0, 240.0))
+        self.assertEqual(sampler.totals[5], (130, 30))
+
+    def test_pid_reuse_after_failed_sample_discards_all_baselines(self):
+        socket = ('ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 users:(("x",pid=5,fd=1))\n'
+                  '\t bytes_received:100 bytes_acked:20\n')
+        sampler = TrafficSampler()
+        sampler.rates(socket, 1)
+        sampler.forget_total(5, keep_observed=False)
+        self.assertEqual(sampler.rates(socket, 2)[5], (800.0, 160.0))
+
+    def test_pid_reuse_keeps_only_counters_observed_for_new_process(self):
+        header = ('ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 '
+                  'users:(("x",pid=5,fd=1),("y",pid=6,fd=2))\n')
+        sampler = TrafficSampler()
+        sampler.rates(header + '\t bytes_received:100 bytes_acked:20\n', 1)
+        sampler.rates(header + '\t bytes_received:110\n', 2)
+        sampler.forget_total(5)
+        rates = sampler.rates(header + '\t bytes_received:120 bytes_acked:30\n', 3)
+        self.assertEqual(rates[5], (80.0, 0.0))
+        self.assertEqual(rates[6], (80.0, 40.0))
+        self.assertEqual(sampler.totals[5], (10, 0))
+
     def test_expired_socket_baseline_is_not_reused_on_reappearance(self):
         socket = ('ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 users:(("x",pid=5,fd=1)) sk:a\n'
                   '\t bytes_received:100 bytes_acked:20\n')

@@ -1108,6 +1108,22 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             await app._refresh()
             self.assertNotIn(42, app._sampler.totals)
 
+    async def test_pid_reuse_during_ss_failure_forgets_socket_baselines(self):
+        processes = [ProcessInfo(42, "old", "old", "user", 1, 10)]
+        socket = ('ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 users:(("x",pid=42,fd=1))\n'
+                  '\t bytes_received:100 bytes_acked:20\n')
+        snapshot = [socket]
+        app = BandctlApp(iface="eth0", shaper=FakeShaper(), processes=lambda: list(processes),
+                         link_bps=100_000_000, is_root=True)
+        with patch("bandctl.app.read_ss", side_effect=lambda: snapshot[0]):
+            async with app.run_test(size=(100, 30)):
+                processes[0] = ProcessInfo(42, "new", "new", "user", 1, 20)
+                snapshot[0] = None
+                await app._refresh()
+                snapshot[0] = socket
+                await app._refresh()
+                self.assertEqual(app._sampler.totals[42], (100, 20))
+
     async def test_narrow_capped_rate_caption_fits(self):
         fake = FakeShaper()
         fake._shares[42] = Share(42, 30, None, 10, "/", "curl")

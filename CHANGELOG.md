@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Discard stale socket baselines when a PID is reused to avoid wrong TCP rates.
+
 - Reuse failed user lookups within a process scan to avoid repeated database calls.
 
 - Test that a CLI client disconnect does not stop the session worker.
