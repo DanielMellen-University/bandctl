@@ -118,6 +118,7 @@ fi
 check_command_destination() {
   local dest=$1 current
   if [ -e "$dest" ] || [ -L "$dest" ]; then
+    [ -L "$dest" ] || die "$dest already exists and is not a bandctl install"
     current=$(readlink -m "$dest" 2>/dev/null || true)
     case "$current" in
       "$PREFIX"/*) ;;

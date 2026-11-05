@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Preserve unrelated command files inside a custom install prefix.
+
 - Reject install prefixes that resolve to protected directories.
 
 - Restore the previous virtual environment when an install fails.

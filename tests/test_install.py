@@ -90,6 +90,26 @@ class ScriptTests(unittest.TestCase):
                 self.assertEqual(existing.read_text(encoding="utf-8"), "keep")
                 self.assertFalse(attempted.exists())
 
+    def test_install_refuses_regular_command_inside_prefix(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prefix, tools = root / "install", root / "tools"
+            bindir = prefix / "bin"
+            bindir.mkdir(parents=True)
+            tools.mkdir()
+            command = bindir / "bandctl"
+            command.write_text("foreign command", encoding="utf-8")
+            attempted = root / "venv-attempted"
+            python = tools / "python3"
+            python.write_text(f"#!/bin/sh\n[ \"$1\" = -c ] && exit 0\ntouch {attempted}\nexit 1\n", encoding="utf-8")
+            python.chmod(0o755)
+            result = _run(["bash", str(INSTALL), "--prefix", str(prefix), "--bindir", str(bindir),
+                           "--skip-deps"], env=_quiet_ps(tools))
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("already exists", result.stderr)
+            self.assertEqual(command.read_text(encoding="utf-8"), "foreign command")
+            self.assertFalse(attempted.exists())
+
     def test_install_rejects_prefix_resolving_to_a_protected_directory(self):
         for alias in ("symlink", "dot", "parent"):
             with self.subTest(alias=alias), tempfile.TemporaryDirectory() as tmp:
