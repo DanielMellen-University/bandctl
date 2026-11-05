@@ -20,6 +20,8 @@ class GroupSettings:
     starts: tuple[int, ...]
 
     def __post_init__(self) -> None:
+        if not self.group.members:
+            raise ValueError(f"group {self.group.name} has no members")
         if len(self.starts) != len(self.group.members) or any(type(value) is not int or value < 0 for value in self.starts):
             raise ValueError("group members need valid process start times")
 

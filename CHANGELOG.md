@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reject empty groups before starting a CLI session for a settings import.
+
 - Test that session lock acquisition failures close their file descriptors.
 
 - Test recovery after recording root qdisc confirmation fails.

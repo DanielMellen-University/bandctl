@@ -84,6 +84,12 @@ class SettingsTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "multiple groups"):
             loads(json.dumps(data))
 
+    def test_rejects_groups_without_members_during_validation(self):
+        data = json.loads(dumps(self.settings()))
+        data["groups"][0]["members"] = []
+        with self.assertRaisesRegex(ValueError, "group .* has no members"):
+            loads(json.dumps(data))
+
 
 class SettingsFileTests(unittest.TestCase):
     def test_import_rejects_fifo_without_waiting_for_a_writer(self):

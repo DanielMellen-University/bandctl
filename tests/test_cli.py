@@ -116,6 +116,25 @@ class LimitInputTests(unittest.TestCase):
 
 
 class WarningTests(unittest.TestCase):
+    def test_import_rejects_empty_group_before_starting_session(self):
+        import tempfile
+        from pathlib import Path
+        from bandctl.__main__ import main
+
+        data = {"version": 1, "interface": "eth0", "down_budget_bps": None,
+                "up_budget_bps": None, "rules": [],
+                "groups": [{"name": "work", "down": 30, "up": None, "members": []}],
+                "boot_id": "12345678-1234-4234-8234-123456789abc"}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            path.write_text(json.dumps(data))
+            stderr = io.StringIO()
+            with patch("os.geteuid", return_value=0), \
+                 patch("bandctl.cli_client.ensure_session") as ensure, contextlib.redirect_stderr(stderr):
+                self.assertEqual(main(["import", str(path)]), 1)
+            ensure.assert_not_called()
+            self.assertIn("group work has no members", stderr.getvalue())
+
     def test_wildcard_option_reaches_cli_session_start(self):
         from bandctl.__main__ import main
         response = {"ok": True, "result": {"pid": 42, "down": 30, "up": None}}
