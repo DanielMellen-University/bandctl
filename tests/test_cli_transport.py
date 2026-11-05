@@ -107,6 +107,29 @@ class TransportTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "invalid request framing"):
             _read_line(connection)
 
+    def test_read_line_enforces_size_and_framing_at_the_limit(self):
+        for fragments, expected in (
+            ([b"abc", b"d\n"], b"abcd"),
+            ([b"ab\n", b""], b"ab"),
+        ):
+            with self.subTest(fragments=fragments):
+                connection = Mock()
+                connection.gettimeout.return_value = None
+                connection.recv.side_effect = fragments
+                self.assertEqual(_read_line(connection, limit=5), expected)
+
+        for fragments, error in (
+            ([b"abcde", b"f"], "too large"),
+            ([b"abcde", b""], "invalid request framing"),
+            ([b"abc\nX"], "invalid request framing"),
+        ):
+            with self.subTest(fragments=fragments):
+                connection = Mock()
+                connection.gettimeout.return_value = None
+                connection.recv.side_effect = fragments
+                with self.assertRaisesRegex(ValueError, error):
+                    _read_line(connection, limit=5)
+
     def test_fragmented_request_is_reassembled(self):
         connection = Mock()
         connection.gettimeout.return_value = None
