@@ -2083,6 +2083,50 @@ class ApplyTests(unittest.TestCase):
         self.assertFalse(any("qdisc del dev eth0" in command for command in _joined(host)))
         self.assertNotIn("nft delete table inet bandctl", _joined(host))
 
+    def test_uncertain_root_and_failed_ingress_cleanup_retry_independently(self):
+        shaper, host = _shaper()
+        host.qdisc = "qdisc cake 0: root refcnt 2\n"
+        host.ifb_exists = True
+        host.fail_substr = "tc qdisc del dev eth0 ingress"
+        host.files["/run/bandctl.json"] = json.dumps({
+            "iface": "eth0", "qdisc": "fq_codel", "root_replaced": True,
+            "root_uncertain": True, "pids": {}, "nft_owned": True,
+            "ifb_owned": True, "ingress_owned": True,
+        })
+
+        shaper.recover()
+
+        self.assertIsNotNone(shaper.recovery_error)
+        state = json.loads(host.files["/run/bandctl.json"])
+        self.assertTrue(state["root_uncertain"])
+        self.assertFalse(state["nft_owned"])
+        self.assertTrue(state["ingress_owned"])
+        self.assertTrue(state["ifb_owned"])
+        self.assertTrue(host.ifb_exists)
+        self.assertFalse(any(" dev eth0 root" in command for command in _joined(host)))
+
+        host.fail_substr = None
+        host.commands.clear()
+        retry = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+        retry.recover()
+        self.assertIn("cannot verify root qdisc", retry.recovery_error)
+        state = json.loads(host.files["/run/bandctl.json"])
+        self.assertTrue(state["root_uncertain"])
+        self.assertFalse(state["ingress_owned"])
+        self.assertFalse(state["ifb_owned"])
+        self.assertFalse(host.ifb_exists)
+        self.assertNotIn("nft delete table inet bandctl", _joined(host))
+        self.assertFalse(any(" dev eth0 root" in command for command in _joined(host)))
+
+        host.qdisc = "qdisc fq_codel 0: root refcnt 2\n"
+        host.commands.clear()
+        final = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+        final.recover()
+        self.assertIsNone(final.recovery_error)
+        self.assertNotIn("/run/bandctl.json", host.files)
+        self.assertNotIn("tc qdisc del dev eth0 ingress", _joined(host))
+        self.assertFalse(any(" dev eth0 root" in command for command in _joined(host)))
+
     def test_uncertain_recovery_without_saved_qdisc_keeps_state_and_cleans_other_resources(self):
         shaper, host = _shaper()
         leaf = "/sys/fs/cgroup/bandctl/bandctl-42"
