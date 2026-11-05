@@ -84,6 +84,9 @@ class LimitInputTests(unittest.TestCase):
         first = ProcessInfo(42, "Firefox", "", "user", 0, 100)
         second = ProcessInfo(43, "firefox-helper", "", "user", 0, 101)
         self.assertEqual(resolve_process("42", [first, second]), first)
+        self.assertEqual(resolve_process("0" * 5000 + "42", [first, second]), first)
+        high = ProcessInfo(2_147_483_647, "high", "", "user", 0, 102)
+        self.assertEqual(resolve_process("2147483647", [high]), high)
         self.assertEqual(resolve_process("firefox", [first, second]), first)
         with self.assertRaisesRegex(ValueError, "no process"):
             resolve_process("fox", [first, second])
@@ -116,6 +119,21 @@ class LimitInputTests(unittest.TestCase):
 
 
 class WarningTests(unittest.TestCase):
+    def test_invalid_numeric_pid_does_not_start_a_session(self):
+        from bandctl.__main__ import main
+
+        for command, target in ((command, target) for command in ("limit", "remove")
+                                for target in ("0", "2147483648", "9" * 5000)):
+            with self.subTest(command=command, length=len(target)), patch("os.geteuid", return_value=0), \
+                 patch("bandctl.cli_client.ensure_session") as ensure, \
+                 patch("bandctl.cli_transport.request", return_value={"ok": False, "error": "worker rejection"}) as request, \
+                 contextlib.redirect_stderr(io.StringIO()) as stderr:
+                args = [command, target] + (["--down", "30"] if command == "limit" else [])
+                self.assertEqual(main(args), 1)
+                self.assertIn("process IDs from 1 to 2147483647", stderr.getvalue())
+                ensure.assert_not_called()
+                request.assert_not_called()
+
     def test_invalid_limit_target_does_not_start_a_session(self):
         from bandctl.__main__ import main
 

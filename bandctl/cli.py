@@ -21,14 +21,26 @@ def list_processes(*, json_output: bool = False, processes=None) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _target_pid(target: str) -> int | None:
+    """Parse a numeric target without accepting a PID outside Linux's range."""
+    raw = target.strip()
+    if not raw:
+        raise ValueError("enter a PID or process name")
+    if not raw.isascii() or not raw.isdigit():
+        return None
+    digits = raw.lstrip("0")
+    if not digits or len(digits) > 10 or int(digits) > 2_147_483_647:
+        raise ValueError("use process IDs from 1 to 2147483647")
+    return int(digits)
+
+
 def resolve_process(target: str, processes):
     """Resolve one PID or exact process name, refusing ambiguity and stale identities."""
     exact_target = target
+    pid = _target_pid(target)
     target = target.strip()
-    if not target:
-        raise ValueError("enter a PID or process name")
-    if target.isascii() and target.isdigit():
-        matches = [proc for proc in processes if proc.pid == int(target)]
+    if pid is not None:
+        matches = [proc for proc in processes if proc.pid == pid]
     else:
         matches = [proc for proc in processes if proc.comm.casefold() == exact_target.casefold()]
         if not matches and target != exact_target:
@@ -68,8 +80,8 @@ def run_command(args) -> int:
     try:
         if os.geteuid() != 0:
             raise ValueError("root is required for this command")
-        if args.command in ("limit", "remove") and not args.target.strip():
-            raise ValueError("enter a PID or process name")
+        if args.command in ("limit", "remove"):
+            _target_pid(args.target)
         if args.command == "limit":
             limit_percentages(args.down, args.up)
             payload = {"command": "limit", "target": args.target, "down": args.down, "up": args.up}

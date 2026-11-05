@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reject invalid numeric PIDs before starting a CLI session.
+
 ## 0.2.5 (2026-11-05)
 
 - Apply automatic rules to reused PIDs after old limits are retired.
