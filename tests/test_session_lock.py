@@ -102,6 +102,47 @@ class MainLockTests(unittest.TestCase):
             self.assertEqual(main([]), 1)
         self.assertIn("cgroup cleanup failed", stderr.getvalue())
 
+    def test_tui_reports_recovery_failure_after_exit(self):
+        import contextlib
+        import io
+        from unittest.mock import patch
+        from bandctl.app import BandctlApp
+        from bandctl.__main__ import main
+
+        app = BandctlApp(is_root=True)
+        stderr = io.StringIO()
+
+        def failed_recovery():
+            app._recovery_error = "recovery failed: bad\nstate\x1b"
+
+        with patch("bandctl.__main__.os.geteuid", return_value=0), \
+             patch("bandctl.__main__.SessionLock"), \
+             patch("bandctl.__main__.BandctlApp", return_value=app), \
+             patch("bandctl.__main__.signal.signal"), patch("bandctl.__main__.atexit.register"), \
+             patch.object(app, "run", side_effect=failed_recovery), contextlib.redirect_stderr(stderr):
+            self.assertEqual(main([]), 1)
+        self.assertIn("recovery failed: bad?state?", stderr.getvalue())
+        self.assertNotIn("\x1b", stderr.getvalue())
+
+    def test_sigterm_preserves_signal_status_and_reports_recovery_failure(self):
+        import contextlib
+        import io
+        from unittest.mock import patch
+        from bandctl.app import BandctlApp
+        from bandctl.__main__ import main
+
+        app = BandctlApp(is_root=True)
+        app._recovery_error = "recovery failed: retry needed"
+        stderr = io.StringIO()
+        with patch("bandctl.__main__.os.geteuid", return_value=0), \
+             patch("bandctl.__main__.SessionLock"), \
+             patch("bandctl.__main__.BandctlApp", return_value=app), \
+             patch("bandctl.__main__.signal.signal") as signal, \
+             patch("bandctl.__main__.atexit.register"), contextlib.redirect_stderr(stderr):
+            with patch.object(app, "run", side_effect=lambda: signal.call_args.args[1](15, None)):
+                self.assertEqual(main([]), 143)
+        self.assertEqual(stderr.getvalue().count("recovery failed: retry needed"), 1)
+
     def test_tui_cleanup_error_replaces_terminal_controls(self):
         import contextlib
         import io

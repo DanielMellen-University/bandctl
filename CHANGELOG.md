@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Report a failed TUI recovery after exit and return a failure status.
+
 - Keep a recovery failure visible when other TUI warnings change.
 
 - Retry TUI recovery even when no default interface is available.

@@ -100,6 +100,11 @@ def main(argv: list[str] | None = None) -> int:
             app.run()
         finally:
             _cleanup(app)
+            recovery_error = getattr(app, "recovery_error", None)
+            if not isinstance(recovery_error, str):
+                recovery_error = None
+            if recovery_error:
+                print(f"bandctl: {terminal_text(recovery_error)}", file=sys.stderr)
             for error in app.cleanup_errors:
                 print(f"bandctl: cleanup failed: {terminal_text(error)}", file=sys.stderr)
     finally:
@@ -107,7 +112,7 @@ def main(argv: list[str] | None = None) -> int:
             lock.release()
     if stop_signum is not None:
         return 128 + stop_signum
-    return 1 if app.cleanup_errors else 0
+    return 1 if recovery_error or app.cleanup_errors else 0
 
 
 def _cleanup(app: BandctlApp) -> None:

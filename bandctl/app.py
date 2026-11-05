@@ -260,6 +260,10 @@ class BandctlApp(App):
         if shaper is not None and self.is_root:
             self.cleanup_errors.extend(shaper.teardown())
 
+    @property
+    def recovery_error(self) -> str | None:
+        return self._recovery_error
+
     def sudo_command(self) -> str:
         # The installed command's argv is `bandctl`. A checkout is `python -m`.
         command = (["sudo", "bandctl"] if Path(sys.argv[0]).name == "bandctl"

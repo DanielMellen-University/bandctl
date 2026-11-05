@@ -316,6 +316,7 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             async with app.run_test(size=(80, 24)):
                 self.assertIn("recovery failed", app._status_text)
                 self.assertIn("forced failure", app._status_text)
+                self.assertEqual(app.recovery_error, recovery.recovery_error)
                 self.assertIn("/run/bandctl.json", host.files)
                 self.assertTrue(app.query_one("#apply", Button).disabled)
                 self.assertTrue(app.query_one("#remove", Button).disabled)
@@ -361,6 +362,7 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             async with app.run_test(size=(80, 24)):
                 self.assertIn("recovery failed", app._status_text)
                 self.assertIn("forced failure", app._status_text)
+                self.assertEqual(app.recovery_error, shaper.recovery_error)
                 self.assertTrue(app.query_one("#apply", Button).disabled)
                 self.assertTrue(app.query_one("#remove", Button).disabled)
 
