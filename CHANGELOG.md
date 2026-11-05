@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.1 (2026-11-05)
+
 - Leave a possibly busy worker running when its startup check times out.
 
 - Let CLI session checks wait for a busy worker.
