@@ -1656,6 +1656,51 @@ class ApplyTests(unittest.TestCase):
         self.assertNotIn("/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs", host.files)
         self.assertIn("/sys/fs/cgroup/bandctl/bandctl-42", host.dirs)
 
+    def test_restore_does_not_move_pid_reused_during_last_cgroup_read(self):
+        for operation in ("remove", "recover"):
+            with self.subTest(operation=operation):
+                shaper, host = _shaper()
+                host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+                shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+                leaf = "/sys/fs/cgroup/bandctl/bandctl-42"
+                host.files[leaf + "/cgroup.procs"] = "42\n"
+                original = "/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs"
+                read = host.read
+                cgroup_reads = 0
+
+                def reuse_after_cgroup_read(path):
+                    nonlocal cgroup_reads
+                    result = read(path)
+                    if path == "/proc/42/cgroup":
+                        cgroup_reads += 1
+                        if cgroup_reads == 2:
+                            host.files["/proc/42/stat"] = "42 (other) S " + "0 " * 18 + "200"
+                    return result
+
+                with patch.object(host, "read", side_effect=reuse_after_cgroup_read):
+                    if operation == "remove":
+                        with self.assertRaisesRegex(ShaperError, "cannot verify pid 42"):
+                            shaper.remove(42)
+                        self.assertIn(42, shaper.shares)
+                    else:
+                        again = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+                        again.recover()
+                        self.assertIn("cannot verify pid 42", again.recovery_error)
+                self.assertNotIn(original, host.files)
+                self.assertEqual(host.files["/proc/42/cgroup"], "0::/bandctl/bandctl-42\n")
+                self.assertIn("/run/bandctl.json", host.files)
+                host.files["/proc/42/cgroup"] = "0::/other.slice\n"
+                host.files[leaf + "/cgroup.procs"] = ""
+                if operation == "remove":
+                    shaper.remove(42)
+                    self.assertNotIn(42, shaper.shares)
+                else:
+                    retry = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+                    retry.recover()
+                    self.assertIsNone(retry.recovery_error)
+                    self.assertNotIn("/run/bandctl.json", host.files)
+                self.assertNotIn(original, host.files)
+
     def test_recover_old_state_checks_cgroup_before_restoring(self):
         shaper, host = _shaper()
         original = "/user.slice/user-1000.slice/session-1.scope"

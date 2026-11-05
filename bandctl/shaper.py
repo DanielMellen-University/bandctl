@@ -704,6 +704,14 @@ class Shaper:
                 raise
             if cgroup != f"/bandctl/bandctl-{share.pid}":
                 return False
+            status = self._process_status(share)
+            if status == "gone":
+                return False
+            if status == "changed":
+                self._check_reused_leaf(share)
+                return False
+            if status != "same":
+                raise ShaperError(f"cannot verify pid {share.pid}")
         self._restore_pid(share.pid, share.original_cgroup)
         return True
 
@@ -817,6 +825,15 @@ class Shaper:
                                     pending_error = str(exc)
                                 raise
                             if cgroup != f"/bandctl/bandctl-{pid}":
+                                continue
+                            try:
+                                current = parse_start_ticks(self.host.read(f"/proc/{pid}/stat"), expected_pid=pid)
+                            except OSError:
+                                current = None
+                            if current != start:
+                                pending_pids.add(pid)
+                                pending_error = f"cannot verify pid {pid}"
+                                notes.append(pending_error)
                                 continue
                         try:
                             self._restore_pid(pid, str(original))

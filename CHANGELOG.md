@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Recheck process identity after the final cgroup read during removal and recovery.
+
 - Recheck process identity after reading its cgroup before applying a limit.
 
 - Test independent cleanup when an uncertain root qdisc cannot be queried.
