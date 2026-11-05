@@ -128,7 +128,8 @@ class WarningTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "settings.json"
             for members, error in (([], "group work has no members"),
-                                   ([{"pid": 42, "start_ticks": 2**64}], "valid process start times")):
+                                   ([{"pid": 42, "start_ticks": 2**64}], "valid process start times"),
+                                   ([{"pid": 2**31, "start_ticks": 100}], "group members must be process IDs")):
                 with self.subTest(members=members):
                     data["groups"][0]["members"] = members
                     path.write_text(json.dumps(data))

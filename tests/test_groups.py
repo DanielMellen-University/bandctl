@@ -20,7 +20,8 @@ class GroupTests(unittest.TestCase):
                 Group("games", down, up)
 
     def test_rejects_invalid_or_duplicate_members(self):
-        for members in ((0,), (-1,), (True,), ("123",), (123, 123)):
+        self.assertEqual(Group("games", 10, 20, (2**31 - 1,)).members, (2**31 - 1,))
+        for members in ((0,), (-1,), (True,), ("123",), (123, 123), (2**31,)):
             with self.subTest(members=members), self.assertRaises(ValueError):
                 Group("games", 10, 20, members)
 

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reject group PIDs outside the range supported by recovery.
+
 - Reject group start times outside the supported process counter range.
 
 - Reject empty groups before starting a CLI session for a settings import.

@@ -30,8 +30,8 @@ class Group:
             if value is not None and (type(value) is not int or not 1 <= value <= 100):
                 raise ValueError("percent must be from 1 to 100")
         members = tuple(self.members)
-        if any(type(pid) is not int or pid <= 0 for pid in members):
-            raise ValueError("group members must be positive process IDs")
+        if any(type(pid) is not int or not 1 <= pid <= 2_147_483_647 for pid in members):
+            raise ValueError("group members must be process IDs from 1 to 2147483647")
         if len(set(members)) != len(members):
             raise ValueError("a process cannot appear twice in a group")
         object.__setattr__(self, "name", name)
