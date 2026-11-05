@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Test independent cleanup when an uncertain root qdisc cannot be queried.
+
 - Discard stale socket baselines when a PID is reused to avoid wrong TCP rates.
 
 - Reuse failed user lookups within a process scan to avoid repeated database calls.
