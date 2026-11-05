@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep socket filters when a socket table has an invalid state field.
+
 - Treat malformed link speeds as unknown instead of using an incorrect capacity.
 
 - Keep cgroup recovery state when a leaf contains malformed process IDs.

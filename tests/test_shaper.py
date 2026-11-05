@@ -2326,6 +2326,7 @@ class ApplyTests(unittest.TestCase):
         for damaged in ("", "not a socket table\n", "sl local_address inode\n", header.replace("tx_queue", "bad_queue"),
                         header.rstrip("\n"), header + "0: truncated\n",
                         header + "0: 0800000A:9C40 04030201:01BB 01 0 0 0 0 0 99",
+                        header + "0: 0800000A:9C41 04030201:01BB invalid 0 0 0 0 0 99\n",
                         header + "0: invalid:0050 04030201:01BB 01 0 0 0 0 0 99\n",
                         header + "0: 0800000A:9C4 04030201:01BB 01 0 0 0 0 0 99\n",
                         header + "0: 0800000A:0000 04030201:01BB 01 0 0 0 0 0 99\n",

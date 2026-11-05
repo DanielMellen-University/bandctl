@@ -109,6 +109,8 @@ def parse_proc_net(text: str, proto: str, family: str, *, strict: bool = False,
             if strict:
                 raise ValueError("invalid socket table row")
             continue
+        if strict and not re.fullmatch(r"[0-9a-fA-F]{2}", parts[3]):
+            raise ValueError("invalid socket table state")
         try:
             local_ip, local_port, local_family = _decode_endpoint(parts[1], family)
             remote_ip, remote_port, remote_family = _decode_endpoint(parts[2], family)
