@@ -7,3 +7,11 @@ venv/
 dist/
 build/
 .mypy_cache/
+
+# Local agent and session files
+AGENTS.md
+.agents/
+CURRENT_CHUNK*
+*prompt*.txt
+*.jsonl
+session*.log
