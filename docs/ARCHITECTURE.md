@@ -145,6 +145,8 @@ The on-screen rate is each socket's counter delta times 8, divided by its sample
 
 Read-only qdisc, class counter, and IFB queries time out after two seconds. Commands that change kernel state have no such timeout because a timed-out change could already have taken effect.
 
+Before replacing a root qdisc, recovery state records the intended replacement. If the command fails and a follow-up query confirms the original qdisc kind is still present, the state clears that ownership flag. An inconclusive query leaves the flag in place.
+
 `traffic.parse_ss_sockets` can identify individual TCP sockets by the `ss` socket cookie, then inode, then endpoint pair. This keeps counters for separate sockets distinct. Shared sockets are attributed to each listed process.
 
 The sampler accumulates observed socket deltas per PID. Live processes keep their totals while idle; totals for processes absent from scans expire after five minutes. When a scanned PID has a new start time, the app clears its previous total.

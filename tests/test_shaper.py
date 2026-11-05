@@ -1694,6 +1694,48 @@ class ApplyTests(unittest.TestCase):
         self.assertTrue(recorded[0]["root_replaced"])
         self.assertEqual(recorded[0]["qdisc"], "fq_codel")
 
+    def test_failed_root_replace_does_not_leave_stale_recovery_ownership(self):
+        shaper, host = _shaper()
+        run = host.run
+
+        def fail_replace(args, input_text=None):
+            if args[:4] == ["tc", "qdisc", "replace", "dev"] and args[4] == "eth0":
+                raise ShaperError("replacement failed")
+            return run(args, input_text)
+
+        with patch.object(host, "run", side_effect=fail_replace):
+            with self.assertRaisesRegex(ShaperError, "replacement failed"):
+                shaper.apply(42, None, 10, None, 100_000_000)
+        self.assertFalse(json.loads(host.files["/run/bandctl.json"])["root_replaced"])
+        host.commands.clear()
+        retry = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+        retry.recover()
+        self.assertIsNone(retry.recovery_error)
+        self.assertFalse(any("qdisc del dev eth0 root" in command for command in _joined(host)))
+
+    def test_failed_root_replace_keeps_ownership_when_qdisc_cannot_be_confirmed(self):
+        for changed in (False, True):
+            with self.subTest(changed=changed):
+                shaper, host = _shaper()
+                run = host.run
+                failed = False
+
+                def fail_replace_and_probe(args, input_text=None):
+                    nonlocal failed
+                    if args[:4] == ["tc", "qdisc", "replace", "dev"] and args[4] == "eth0":
+                        failed = True
+                        if changed:
+                            host.qdisc = "qdisc cake 0: root refcnt 2\n"
+                        raise ShaperError("replacement failed")
+                    if failed and not changed and args[:3] == ["tc", "qdisc", "show"]:
+                        raise ShaperError("query failed")
+                    return run(args, input_text)
+
+                with patch.object(host, "run", side_effect=fail_replace_and_probe):
+                    with self.assertRaisesRegex(ShaperError, "replacement failed"):
+                        shaper.apply(42, None, 10, None, 100_000_000)
+                self.assertTrue(json.loads(host.files["/run/bandctl.json"])["root_replaced"])
+
     def test_recover_older_state_restores_saved_root_qdisc(self):
         shaper, host = _shaper()
         host.files["/run/bandctl.json"] = json.dumps({"iface": "eth0", "qdisc": "fq", "pids": {}})

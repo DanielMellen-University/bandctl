@@ -1083,9 +1083,21 @@ class Shaper:
             self._saved_qdisc = current if current in SAFE_QDISCS else "fq_codel"
         # Recovery must know the original qdisc before it may be replaced.
         self._write_state(root_replaced=True, required=True)
-        self._run(
-            ["tc", "qdisc", "replace", "dev", self.iface, "root", "handle", "1:", "htb", "default", "999"]
-        )
+        try:
+            self._run(
+                ["tc", "qdisc", "replace", "dev", self.iface, "root", "handle", "1:", "htb", "default", "999"]
+            )
+        except ShaperError as replace_error:
+            try:
+                observed = self._root_kind(self.iface)
+            except ShaperError:
+                observed = None
+            if observed == current:
+                try:
+                    self._record_recovery_fields(root_replaced=False)
+                except ShaperError as state_error:
+                    raise ShaperError(f"{replace_error}; cannot update recovery state: {state_error}") from replace_error
+            raise
         self._egress = True
 
     def _ensure_ifb(self) -> None:

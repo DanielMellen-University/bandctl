@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Clear stale root qdisc ownership after a failed replacement when the original is confirmed.
+
 - Keep the download setup error when its cleanup also fails.
 
 - Bound read-only network queries so a stalled command cannot block a session indefinitely.
