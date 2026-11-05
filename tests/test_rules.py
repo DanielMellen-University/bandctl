@@ -67,6 +67,18 @@ class RuleTests(unittest.TestCase):
         tracker.candidates([], [rule], set(), 400)
         self.assertEqual(tracker.candidates([proc], [rule], set(), 401), [(proc, rule)])
 
+    def test_manual_removal_survives_unreadable_start_time(self):
+        tracker = RuleTracker()
+        rule = AutoRule("steam", None, 10)
+        proc = ProcessInfo(42, "steam", "steam", "user", 1, 100)
+        unknown = ProcessInfo(42, "steam", "steam", "user", 1, None)
+        tracker.candidates([proc], [rule], set(), 1)
+        tracker.applied(proc)
+        self.assertEqual(tracker.candidates([unknown], [rule], set(), 302), [])
+        self.assertEqual(tracker.candidates([proc], [rule], set(), 303), [])
+        replacement = ProcessInfo(42, "steam", "steam", "user", 1, 200)
+        self.assertEqual(tracker.candidates([replacement], [rule], set(), 304), [(replacement, rule)])
+
     def test_scheduled_ownership_expires_and_preserves_manual_changes(self):
         owner = ScheduledOwnership()
         rule = AutoRule("steam", 30, None, DailyWindow(time(9), time(17)))

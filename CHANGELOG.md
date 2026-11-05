@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Preserve manual rule overrides while a visible process has an unreadable start time.
+
 - Leave a starting CLI worker running after a startup deadline to protect concurrent requests.
 
 ## 0.2.2 (2026-11-05)

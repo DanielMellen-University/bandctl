@@ -58,8 +58,10 @@ class RuleTracker:
         current: time | None = None,
     ) -> list[tuple[ProcessInfo, AutoRule]]:
         found = []
+        unknown_pids: set[int] = set()
         for proc in processes:
             if proc.start_ticks is None:
+                unknown_pids.add(proc.pid)
                 continue
             key = (proc.pid, proc.start_ticks)
             self._last_seen[key] = now
@@ -71,6 +73,9 @@ class RuleTracker:
             if key not in self._handled and now >= self._retry_at.get(key, 0):
                 found.append((proc, rule))
         for key, seen in list(self._last_seen.items()):
+            if key[0] in unknown_pids:
+                self._last_seen[key] = now
+                continue
             if now - seen > 300:
                 self._last_seen.pop(key, None)
                 self._handled.discard(key)
