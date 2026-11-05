@@ -954,6 +954,8 @@ class Shaper:
             raise ShaperError(f"cannot verify pid {share.pid} before moving it")
         if self._read_cgroup(share.pid) != share.original_cgroup:
             raise ShaperError(f"cgroup for pid {share.pid} changed before moving it")
+        if share.start_ticks is not None and self._process_status(share) != "same":
+            raise ShaperError(f"cannot verify pid {share.pid} before moving it")
         self.host.write(f"{leaf}/cgroup.procs", f"{share.pid}\n")
 
     def _check_leaf_empty(self, pid: int) -> None:

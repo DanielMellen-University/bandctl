@@ -3200,6 +3200,28 @@ class CleanupTests(unittest.TestCase):
         self.assertEqual(host.files["/proc/42/cgroup"], "0::/new.slice\n")
         self.assertNotIn(42, shaper.shares)
 
+    def test_apply_refuses_pid_reused_during_last_cgroup_read(self):
+        shaper, host = _shaper()
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        read = host.read
+        cgroup_reads = 0
+        leaf = "/sys/fs/cgroup/bandctl/bandctl-42"
+
+        def reuse_after_cgroup_read(path):
+            nonlocal cgroup_reads
+            result = read(path)
+            if path == "/proc/42/cgroup":
+                cgroup_reads += 1
+                if cgroup_reads == 2:
+                    host.files["/proc/42/stat"] = "42 (other) S " + "0 " * 18 + "200"
+            return result
+
+        with patch.object(host, "read", side_effect=reuse_after_cgroup_read):
+            with self.assertRaisesRegex(ShaperError, "cannot verify pid 42"):
+                shaper.apply(42, 10, None, 100_000_000, None, expected_start_ticks=100)
+        self.assertNotIn(leaf + "/cgroup.procs", host.files)
+        self.assertNotIn(42, shaper.shares)
+
     def test_refuses_to_move_process_without_recovery_state(self):
         shaper, host = _shaper()
         original_write = host.write

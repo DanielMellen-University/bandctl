@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Recheck process identity after reading its cgroup before applying a limit.
+
 - Test independent cleanup when an uncertain root qdisc cannot be queried.
 
 - Discard stale socket baselines when a PID is reused to avoid wrong TCP rates.
