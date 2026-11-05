@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Ignore delayed highlights that no longer match the table cursor.
+
 - Clear pending share edits when the selected process changes or its PID is reused.
 
 - Keep socket filters when a socket descriptor has malformed brackets.

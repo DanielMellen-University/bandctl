@@ -635,6 +635,42 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(BandctlApp, "screen_stack", new_callable=PropertyMock, return_value=[]):
             app.on_data_table_row_highlighted(event)
 
+    async def test_late_highlight_for_removed_row_does_not_change_selection(self):
+        processes = [ProcessInfo(42, "old", "old", "user", 1, 10)]
+        app = BandctlApp(iface="eth0", shaper=FakeShaper(), processes=lambda: list(processes),
+                         link_bps=100_000_000, is_root=True, rates=lambda: {42: (5_000_000, 0)})
+        async with app.run_test(size=(100, 30)) as pilot:
+            app._show_all = True
+            await pilot.pause()
+            processes[0] = ProcessInfo(43, "new", "new", "user", 1, 20)
+            await app._refresh()
+            self.assertEqual(app._selected, 43)
+            down = app.query_one("#down-pct", Input)
+            down.value = "30"
+            event = SimpleNamespace(data_table=app.query_one("#procs", DataTable),
+                                    row_key=SimpleNamespace(value="42"))
+            app.on_data_table_row_highlighted(event)
+            self.assertEqual(app._selected, 43)
+            self.assertEqual(down.value, "30")
+
+    async def test_late_highlight_for_visible_row_does_not_revert_cursor(self):
+        app = _app(FakeShaper())
+        async with app.run_test(size=(100, 30)) as pilot:
+            app._show_all = True
+            app._render()
+            await pilot.pause()
+            table = app.query_one("#procs", DataTable)
+            table.move_cursor(row=table.get_row_index("7"), animate=False)
+            current = SimpleNamespace(data_table=table, row_key=SimpleNamespace(value="7"))
+            app.on_data_table_row_highlighted(current)
+            self.assertEqual(app._selected, 7)
+            down = app.query_one("#down-pct", Input)
+            down.value = "30"
+            old = SimpleNamespace(data_table=table, row_key=SimpleNamespace(value="42"))
+            app.on_data_table_row_highlighted(old)
+            self.assertEqual(app._selected, 7)
+            self.assertEqual(down.value, "30")
+
     async def test_repeated_manual_refresh_does_not_cancel_active_rule_work(self):
         import asyncio
 
@@ -1149,8 +1185,9 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             down.focus()
             await pilot.pause()
             self.assertIs(app.focused, down)
-            event = SimpleNamespace(data_table=app.query_one("#procs", DataTable),
-                                    row_key=SimpleNamespace(value="7"))
+            table = app.query_one("#procs", DataTable)
+            table.move_cursor(row=table.get_row_index("7"), animate=False)
+            event = SimpleNamespace(data_table=table, row_key=SimpleNamespace(value="7"))
             app.on_data_table_row_highlighted(event)
             self.assertEqual(app._selected, 7)
             self.assertEqual((down.value, up.value), ("", ""))

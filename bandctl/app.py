@@ -330,6 +330,9 @@ class BandctlApp(App):
             pid = int(str(event.row_key.value))
         except (TypeError, ValueError):
             return
+        cursor_row = event.data_table.cursor_row
+        if not 0 <= cursor_row < len(self._shown) or self._shown[cursor_row] != pid:
+            return
         previous = self._selected
         self._selected = pid
         self._fill_inputs(pid, force=previous != pid)
