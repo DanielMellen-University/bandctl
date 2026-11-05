@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Leave a possibly busy CLI worker running after an uncertain startup check.
+
 - Recheck process identity after the final cgroup read during removal and recovery.
 
 - Recheck process identity after reading its cgroup before applying a limit.
