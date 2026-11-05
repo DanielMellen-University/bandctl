@@ -90,6 +90,29 @@ class ScriptTests(unittest.TestCase):
                 self.assertEqual(existing.read_text(encoding="utf-8"), "keep")
                 self.assertFalse(attempted.exists())
 
+    def test_install_rejects_prefix_resolving_to_a_protected_directory(self):
+        for alias in ("symlink", "dot", "parent"):
+            with self.subTest(alias=alias), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                link, bindir, tools = root / "prefix", root / "bin", root / "tools"
+                link.symlink_to("/tmp", target_is_directory=True)
+                prefix = {"symlink": str(link), "dot": "/tmp/.", "parent": f"{root}/.."}[alias]
+                bindir.mkdir()
+                tools.mkdir()
+                env = _quiet_ps(tools)
+                attempted = root / "mkdir-attempted"
+                mkdir = tools / "mkdir"
+                mkdir.write_text(f"#!/bin/sh\ntouch {attempted}\nexit 1\n", encoding="utf-8")
+                mkdir.chmod(0o755)
+                python = tools / "python3"
+                python.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+                python.chmod(0o755)
+                result = _run(["bash", str(INSTALL), "--prefix", prefix, "--bindir", str(bindir),
+                               "--skip-deps"], env=env)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("refusing", result.stderr)
+                self.assertFalse(attempted.exists())
+
     def test_install_allows_its_dangling_command_link_before_rebuilding_venv(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

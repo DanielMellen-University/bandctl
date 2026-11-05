@@ -94,6 +94,12 @@ esac
 case "$PREFIX$BINDIR" in
   *[!A-Za-z0-9._/-]*) die "prefix and bindir may only use letters, numbers, and ._/-" ;;
 esac
+resolved_prefix=$(readlink -m -- "$PREFIX") || die "cannot resolve prefix $PREFIX"
+case "$resolved_prefix" in
+  /|/usr|/usr/bin|/usr/local|/usr/local/bin|/opt|/bin|/sbin|/etc|/home|/root|/tmp|/var)
+    die "refusing to install into $resolved_prefix"
+    ;;
+esac
 
 if [ "$(id -u)" -ne 0 ] && { [ "$PREFIX" = /opt/bandctl ] || [ "$BINDIR" = /usr/local/bin ]; }; then
   exec sudo "$0" "${ORIG_ARGS[@]}"

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reject install prefixes that resolve to protected directories.
+
 - Restore the previous virtual environment when an install fails.
 
 - Refuse symlinks at the uninstall wrapper before changing an install.
