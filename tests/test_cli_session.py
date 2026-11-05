@@ -171,6 +171,39 @@ class CliSessionTests(unittest.TestCase):
         self.session.refresh(now=2, current=time(10))
         self.assertFalse(self.shaper.shares)
 
+    def test_slow_rule_failures_wait_from_failure_before_retry(self):
+        from datetime import time
+        from types import SimpleNamespace
+        from unittest.mock import Mock, patch
+        from bandctl.schedule import DailyWindow
+
+        for operation in ("apply", "remove"):
+            with self.subTest(operation=operation):
+                shaper = Mock()
+                shaper.match_wildcard = False
+                shaper.flow_warning = None
+                shaper.shares = {}
+                proc = ProcessInfo(42, "firefox", "firefox", "user", 0, 100)
+                session = CliSession(shaper, "eth0", 100_000_000, lambda: [proc])
+                if operation == "apply":
+                    session.rules = [AutoRule("firefox", 20, None)]
+                    attempted = shaper.apply_tracked
+                else:
+                    rule = AutoRule("firefox", 20, None, DailyWindow(time(9), time(17)))
+                    session.rules = [rule]
+                    session._scheduled.applied(proc, rule, 7)
+                    shaper.shares = {42: SimpleNamespace(down_pct=20, up_pct=None, revision=7)}
+                    attempted = shaper.remove
+                attempted.side_effect = ShaperError("operation failed")
+                with patch("bandctl.cli_session.time.monotonic", return_value=20):
+                    session.refresh(now=1, current=time(18))
+                with patch("bandctl.cli_session.time.monotonic", return_value=21):
+                    session.refresh(now=21, current=time(18))
+                self.assertEqual(attempted.call_count, 1)
+                with patch("bandctl.cli_session.time.monotonic", return_value=35):
+                    session.refresh(now=35, current=time(18))
+                self.assertEqual(attempted.call_count, 2)
+
     def test_settings_are_committed_only_after_import_succeeds(self):
         self.session.rules = [AutoRule("old", 10, None)]
         with tempfile.TemporaryDirectory() as directory:

@@ -102,7 +102,7 @@ class CliSession:
             try:
                 self.shaper.remove(proc.pid, expected_revision=revision)
             except (ShaperError, OSError) as exc:
-                self._scheduled.failed(proc, now)
+                self._scheduled.failed(proc, time.monotonic())
                 messages.append(f"scheduled limit for pid {proc.pid}: {exc}")
             else:
                 self._scheduled.forget(proc)
@@ -116,7 +116,7 @@ class CliSession:
                     expected_start_ticks=proc.start_ticks, only_if_unlimited=True,
                 )
             except (ShaperError, OSError) as exc:
-                self._tracker.failed(proc, now)
+                self._tracker.failed(proc, time.monotonic())
                 messages.append(f"auto rule for pid {proc.pid}: {exc}")
             else:
                 self._tracker.applied(proc)
