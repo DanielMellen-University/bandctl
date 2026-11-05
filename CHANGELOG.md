@@ -1,14 +1,29 @@
 # Changelog
 
-## Unreleased
+## 1.0.0 (2026-11-05)
+
+First stable release. bandctl now does everything it set out to do: separate download and upload caps per process, live rate graphs and session totals, auto-apply rules with daily windows, shared group limits, search, JSON settings import and export, and a non-interactive CLI that drives a background session. Since 0.2.0, the work has been about making it safe to run as root on a real machine, and this release closes that out.
+
+Highlights:
+
+- One shaping session at a time, shared by the TUI and the CLI, with crash recovery from `/run/bandctl.json`.
+- Every process move, qdisc replacement, and cleanup step checks process identity and cgroup membership first, so a reused PID or a process moved by another manager is left alone.
+- If bandctl cannot confirm it owns the root qdisc, it leaves it untouched and still cleans up everything else it created.
+- Truncated or malformed output from `ip`, `tc`, `ss`, `/proc`, and cgroup files is rejected instead of half-parsed, and counter baselines are kept.
+- Control characters and invalid Unicode in process names, paths, and errors are made safe before they reach the terminal.
+- 633 unit tests, all runnable without root.
+
+Changes since 0.2.5:
 
 - Refuse to reuse a cgroup when its process list is malformed.
-
-- Keep class counter baselines when tc output is truncated.
-
-- Fall back when ip route output is truncated to avoid selecting a partial interface name.
-
+- Keep class counter baselines when `tc` output is truncated.
+- Fall back when `ip route` output is truncated to avoid selecting a partial interface name.
 - Reject invalid numeric PIDs before starting a CLI session.
+- Rewrote the README as a short overview with features, quick start, how it works, requirements, and limitations.
+- Reorganized the usage and architecture docs and moved the full key and layout tables into the usage guide.
+- Regenerated every screenshot headlessly with the new `tools/screenshots.py`.
+
+Known limitations, by design for this release: limits last only while bandctl runs, rates and totals count TCP only, and setting limits needs root.
 
 ## 0.2.5 (2026-11-05)
 
