@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep socket filters when a socket descriptor has malformed brackets.
+
 - Keep recovery state when a qdisc query is truncated or reports multiple roots.
 
 - Keep an active refresh running when another manual refresh is requested.

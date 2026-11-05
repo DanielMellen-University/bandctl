@@ -2420,9 +2420,24 @@ class ApplyTests(unittest.TestCase):
                 self.assertIsNone(shaper.flow_warning)
                 self.assertEqual(shaper._flows, {})
 
+    def test_non_socket_descriptors_do_not_interrupt_socket_scan(self):
+        shaper, host = _shaper()
+        _open_socket(host)
+        host.links.update({
+            "/proc/42/fd/4": "pipe:[111]",
+            "/proc/42/fd/5": "anon_inode:[eventfd]",
+            "/proc/42/fd/6": "/tmp/socket:settings",
+        })
+        shaper.apply(42, None, 10, None, 100_000_000)
+        existing = dict(shaper._flows)
+        self.assertTrue(existing)
+        shaper.sample()
+        self.assertIsNone(shaper.flow_warning)
+        self.assertEqual(shaper._flows, existing)
+
     def test_malformed_socket_descriptor_keeps_filters_until_retry(self):
-        for target in ("socket:[", "socket:[99", "socket:[099]", "socket:[x]",
-                       "socket:[18446744073709551616]"):
+        for target in ("socket:", "socket:99", "socket:99]", "socket:[", "socket:[99",
+                       "socket:[099]", "socket:[x]", "socket:[18446744073709551616]"):
             with self.subTest(target=target):
                 shaper, host = _shaper()
                 _open_socket(host)

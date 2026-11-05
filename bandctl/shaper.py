@@ -1619,10 +1619,10 @@ class Shaper:
                 continue
             except OSError as exc:
                 raise ShaperError(f"cannot read {fd_dir}/{name}: {exc}") from exc
-            if not target.startswith("socket:["):
+            if not target.startswith("socket:"):
                 continue
             inode = target[len("socket:[") : -1]
-            if not target.endswith("]") or not valid_socket_inode(inode):
+            if not target.startswith("socket:[") or not target.endswith("]") or not valid_socket_inode(inode):
                 raise ShaperError(f"invalid socket descriptor {fd_dir}/{name}")
             flow = net.get(inode)
             if flow is None or inode in seen:
