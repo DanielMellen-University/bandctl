@@ -2472,6 +2472,26 @@ class CleanupTests(unittest.TestCase):
         self.assertEqual(shaper._remove_tree(), [])
         self.assertNotIn("/sys/fs/cgroup/cgroup.procs", host.files)
 
+    def test_leaf_cleanup_does_not_move_a_reused_pid(self):
+        shaper, host = _shaper()
+        leaf = "/sys/fs/cgroup/bandctl/bandctl-42"
+        host.dirs.update({"/sys/fs/cgroup/bandctl", leaf})
+        host.files[leaf + "/cgroup.procs"] = "43\n"
+        host.files["/proc/43/cgroup"] = "0::/bandctl/bandctl-42\n"
+        read = host.read
+        starts = iter((100, 200))
+
+        def changing_identity(path):
+            if path == "/proc/43/stat":
+                return "43 (child) S " + "0 " * 18 + str(next(starts))
+            return read(path)
+
+        with patch.object(host, "read", side_effect=changing_identity):
+            errors = shaper._remove_tree()
+        self.assertTrue(any("cannot verify pid 43" in error for error in errors))
+        self.assertIn(leaf, host.dirs)
+        self.assertNotIn("/sys/fs/cgroup/cgroup.procs", host.files)
+
     def test_leaf_cleanup_keeps_a_leaf_when_process_cgroup_is_unreadable(self):
         shaper, host = _shaper()
         leaf = "/sys/fs/cgroup/bandctl/bandctl-42"
@@ -2511,6 +2531,26 @@ class CleanupTests(unittest.TestCase):
         self.assertEqual(host.files["/sys/fs/cgroup/cgroup.procs"], "43\n")
         self.assertNotIn("/run/bandctl.json", host.files)
 
+    def test_leaf_cleanup_retries_when_child_identity_is_unreadable(self):
+        shaper, host = _shaper()
+        shaper.apply(42, None, 10, None, 100_000_000)
+        leaf = "/sys/fs/cgroup/bandctl/bandctl-42"
+        host.files[leaf + "/cgroup.procs"] = "43\n"
+        host.files["/proc/43/cgroup"] = "0::/bandctl/bandctl-42\n"
+        host.files["/proc/43/stat"] = "malformed"
+
+        notes = shaper.teardown()
+        self.assertTrue(any("cannot verify pid 43" in note for note in notes))
+        self.assertIn("/run/bandctl.json", host.files)
+        self.assertNotIn("/sys/fs/cgroup/cgroup.procs", host.files)
+
+        host.files["/proc/43/stat"] = "43 (child) S " + "0 " * 18 + "100"
+        retry = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+        retry.recover()
+        self.assertIsNone(retry.recovery_error)
+        self.assertEqual(host.files["/sys/fs/cgroup/cgroup.procs"], "43\n")
+        self.assertNotIn("/run/bandctl.json", host.files)
+
     def test_leaf_cleanup_skips_a_process_that_exited_after_the_listing(self):
         shaper, host = _shaper()
         leaf = "/sys/fs/cgroup/bandctl/bandctl-42"
@@ -2527,6 +2567,7 @@ class CleanupTests(unittest.TestCase):
         leaf = "/sys/fs/cgroup/bandctl/bandctl-42"
         host.files[leaf + "/cgroup.procs"] = "43\n"
         host.files["/proc/43/cgroup"] = "0::/bandctl/bandctl-42\n"
+        host.files["/proc/43/stat"] = "43 (child) S " + "0 " * 18 + "100"
         rmdir = host.rmdir
         write = host.write
 
@@ -2554,6 +2595,7 @@ class CleanupTests(unittest.TestCase):
         leaf = "/sys/fs/cgroup/bandctl/bandctl-42/cgroup.procs"
         host.files[leaf] = "43\n"  # A child inherited the leaf cgroup.
         host.files["/proc/43/cgroup"] = "0::/bandctl/bandctl-42\n"
+        host.files["/proc/43/stat"] = "43 (child) S " + "0 " * 18 + "100"
         root = "/sys/fs/cgroup/cgroup.procs"
         write = host.write
 

@@ -998,6 +998,20 @@ class Shaper:
                         raise
                     if cgroup != f"/bandctl/{name}":
                         continue
+                    try:
+                        start = parse_start_ticks(self.host.read(f"/proc/{pid}/stat"), expected_pid=pid)
+                        cgroup = self._read_cgroup(pid)
+                        current = parse_start_ticks(self.host.read(f"/proc/{pid}/stat"), expected_pid=pid)
+                    except FileNotFoundError as exc:
+                        if not self._pid_alive(pid):
+                            continue
+                        raise ShaperError(f"cannot verify pid {pid}") from exc
+                    except OSError as exc:
+                        raise ShaperError(f"cannot verify pid {pid}") from exc
+                    if start is None or current != start:
+                        raise ShaperError(f"cannot verify pid {pid}")
+                    if cgroup != f"/bandctl/{name}":
+                        continue
                     self._restore_pid(pid, "/")
                 except (ShaperError, ValueError) as exc:
                     errors.append(f"cannot clean {leaf}: {exc}")

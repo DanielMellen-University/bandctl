@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Verify inherited process identities before moving them during cgroup cleanup.
+
 - Reuse successful user lookups within each process scan.
 
 - Treat link speeds outside the supported capacity range as unknown.
