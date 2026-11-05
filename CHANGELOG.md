@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Test that TCP rates and totals resume after individual counters reset.
+
 - Test retries when an uncertain root qdisc has no saved original.
 
 - Keep uncertain root qdisc recovery state when the saved original is missing.

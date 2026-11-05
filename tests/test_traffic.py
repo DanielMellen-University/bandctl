@@ -184,6 +184,16 @@ class ParseTests(unittest.TestCase):
         sampler.rates(before, 1.0)
         self.assertEqual(sampler.rates(after, 2.0)[5], (0.0, 0.0))
 
+    def test_counters_resume_from_their_new_values_after_a_reset(self):
+        header = 'ESTAB 0 0 10.0.0.2:1 1.1.1.1:1 users:(("x",pid=5,fd=1)) sk:a\n'
+        sampler = TrafficSampler()
+        sampler.rates(header + '\t bytes_received:1000 bytes_acked:500\n', 1)
+        self.assertEqual(sampler.rates(header + '\t bytes_received:1010 bytes_acked:510\n', 2)[5], (80.0, 80.0))
+        self.assertEqual(sampler.rates(header + '\t bytes_received:5 bytes_acked:520\n', 3)[5], (0.0, 80.0))
+        self.assertEqual(sampler.rates(header + '\t bytes_received:15 bytes_acked:3\n', 4)[5], (80.0, 0.0))
+        self.assertEqual(sampler.rates(header + '\t bytes_received:25 bytes_acked:13\n', 5)[5], (80.0, 80.0))
+        self.assertEqual(sampler.totals[5], (30, 30))
+
     def test_missing_socket_counters_do_not_recount_previous_traffic(self):
         header = 'ESTAB 0 0 10.0.0.2:1 1.1.1.1:1 users:(("x",pid=5,fd=1)) sk:a\n'
         sampler = TrafficSampler()
