@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Clean other owned resources while an unconfirmed root qdisc remains untouched.
+
 - Leave an unconfirmed root qdisc untouched during recovery.
 
 - Keep recovery state when a failed root qdisc replacement cannot be verified.

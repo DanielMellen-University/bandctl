@@ -758,17 +758,18 @@ class Shaper:
                     self._torn = True
                     self.recovery_error = "invalid recovery state: invalid start_ticks"
                     return [self.recovery_error]
+            root_error: str | None = None
             if state and state.get("root_uncertain"):
                 try:
                     if self._root_kind(state["iface"]) != state.get("qdisc", "fq_codel"):
                         raise ShaperError("cannot verify root qdisc after failed replacement")
                     self._record_recovery_fields(root_replaced=False, root_uncertain=False)
                 except ShaperError as exc:
-                    self._torn = True
-                    self.recovery_error = f"recovery failed: {exc}"
-                    return [self.recovery_error]
-                state["root_replaced"] = False
-                state["root_uncertain"] = False
+                    root_error = str(exc)
+                    notes.append(root_error)
+                else:
+                    state["root_replaced"] = False
+                    state["root_uncertain"] = False
             pending_pids: set[int] = set()
             pending_error: str | None = None
             if state and state.get("iface"):
@@ -810,7 +811,7 @@ class Shaper:
                     except (ShaperError, ValueError) as exc:
                         notes.append(str(exc))
                 self._saved_qdisc = qdisc
-                restore_root = bool(state.get("root_replaced", True))
+                restore_root = bool(state.get("root_replaced", True)) and root_error is None
                 self._egress = restore_root
                 ifb_owned = state.get("ifb_owned") if "ifb_owned" in state else None
                 ingress_owned = state.get("ingress_owned") if "ingress_owned" in state else None
@@ -825,9 +826,9 @@ class Shaper:
             self._shares.clear()
             self._classes.clear()
             self._filters.clear()
-            if pending_pids or tree_errors or self._egress or self._ifb_owned or self._ingress_owned or self._nft_cleanup_error:
+            if root_error or pending_pids or tree_errors or self._egress or self._ifb_owned or self._ingress_owned or self._nft_cleanup_error:
                 self._torn = True
-                self.recovery_error = f"recovery failed: {self._ifb_cleanup_error or self._nft_cleanup_error or pending_error or (tree_errors[0] if tree_errors else notes[-1])}"
+                self.recovery_error = f"recovery failed: {self._ifb_cleanup_error or self._nft_cleanup_error or pending_error or (tree_errors[0] if tree_errors else None) or root_error or notes[-1]}"
             else:
                 try:
                     self._unlink_state()
