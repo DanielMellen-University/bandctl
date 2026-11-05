@@ -108,7 +108,10 @@ class CliSession:
                 self._scheduled.forget(proc)
                 self._tracker.released(proc)
                 messages.append(f"schedule ended for pid {proc.pid}")
-        candidates = self._tracker.candidates(processes, self.rules, set(self.shaper.shares), now, current)
+        shares = self.shaper.shares
+        candidates = self._tracker.candidates(
+            processes, self.rules, {pid: share.start_ticks for pid, share in shares.items()}, now, current
+        )
         for proc, rule in candidates:
             try:
                 message, revision = self.shaper.apply_tracked(

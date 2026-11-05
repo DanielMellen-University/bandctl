@@ -30,8 +30,8 @@ class RuleTests(unittest.TestCase):
         self.assertIs(first_match([scheduled, fallback], "steam"), fallback)
         tracker = RuleTracker()
         proc = ProcessInfo(42, "steam", "steam", "user", 1, 100)
-        self.assertEqual(tracker.candidates([proc], [scheduled], set(), 1, time(12)), [])
-        self.assertEqual(tracker.candidates([proc], [scheduled], set(), 2, time(23)), [(proc, scheduled)])
+        self.assertEqual(tracker.candidates([proc], [scheduled], {}, 1, time(12)), [])
+        self.assertEqual(tracker.candidates([proc], [scheduled], {}, 2, time(23)), [(proc, scheduled)])
 
     def test_invalid_rules_are_rejected(self):
         for name, down, up in ((" ", 10, None), ("x\n", 10, None), ("\ud800", 10, None), ("x", None, None),
@@ -45,40 +45,47 @@ class RuleTests(unittest.TestCase):
         rule = AutoRule("steam", 30, None)
         first = ProcessInfo(42, "steam", "steam", "user", 1, 100)
         unknown = ProcessInfo(43, "steam", "steam", "user", 1)
-        self.assertEqual(tracker.candidates([first, unknown], [rule], set(), 1), [(first, rule)])
+        self.assertEqual(tracker.candidates([first, unknown], [rule], {}, 1), [(first, rule)])
         tracker.applied(first, now=1)
-        self.assertEqual(tracker.candidates([first], [rule], set(), 2), [])
+        self.assertEqual(tracker.candidates([first], [rule], {}, 2), [])
         tracker.released(first)
-        self.assertEqual(tracker.candidates([first], [rule], set(), 2), [(first, rule)])
+        self.assertEqual(tracker.candidates([first], [rule], {}, 2), [(first, rule)])
         tracker.applied(first, now=2)
         replacement = ProcessInfo(42, "steam", "steam", "user", 1, 200)
-        self.assertEqual(tracker.candidates([replacement], [rule], set(), 3), [(replacement, rule)])
-        self.assertEqual(tracker.candidates([replacement], [rule], {42}, 4), [])
-        self.assertEqual(tracker.candidates([replacement], [rule], set(), 5), [])
+        self.assertEqual(tracker.candidates([replacement], [rule], {}, 3), [(replacement, rule)])
+        self.assertEqual(tracker.candidates([replacement], [rule], {42: 200}, 4), [])
+        self.assertEqual(tracker.candidates([replacement], [rule], {}, 5), [])
+
+    def test_old_limit_does_not_suppress_a_reused_pid(self):
+        tracker = RuleTracker()
+        rule = AutoRule("steam", 30, None)
+        replacement = ProcessInfo(42, "steam", "steam", "user", 1, 200)
+        self.assertEqual(tracker.candidates([replacement], [rule], {42: 100}, 1), [])
+        self.assertEqual(tracker.candidates([replacement], [rule], {}, 2), [(replacement, rule)])
 
     def test_failed_attempt_waits_before_retry_and_disappeared_state_expires(self):
         tracker = RuleTracker()
         rule = AutoRule("steam", None, 10)
         proc = ProcessInfo(42, "steam", "steam", "user", 1, 100)
-        self.assertEqual(tracker.candidates([proc], [rule], set(), 10), [(proc, rule)])
+        self.assertEqual(tracker.candidates([proc], [rule], {}, 10), [(proc, rule)])
         tracker.failed(proc, 10)
-        self.assertEqual(tracker.candidates([proc], [rule], set(), 24), [])
-        self.assertEqual(tracker.candidates([proc], [rule], set(), 25), [(proc, rule)])
+        self.assertEqual(tracker.candidates([proc], [rule], {}, 24), [])
+        self.assertEqual(tracker.candidates([proc], [rule], {}, 25), [(proc, rule)])
         tracker.applied(proc, now=25)
-        tracker.candidates([], [rule], set(), 400)
-        self.assertEqual(tracker.candidates([proc], [rule], set(), 401), [(proc, rule)])
+        tracker.candidates([], [rule], {}, 400)
+        self.assertEqual(tracker.candidates([proc], [rule], {}, 401), [(proc, rule)])
 
     def test_manual_removal_survives_unreadable_start_time(self):
         tracker = RuleTracker()
         rule = AutoRule("steam", None, 10)
         proc = ProcessInfo(42, "steam", "steam", "user", 1, 100)
         unknown = ProcessInfo(42, "steam", "steam", "user", 1, None)
-        tracker.candidates([proc], [rule], set(), 1)
+        tracker.candidates([proc], [rule], {}, 1)
         tracker.applied(proc, now=1)
-        self.assertEqual(tracker.candidates([unknown], [rule], set(), 302), [])
-        self.assertEqual(tracker.candidates([proc], [rule], set(), 303), [])
+        self.assertEqual(tracker.candidates([unknown], [rule], {}, 302), [])
+        self.assertEqual(tracker.candidates([proc], [rule], {}, 303), [])
         replacement = ProcessInfo(42, "steam", "steam", "user", 1, 200)
-        self.assertEqual(tracker.candidates([replacement], [rule], set(), 304), [(replacement, rule)])
+        self.assertEqual(tracker.candidates([replacement], [rule], {}, 304), [(replacement, rule)])
 
     def test_manual_actions_before_first_scan_expire_after_processes_disappear(self):
         tracker = RuleTracker()
@@ -86,19 +93,19 @@ class RuleTests(unittest.TestCase):
         with patch("bandctl.rules.monotonic", return_value=1):
             for proc in processes:
                 tracker.applied(proc)
-        tracker.candidates([], [], set(), 302)
+        tracker.candidates([], [], {}, 302)
         rule = AutoRule("steam", None, 10)
-        self.assertEqual(tracker.candidates([processes[0]], [rule], set(), 303), [(processes[0], rule)])
+        self.assertEqual(tracker.candidates([processes[0]], [rule], {}, 303), [(processes[0], rule)])
         self.assertEqual(len(tracker._handled), 0)
 
     def test_manual_action_refreshes_last_seen_after_a_scan_gap(self):
         tracker = RuleTracker()
         rule = AutoRule("steam", None, 10)
         proc = ProcessInfo(42, "steam", "steam", "user", 1, 100)
-        tracker.candidates([proc], [rule], set(), 1)
+        tracker.candidates([proc], [rule], {}, 1)
         tracker.applied(proc, now=300)
-        tracker.candidates([], [rule], set(), 302)
-        self.assertEqual(tracker.candidates([proc], [rule], set(), 303), [])
+        tracker.candidates([], [rule], {}, 302)
+        self.assertEqual(tracker.candidates([proc], [rule], {}, 303), [])
 
     def test_scheduled_ownership_expires_and_preserves_manual_changes(self):
         owner = ScheduledOwnership()

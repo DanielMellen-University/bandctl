@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Apply automatic rules to reused PIDs after old limits are retired.
+
 - Keep unpaired surrogates from hiding uninstall recovery errors.
 
 - Report large worker startup errors without blocking on a full pipe.

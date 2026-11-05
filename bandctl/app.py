@@ -589,10 +589,15 @@ class BandctlApp(App):
                 self._scheduled.forget(proc)
                 self._rule_tracker.released(proc)
                 self._note(f"schedule ended: {message}")
-        candidates = self._rule_tracker.candidates(procs, self._rules, set(self.shaper.shares), now, current)
+        shares = self.shaper.shares
+        candidates = self._rule_tracker.candidates(
+            procs, self._rules, {pid: share.start_ticks for pid, share in shares.items()}, now, current
+        )
         for proc, rule in candidates:
-            if proc.pid in self.shaper.shares:
-                self._rule_tracker.applied(proc)
+            share = self.shaper.shares.get(proc.pid)
+            if share is not None:
+                if share.start_ticks is None or share.start_ticks == proc.start_ticks:
+                    self._rule_tracker.applied(proc)
                 continue
             down_cap, up_cap = self._effective_caps()
             try:
@@ -601,8 +606,10 @@ class BandctlApp(App):
                     proc.cmdline, expected_start_ticks=proc.start_ticks, only_if_unlimited=True,
                 )
             except (ShaperError, OSError) as exc:
-                if proc.pid in self.shaper.shares:
-                    self._rule_tracker.applied(proc)
+                share = self.shaper.shares.get(proc.pid)
+                if share is not None:
+                    if share.start_ticks is None or share.start_ticks == proc.start_ticks:
+                        self._rule_tracker.applied(proc)
                     continue
                 self._rule_tracker.failed(proc, time.monotonic())
                 self._note(f"auto rule for pid {proc.pid}: {exc}", bad=True)

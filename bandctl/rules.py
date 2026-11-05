@@ -55,7 +55,7 @@ class RuleTracker:
         self._last_seen: dict[tuple[int, int], float] = {}
 
     def candidates(
-        self, processes: list[ProcessInfo], rules: list[AutoRule], limited: set[int], now: float,
+        self, processes: list[ProcessInfo], rules: list[AutoRule], limited: dict[int, int | None], now: float,
         current: time | None = None,
     ) -> list[tuple[ProcessInfo, AutoRule]]:
         found = []
@@ -70,7 +70,9 @@ class RuleTracker:
             if rule is None:
                 continue
             if proc.pid in limited:
-                self._handled.add(key)
+                if limited[proc.pid] is None or limited[proc.pid] == proc.start_ticks:
+                    self._handled.add(key)
+                continue
             if key not in self._handled and now >= self._retry_at.get(key, 0):
                 found.append((proc, rule))
         for key, seen in list(self._last_seen.items()):

@@ -206,6 +206,24 @@ class CliSessionTests(unittest.TestCase):
         self.session.refresh(now=2, current=time(10))
         self.assertFalse(self.shaper.shares)
 
+    def test_auto_rule_applies_after_a_reused_pid_old_limit_is_retired(self):
+        from datetime import time
+        from unittest.mock import patch
+
+        self.session.limit("42", "10", None)
+        self.session.rules = [AutoRule("firefox", 20, None)]
+        self.procs[0] = ProcessInfo(42, "firefox", "firefox", "user", 0, 101)
+        self.host.files["/proc/42/stat"] = "42 (firefox) S " + "0 " * 18 + "101 0\n"
+        self.host.files["/proc/42/cgroup"] = "0::/user.slice/user-1000.slice/session-1.scope\n"
+        self.host.files["/sys/fs/cgroup/bandctl/bandctl-42/cgroup.procs"] = ""
+
+        with patch.object(self.shaper, "sample", return_value={}):
+            self.session.refresh(now=1, current=time(10))
+        self.assertEqual(self.shaper.shares[42].start_ticks, 100)
+        self.session.refresh(now=2, current=time(10))
+        self.assertEqual(self.shaper.shares[42].start_ticks, 101)
+        self.assertEqual(self.shaper.shares[42].down_pct, 20)
+
     def test_slow_rule_failures_wait_from_failure_before_retry(self):
         from datetime import time
         from types import SimpleNamespace
@@ -227,7 +245,7 @@ class CliSessionTests(unittest.TestCase):
                     rule = AutoRule("firefox", 20, None, DailyWindow(time(9), time(17)))
                     session.rules = [rule]
                     session._scheduled.applied(proc, rule, 7)
-                    shaper.shares = {42: SimpleNamespace(down_pct=20, up_pct=None, revision=7)}
+                    shaper.shares = {42: SimpleNamespace(down_pct=20, up_pct=None, revision=7, start_ticks=100)}
                     attempted = shaper.remove
                 attempted.side_effect = ShaperError("operation failed")
                 with patch("bandctl.cli_session.time.monotonic", return_value=20):

@@ -607,6 +607,39 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             await app._apply_rules([proc])
             self.assertEqual(fake.shares[42].up_pct, 70)
 
+    async def test_old_limit_arriving_during_rule_apply_does_not_suppress_replacement(self):
+        from bandctl.rules import AutoRule
+
+        for stage in ("before_apply", "during_apply"):
+            with self.subTest(stage=stage):
+                fake = FakeShaper()
+                proc = ProcessInfo(42, "steam", "steam", "user", 1, 200)
+                app = BandctlApp(iface="eth0", shaper=fake, processes=lambda: [proc],
+                                 link_bps=100_000_000, is_root=True, rates=lambda: {})
+                async with app.run_test(size=(100, 30)):
+                    app._rules = [AutoRule("steam", 30, None)]
+                    stale = Share(42, 10, None, 10, "/", start_ticks=100)
+                    if stage == "before_apply":
+                        candidates = app._rule_tracker.candidates
+
+                        def add_old_limit(*args, **kwargs):
+                            result = candidates(*args, **kwargs)
+                            fake._shares[42] = stale
+                            return result
+
+                        with patch.object(app._rule_tracker, "candidates", side_effect=add_old_limit):
+                            await app._apply_rules([proc])
+                    else:
+                        def fail_with_old_limit(*_args, **_kwargs):
+                            fake._shares[42] = stale
+                            raise ShaperError("already limited")
+
+                        with patch.object(fake, "apply_tracked", side_effect=fail_with_old_limit):
+                            await app._apply_rules([proc])
+                    fake._shares.pop(42)
+                    await app._apply_rules([proc])
+                    self.assertEqual(fake.shares[42].start_ticks, 200)
+                    self.assertEqual(fake.shares[42].down_pct, 30)
     async def test_scheduled_rule_takes_precedence_over_an_automatic_fallback(self):
         from datetime import time
         from bandctl.rules import AutoRule
