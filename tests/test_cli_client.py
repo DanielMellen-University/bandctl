@@ -3,7 +3,10 @@ import errno
 import io
 import socket
 import subprocess
+import tempfile
+import threading
 import unittest
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 from bandctl.cli_client import _ping, ensure_session, wait_for_stop
@@ -11,6 +14,29 @@ from bandctl.session_lock import SessionLockError
 
 
 class ClientTests(unittest.TestCase):
+    def test_ping_waits_for_a_busy_session(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "socket")
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
+                listener.bind(path)
+                listener.listen()
+
+                def respond():
+                    with listener.accept()[0] as connection:
+                        connection.recv(4096)
+                        threading.Event().wait(1.2)
+                        try:
+                            connection.sendall(b'{"ok":true,"result":{"iface":"eth0"}}\n')
+                        except BrokenPipeError:
+                            pass
+
+                server = threading.Thread(target=respond)
+                server.start()
+                try:
+                    self.assertEqual(_ping(path), "eth0")
+                finally:
+                    server.join(timeout=3)
+
     def test_only_missing_or_stale_socket_allows_a_new_session(self):
         for error in (FileNotFoundError(errno.ENOENT, "missing"),
                       ConnectionRefusedError(errno.ECONNREFUSED, "stale")):

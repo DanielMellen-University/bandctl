@@ -15,7 +15,7 @@ from bandctl.session_lock import SessionLock, SessionLockError
 
 def _ping(path: str, *, match_wildcard: bool = False):
     try:
-        response = request(path, {"command": "ping"}, timeout=1.0)
+        response = request(path, {"command": "ping"}, timeout=30.0)
     except OSError as exc:
         if exc.errno in (errno.ENOENT, errno.ECONNREFUSED):
             return None
