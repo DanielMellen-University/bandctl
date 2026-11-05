@@ -185,6 +185,14 @@ class ParseTests(unittest.TestCase):
                         "class htb 1:11 root\n Sent 1000 bytes 1 pkt\n")
                 self.assertEqual(parse_class_bytes(text), {11: 1000})
 
+    def test_class_bytes_ignore_every_duplicate_even_with_missing_counters(self):
+        good = "class htb 1:10 root\n Sent 100 bytes 1 pkt\n"
+        missing = "class htb 1:10 root\n"
+        other = "class htb 1:11 root\n Sent 200 bytes 1 pkt\n"
+        for classes in (good + missing, missing + good, good * 3):
+            with self.subTest(classes=classes):
+                self.assertEqual(parse_class_bytes(classes + other), {11: 200})
+
     def test_unconnected_udp_flower_omits_the_remote(self):
         flow = SockFlow("udp", "ip", "10.0.0.8", 5353, "", 0)
         command = " ".join(
@@ -1326,6 +1334,24 @@ class ApplyTests(unittest.TestCase):
             host.class_show["eth0"] = counters(100, 100)
             self.assertEqual(shaper.sample(), {42: (0.0, 0.0), 43: (0.0, 0.0)})
             host.class_show["eth0"] = counters("9" * 5000, 200)
+            self.assertEqual(shaper.sample(), {42: (0.0, 0.0), 43: (0.0, 800.0)})
+            host.class_show["eth0"] = counters(300, 300)
+            self.assertEqual(shaper.sample(), {42: (0.0, 800.0), 43: (0.0, 800.0)})
+
+    def test_duplicate_class_counter_preserves_baseline_and_other_class_rates(self):
+        shaper, host = _shaper()
+        shaper.apply(42, None, 50, None, 100_000_000)
+        shaper.apply(43, None, 25, None, 100_000_000)
+
+        def counters(first, second):
+            return (f"class htb 1:10 parent 1:1\n Sent {first} bytes 1 pkt\n"
+                    f"class htb 1:11 parent 1:1\n Sent {second} bytes 1 pkt\n")
+
+        with patch.object(shaper, "_sync_flows"), \
+             patch("bandctl.shaper.time.monotonic", side_effect=[1.0, 2.0, 3.0]):
+            host.class_show["eth0"] = counters(100, 100)
+            self.assertEqual(shaper.sample(), {42: (0.0, 0.0), 43: (0.0, 0.0)})
+            host.class_show["eth0"] = counters(200, 200) + "class htb 1:10 parent 1:1\n Sent 5000 bytes 1 pkt\n"
             self.assertEqual(shaper.sample(), {42: (0.0, 0.0), 43: (0.0, 800.0)})
             host.class_show["eth0"] = counters(300, 300)
             self.assertEqual(shaper.sample(), {42: (0.0, 800.0), 43: (0.0, 800.0)})
