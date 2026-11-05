@@ -54,6 +54,22 @@ class ParseTests(unittest.TestCase):
                 self.assertEqual(sampler.rates(text, 2)[5], (0.0, 80.0))
                 self.assertEqual(sampler.rates(header + '\t bytes_received:30 bytes_acked:30\n', 3)[5], (80.0, 80.0))
 
+    def test_malformed_counter_tokens_do_not_replace_the_last_baseline(self):
+        header = 'ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 users:(("a",pid=5,fd=1)) sk:a\n'
+        for invalid in ("20x", "20.5", "20_000"):
+            with self.subTest(invalid=invalid):
+                sampler = TrafficSampler()
+                sampler.rates(header + '\t bytes_received:10 bytes_acked:10\n', 1)
+                malformed = header + f'\t bytes_received:{invalid} bytes_acked:20\n'
+                self.assertEqual(parse_ss(malformed), {5: (0, 20)})
+                self.assertEqual(sampler.rates(malformed, 2)[5], (0.0, 80.0))
+                self.assertEqual(sampler.rates(header + '\t bytes_received:30 bytes_acked:30\n', 3)[5], (80.0, 80.0))
+                self.assertEqual(sampler.totals[5], (20, 20))
+        for field in ("bytes_received", "bytes_acked", "bytes_sent"):
+            with self.subTest(field=field):
+                malformed = header + f'\t {field}:20x other_{field}:30\n'
+                self.assertEqual(parse_ss_sockets(malformed, omit_unreported=True), {})
+
     def test_process_name_does_not_supply_socket_identity(self):
         text = (
             'ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 users:(("sk:bad",pid=5,fd=1)) ino:42 sk:a\n'

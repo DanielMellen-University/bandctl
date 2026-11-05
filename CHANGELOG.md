@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Ignore malformed TCP byte counter tokens to avoid incorrect rates.
+
 - Correct the architecture notes on interface discovery and socket scan failures.
 
 - Keep socket filters when a descriptor has a malformed socket inode.

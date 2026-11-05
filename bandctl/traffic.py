@@ -17,9 +17,9 @@ _QUOTED_RE = re.compile(r'"(?:\\.|[^"\\])*"')
 _SOCKET_COOKIE_RE = re.compile(r"\bsk:([0-9a-fA-F]+)\b")
 _SOCKET_INODE_RE = re.compile(r"\bino:(\d+)\b")
 _FIELD_RE = {
-    "bytes_received": re.compile(r"bytes_received:([0-9]+)"),
-    "bytes_acked": re.compile(r"bytes_acked:([0-9]+)"),
-    "bytes_sent": re.compile(r"bytes_sent:([0-9]+)"),
+    "bytes_received": re.compile(r"(?<!\S)bytes_received:([0-9]+)(?=\s|$)"),
+    "bytes_acked": re.compile(r"(?<!\S)bytes_acked:([0-9]+)(?=\s|$)"),
+    "bytes_sent": re.compile(r"(?<!\S)bytes_sent:([0-9]+)(?=\s|$)"),
 }
 
 
