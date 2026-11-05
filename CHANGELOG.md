@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Correct the architecture notes on interface discovery and socket scan failures.
+
 - Keep socket filters when a descriptor has a malformed socket inode.
 
 ## 0.2.3 (2026-11-05)
