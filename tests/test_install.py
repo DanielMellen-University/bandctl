@@ -638,6 +638,37 @@ class ScriptTests(unittest.TestCase):
             self.assertFalse(prefix.exists())
             self.assertFalse((root / "lock-released-early").exists())
 
+    def test_uninstall_reports_unpaired_surrogates_in_recovery_errors(self):
+        for recovery in ("return ['bad\\ud800\\udcff']", "raise RuntimeError('bad\\ud800\\udcff')"):
+            with self.subTest(recovery=recovery), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                prefix, bindir, tools = root / "install", root / "bin", root / "tools"
+                venv_bin = prefix / "venv" / "bin"
+                venv_bin.mkdir(parents=True)
+                bindir.mkdir()
+                tools.mkdir()
+                (prefix / "install-stamp").write_text(f"PREFIX={prefix}\nBINDIR={bindir}\n", encoding="utf-8")
+                package = root / "bandctl"
+                package.mkdir()
+                (package / "__init__.py").write_text("", encoding="utf-8")
+                (package / "session_lock.py").write_text(
+                    "class SessionLock:\n"
+                    "    def __enter__(self): return self\n"
+                    "    def __exit__(self, *args): pass\n", encoding="utf-8")
+                (package / "shaper.py").write_text(
+                    "class Shaper:\n"
+                    "    def __init__(self, iface): self.recovery_error = 'failed'\n"
+                    f"    def recover(self): {recovery}\n", encoding="utf-8")
+                (venv_bin / "python").symlink_to(sys.executable)
+                env = _quiet_ps(tools)
+                env.update(PYTHONPATH=str(root), PYTHONIOENCODING="utf-8:strict")
+                result = _run(["bash", str(UNINSTALL), "--prefix", str(prefix), "--bindir", str(bindir)],
+                              env=env, cwd=root)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("bad??", result.stdout + result.stderr)
+                self.assertIn("could not clear kernel state", result.stderr)
+                self.assertFalse(prefix.exists())
+
     def test_uninstall_refuses_recovery_when_session_lock_is_held(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

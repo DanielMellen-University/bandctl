@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep unpaired surrogates from hiding uninstall recovery errors.
+
 - Report large worker startup errors without blocking on a full pipe.
 
 - Speed up rate planning for many overcommitted classes.

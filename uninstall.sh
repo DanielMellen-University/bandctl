@@ -184,7 +184,7 @@ def fallback_lock():
         os.close(fd)
 
 def safe(text):
-    return "".join("?" if ord(c) < 32 or 127 <= ord(c) <= 159 else c for c in text)
+    return "".join("?" if ord(c) < 32 or 127 <= ord(c) <= 159 or 0xD800 <= ord(c) <= 0xDFFF else c for c in text)
 
 try:
     skip_reason = "installed Python is missing"
