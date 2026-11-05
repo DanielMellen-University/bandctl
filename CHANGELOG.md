@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep recovery state when a failed root qdisc replacement cannot be verified.
+
 - Clear stale root qdisc ownership after a failed replacement when the original is confirmed.
 
 - Keep the download setup error when its cleanup also fails.

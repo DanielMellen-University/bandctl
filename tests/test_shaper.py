@@ -1736,6 +1736,43 @@ class ApplyTests(unittest.TestCase):
                         shaper.apply(42, None, 10, None, 100_000_000)
                 self.assertTrue(json.loads(host.files["/run/bandctl.json"])["root_replaced"])
 
+    def test_uncertain_root_replacement_keeps_state_through_rollback_and_exit(self):
+        for existing_download in (False, True):
+            with self.subTest(existing_download=existing_download):
+                shaper, host = _shaper()
+                if existing_download:
+                    shaper.apply(42, 10, None, 100_000_000, None)
+                run = host.run
+                failed = False
+
+                def fail_replace_and_probe(args, input_text=None):
+                    nonlocal failed
+                    if args[:4] == ["tc", "qdisc", "replace", "dev"] and args[4] == "eth0":
+                        failed = True
+                        raise ShaperError("replacement failed")
+                    if failed and args[:3] == ["tc", "qdisc", "show"]:
+                        raise ShaperError("query failed")
+                    return run(args, input_text)
+
+                with patch.object(host, "run", side_effect=fail_replace_and_probe):
+                    with self.assertRaisesRegex(ShaperError, "replacement failed"):
+                        shaper.apply(42, 10 if existing_download else None, 10,
+                                     100_000_000 if existing_download else None, 100_000_000)
+                self.assertTrue(json.loads(host.files["/run/bandctl.json"])["root_replaced"])
+                host.commands.clear()
+                if not existing_download:
+                    host.files.pop("/sys/fs/cgroup/bandctl/bandctl-42/cgroup.procs", None)
+                with self.assertRaisesRegex(ShaperError, "cannot verify root qdisc"):
+                    shaper.apply(42, 10 if existing_download else None, 10,
+                                 100_000_000 if existing_download else None, 100_000_000)
+                self.assertFalse(any("qdisc replace dev eth0 root" in command for command in _joined(host)))
+                self.assertTrue(json.loads(host.files["/run/bandctl.json"])["root_replaced"])
+                host.commands.clear()
+                notes = shaper.teardown()
+                self.assertTrue(any("root qdisc" in note and "cannot verify" in note for note in notes))
+                self.assertIn("/run/bandctl.json", host.files)
+                self.assertFalse(any("qdisc del dev eth0 root" in command for command in _joined(host)))
+
     def test_recover_older_state_restores_saved_root_qdisc(self):
         shaper, host = _shaper()
         host.files["/run/bandctl.json"] = json.dumps({"iface": "eth0", "qdisc": "fq", "pids": {}})

@@ -129,6 +129,7 @@ class Shaper:
     _up_cap: int | None = None
     _egress: bool = False
     _root_restore_failed: bool = False
+    _root_uncertain: bool = False
     _ifb: bool = False
     _ifb_owned: bool = False
     _ingress_owned: bool = False
@@ -849,7 +850,9 @@ class Shaper:
                                          nft_owned=self._nft_owned))
             tree_errors = self._remove_tree(protected_pids=pending_pids)
             notes.extend(tree_errors)
-            if not pending_pids and not tree_errors and not self._egress and not self._ifb_owned and not self._ingress_owned and not self._nft_cleanup_error:
+            if self._root_uncertain:
+                notes.append("cannot verify root qdisc after failed replacement; recovery state retained")
+            if not pending_pids and not tree_errors and not self._egress and not self._root_uncertain and not self._ifb_owned and not self._ingress_owned and not self._nft_cleanup_error:
                 try:
                     self._unlink_state()
                 except ShaperError as exc:
@@ -1066,6 +1069,8 @@ class Shaper:
             self._write_state()
 
     def _ensure_egress(self) -> None:
+        if self._root_uncertain:
+            raise ShaperError("cannot verify root qdisc after failed replacement; restart to recover")
         if self._root_restore_failed:
             raise ShaperError("root qdisc restore is incomplete; remove the limit to retry")
         if self._egress:
@@ -1097,6 +1102,9 @@ class Shaper:
                     self._record_recovery_fields(root_replaced=False)
                 except ShaperError as state_error:
                     raise ShaperError(f"{replace_error}; cannot update recovery state: {state_error}") from replace_error
+            else:
+                self._root_uncertain = True
+                raise ShaperError(f"{replace_error}; cannot verify root qdisc after failed replacement") from replace_error
             raise
         self._egress = True
 
@@ -1410,7 +1418,7 @@ class Shaper:
         payload = {
             "iface": self.iface,
             "qdisc": self._saved_qdisc or "fq_codel",
-            "root_replaced": self._egress if root_replaced is None else root_replaced,
+            "root_replaced": (self._egress or self._root_uncertain) if root_replaced is None else root_replaced,
             "ifb_owned": self._ifb_owned,
             "ingress_owned": self._ingress_owned,
             "nft_owned": self._nft_owned,
