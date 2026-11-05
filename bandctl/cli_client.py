@@ -48,22 +48,13 @@ def ensure_session(iface: str | None, *, start: bool, socket_path: str = SOCKET_
                               stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
                               start_new_session=True, close_fds=True)
     deadline = time.monotonic() + 5.0
-    ready = False
-    readiness_uncertain = False
     lock_error = None
     try:
         while time.monotonic() < deadline:
-            try:
-                active = _ping(socket_path, match_wildcard=match_wildcard)
-            except (OSError, ValueError):
-                # The worker may already be handling another client's request.
-                readiness_uncertain = True
-                raise
+            active = _ping(socket_path, match_wildcard=match_wildcard)
             if active is not None:
-                readiness_uncertain = True
                 if active != chosen:
                     raise ValueError(f"active session uses interface {active}")
-                ready = True
                 return active
             if worker.poll() is not None and lock_error is None:
                 detail = worker.stderr.read(4096).decode("utf-8", errors="replace").strip() if worker.stderr else ""
@@ -73,14 +64,10 @@ def ensure_session(iface: str | None, *, start: bool, socket_path: str = SOCKET_
                 else:
                     raise ValueError(detail or "could not start CLI session")
             time.sleep(0.05)
-        raise ValueError(lock_error or "CLI session did not start")
+        raise ValueError(lock_error or "CLI session did not become ready; check the session before retrying")
     finally:
-        if not ready and not readiness_uncertain and worker.poll() is None:
-            try:
-                worker.terminate()
-                worker.wait(timeout=3.0)
-            except (OSError, subprocess.TimeoutExpired):
-                pass
+        # Another client may have connected since the last readiness check.
+        # Leave a running worker to finish startup or serve that client.
         if worker.stderr is not None:
             worker.stderr.close()
 

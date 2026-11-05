@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Leave a starting CLI worker running after a startup deadline to protect concurrent requests.
+
 ## 0.2.2 (2026-11-05)
 
 - Leave a possibly busy CLI worker running after an uncertain startup check.

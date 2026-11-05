@@ -137,7 +137,7 @@ class ClientTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "active session uses interface wlan0"):
                 ensure_session("eth0", start=True)
 
-    def test_start_timeout_terminates_its_own_worker(self):
+    def test_start_timeout_leaves_a_worker_that_is_still_starting(self):
         worker = Mock()
         worker.stderr = io.BytesIO()
         worker.poll.return_value = None
@@ -146,10 +146,34 @@ class ClientTests(unittest.TestCase):
              patch("bandctl.cli_client.subprocess.Popen", return_value=worker), \
              patch("bandctl.cli_client.time.monotonic", side_effect=[0, 1, 6]), \
              patch("bandctl.cli_client.time.sleep"):
-            with self.assertRaisesRegex(ValueError, "did not start"):
+            with self.assertRaisesRegex(ValueError, "did not become ready"):
                 ensure_session("eth0", start=True)
-        worker.terminate.assert_called_once()
-        worker.wait.assert_called_once_with(timeout=3.0)
+        worker.terminate.assert_not_called()
+
+    def test_start_timeout_does_not_terminate_worker_ready_after_last_probe(self):
+        worker = Mock()
+        worker.stderr = io.BytesIO()
+        worker.poll.return_value = None
+        probes = 0
+        other_client_using_worker = False
+
+        def probe(*_args, **_kwargs):
+            nonlocal probes, other_client_using_worker
+            probes += 1
+            if probes == 2:
+                # The socket opens after this probe and another client connects.
+                other_client_using_worker = True
+            return None
+
+        with patch("bandctl.cli_client._ping", side_effect=probe), \
+             patch("bandctl.cli_client.check_iface", return_value="eth0"), \
+             patch("bandctl.cli_client.subprocess.Popen", return_value=worker), \
+             patch("bandctl.cli_client.time.monotonic", side_effect=[0, 1, 6]), \
+             patch("bandctl.cli_client.time.sleep"):
+            with self.assertRaisesRegex(ValueError, "did not become ready"):
+                ensure_session("eth0", start=True)
+        self.assertTrue(other_client_using_worker)
+        worker.terminate.assert_not_called()
 
     def test_readiness_timeout_does_not_terminate_a_possibly_busy_worker(self):
         worker = Mock()
