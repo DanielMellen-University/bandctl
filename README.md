@@ -107,6 +107,8 @@ The process table always fits the width instead of scrolling sideways. When spac
 
 The table lists processes using more than 1% of the link. When the link speed is unknown, that 1% is of the TCP traffic measured right now, ignoring loopback. `n` lists every process. A process that already has a share stays on screen so you can remove it. Type `/` to filter by name, command line, pid, or user. Command lines are truncated to 80 characters before searching. A search looks through every process, including idle ones under 1%. Esc goes back to the table. Select a row with the arrow keys or a click.
 
+The table rates, meters, and graphs estimate non-loopback TCP traffic from `ss`. They include traffic on other interfaces and do not show UDP, even when bandctl shapes it. An active UDP-only process can be hidden by the 1% filter; press `n` or search to find it.
+
 Type a download percent, an upload percent, or both (1 to 100). Leave a field blank to leave that direction uncapped. Enter in a percent field, the Apply button, or `a` installs the share. `u` removes it. Limited rows are orange, except the selected row, which stays green so the text stays readable. The bar is green while usage is under the ceiling and orange when it is at the cap.
 
 Apply verifies the selected process start time. If the process has exited, its PID was reused, or its start time cannot be read, rescan and try again.

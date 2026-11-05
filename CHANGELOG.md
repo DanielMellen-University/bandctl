@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Clarify that displayed rates cover TCP across interfaces, not class throughput.
+
 - Report incomplete group import rollback when a member moves elsewhere.
 
 - Leave processes moved elsewhere alone when removal rollback fails.
