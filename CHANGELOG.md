@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Retry TUI recovery even when no default interface is available.
+
 - Keep socket filters when a table has a noncanonical or out-of-range inode.
 
 - Refuse to move a process if it left its recorded cgroup during setup.

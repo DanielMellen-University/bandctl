@@ -204,14 +204,18 @@ class BandctlApp(App):
 
     async def on_mount(self) -> None:
         self._resolve_iface()
+        recovery_error = None
         if self._shaper_arg is not None:
             self.shaper = self._shaper_arg
-        elif self.is_root and self.iface:
-            self.shaper = Shaper(self.iface, match_wildcard=self._match_wildcard)
-            for note in self.shaper.recover():
+        elif self.is_root:
+            recovery_shaper = Shaper(self.iface, match_wildcard=self._match_wildcard)
+            for note in recovery_shaper.recover():
                 self._log(note)
+            recovery_error = recovery_shaper.recovery_error
+            if self.iface:
+                self.shaper = recovery_shaper
         await self._refresh()
-        recovery_error = getattr(self.shaper, "recovery_error", None)
+        recovery_error = recovery_error or getattr(self.shaper, "recovery_error", None)
         if recovery_error:
             self.query_one("#apply", Button).disabled = True
             self.query_one("#remove", Button).disabled = True

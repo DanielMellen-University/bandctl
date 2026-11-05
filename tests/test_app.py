@@ -264,15 +264,87 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_root_without_default_route_shows_error_and_disables_controls(self):
         from bandctl.iface import IfaceError
+        from bandctl.shaper import Shaper
+        from test_shaper import _shaper
 
         app = BandctlApp(processes=lambda: list(PROCS), link_bps=100_000_000,
                          is_root=True, rates=_rates)
-        with patch("bandctl.app.default_iface", side_effect=IfaceError("no default route; pass --iface")):
+        _, host = _shaper()
+        with patch("bandctl.app.default_iface", side_effect=IfaceError("no default route; pass --iface")), \
+             patch("bandctl.app.Shaper", return_value=Shaper("", host=host, state_path="/run/bandctl.json")):
             async with app.run_test(size=(80, 24)):
                 self.assertIn("no default route", app._status_text)
                 self.assertTrue(app.query_one("#apply", Button).disabled)
                 self.assertTrue(app.query_one("#remove", Button).disabled)
                 self.assertIsNone(app.shaper)
+
+    async def test_root_recovers_previous_session_without_default_route(self):
+        from bandctl.iface import IfaceError
+        from bandctl.shaper import Shaper
+        from test_shaper import _shaper
+
+        previous, host = _shaper()
+        previous.apply(42, None, 10, None, 100_000_000)
+        app = BandctlApp(processes=lambda: list(PROCS), link_bps=100_000_000,
+                         is_root=True, rates=_rates)
+        recovery = Shaper("", host=host, state_path="/run/bandctl.json")
+        with patch("bandctl.app.default_iface", side_effect=IfaceError("no default route; pass --iface")), \
+             patch("bandctl.app.Shaper", return_value=recovery):
+            async with app.run_test(size=(80, 24)):
+                self.assertNotIn("/run/bandctl.json", host.files)
+                self.assertEqual(host.files["/proc/42/cgroup"], "0::/user.slice/user-1000.slice/session-1.scope\n")
+                self.assertIn("tc qdisc add dev eth0 root fq_codel",
+                              [" ".join(args) for args, _ in host.commands])
+                self.assertIn("no default route", app._status_text)
+                self.assertTrue(app.query_one("#apply", Button).disabled)
+                self.assertTrue(app.query_one("#remove", Button).disabled)
+                self.assertIsNone(app.shaper)
+
+    async def test_root_reports_failed_recovery_without_default_route(self):
+        from bandctl.iface import IfaceError
+        from bandctl.shaper import Shaper
+        from test_shaper import _shaper
+
+        previous, host = _shaper()
+        previous.apply(42, None, 10, None, 100_000_000)
+        host.fail_substr = "tc qdisc add dev eth0 root"
+        app = BandctlApp(processes=lambda: list(PROCS), link_bps=100_000_000,
+                         is_root=True, rates=_rates)
+        recovery = Shaper("", host=host, state_path="/run/bandctl.json")
+        with patch("bandctl.app.default_iface", side_effect=IfaceError("no default route; pass --iface")), \
+             patch("bandctl.app.Shaper", return_value=recovery):
+            async with app.run_test(size=(80, 24)):
+                self.assertIn("recovery failed", app._status_text)
+                self.assertIn("forced failure", app._status_text)
+                self.assertIn("/run/bandctl.json", host.files)
+                self.assertTrue(app.query_one("#apply", Button).disabled)
+                self.assertTrue(app.query_one("#remove", Button).disabled)
+                self.assertIsNone(app.shaper)
+
+    async def test_recovery_without_route_leaves_unconfirmed_qdisc_alone(self):
+        import json
+        from bandctl.iface import IfaceError
+        from bandctl.shaper import Shaper
+        from test_shaper import _shaper
+
+        previous, host = _shaper()
+        previous.apply(42, None, 10, None, 100_000_000)
+        state = json.loads(host.files["/run/bandctl.json"])
+        state["root_uncertain"] = True
+        host.files["/run/bandctl.json"] = json.dumps(state)
+        host.qdisc = "qdisc cake 0: root refcnt 2\n"
+        host.commands.clear()
+        app = BandctlApp(processes=lambda: list(PROCS), link_bps=100_000_000,
+                         is_root=True, rates=_rates)
+        recovery = Shaper("", host=host, state_path="/run/bandctl.json")
+        with patch("bandctl.app.default_iface", side_effect=IfaceError("no default route; pass --iface")), \
+             patch("bandctl.app.Shaper", return_value=recovery):
+            async with app.run_test(size=(80, 24)):
+                self.assertIn("cannot verify root qdisc", app._status_text)
+                self.assertEqual(host.files["/proc/42/cgroup"], "0::/user.slice/user-1000.slice/session-1.scope\n")
+                self.assertIn("/run/bandctl.json", host.files)
+                self.assertFalse(any(args[:3] == ["tc", "qdisc", "del"] or args[:3] == ["tc", "qdisc", "add"]
+                                     for args, _ in host.commands))
 
     async def test_failed_recovery_is_shown_and_apply_is_disabled(self):
         from bandctl.shaper import Shaper

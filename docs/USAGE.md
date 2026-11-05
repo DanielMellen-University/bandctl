@@ -166,6 +166,8 @@ The same applies when a group member moves elsewhere during settings import roll
 
 A crash skips that path. The next start reads `/run/bandctl.json` and finishes it. The recovery file must be a regular file. Reboot also drops the qdisc and the file, because neither is persistent.
 
+The root TUI also attempts recovery when no default route is available, using the interface recorded in the recovery file. Apply and Remove stay disabled until you start a session with a usable interface.
+
 If a root qdisc replacement could not be confirmed, recovery checks the current qdisc first. If its kind differs from the saved original, recovery leaves the qdisc and recovery file in place. It still tries to restore processes and remove other owned resources.
 
 Cleanup only treats `bandctl-<pid>` directories with a canonical positive PID as bandctl leaves. Other directories are left alone and can prevent removal of the parent cgroup. If restoring a process or the root qdisc, cleaning cgroups, removing the download redirect, or deleting the nftables table fails, bandctl reports the error and keeps the recovery file. It also reports a failure to remove the recovery file itself. The TUI prints cleanup errors after exit and returns a failure status. Remove can retry while the session is open. After exit, the next start retries recovery. If it still fails, the TUI shows the error and disables Apply and Remove, and the CLI session does not start. Removal and recovery also wait if a reused PID is still in the old cgroup. They can finish once that process leaves the cgroup or exits.
