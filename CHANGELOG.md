@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Ignore malformed socket identities to keep separate TCP counters apart.
+
 - Reject truncated fallback routing tables before choosing an interface.
 
 - Reject truncated process stat records before using their start times.

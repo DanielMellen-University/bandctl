@@ -14,8 +14,8 @@ import subprocess
 
 _PID_RE = re.compile(r'\("(?:\\.|[^"\\])*",pid=([0-9]+)(?=,|\))')
 _QUOTED_RE = re.compile(r'"(?:\\.|[^"\\])*"')
-_SOCKET_COOKIE_RE = re.compile(r"\bsk:([0-9a-fA-F]+)\b")
-_SOCKET_INODE_RE = re.compile(r"\bino:(\d+)\b")
+_SOCKET_COOKIE_RE = re.compile(r"(?<!\S)sk:([0-9a-fA-F]+)(?=\s|$)")
+_SOCKET_INODE_RE = re.compile(r"(?<!\S)ino:([0-9]+)(?=\s|$)")
 _FIELD_RE = {
     "bytes_received": re.compile(r"(?<!\S)bytes_received:([0-9]+)(?=\s|$)"),
     "bytes_acked": re.compile(r"(?<!\S)bytes_acked:([0-9]+)(?=\s|$)"),

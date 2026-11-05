@@ -85,6 +85,27 @@ class ParseTests(unittest.TestCase):
                       '\t bytes_received:50\n')
         self.assertEqual(parse_ss_sockets(inode_only), {(5, "ino:44"): (50, 0)})
 
+    def test_malformed_socket_cookie_does_not_alias_another_socket(self):
+        text = (
+            'ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 users:(("a",pid=5,fd=1)) ino:42 sk:ab\n'
+            '\t bytes_received:100\n'
+            'ESTAB 0 0 10.0.0.2:2 1.1.1.1:443 users:(("a",pid=5,fd=2)) ino:43 sk:ab-invalid\n'
+            '\t bytes_received:200\n'
+        )
+        self.assertEqual(parse_ss_sockets(text), {
+            (5, "sk:ab"): (100, 0), (5, "ino:43"): (200, 0),
+        })
+        sampler = TrafficSampler()
+        sampler.rates(text, 1)
+        later = text.replace("received:100", "received:110").replace("received:200", "received:220")
+        self.assertEqual(sampler.rates(later, 2)[5], (240.0, 0.0))
+        self.assertEqual(sampler.totals[5], (30, 0))
+
+    def test_malformed_inode_falls_back_to_endpoints(self):
+        text = ('ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 users:(("a",pid=5,fd=1)) ino:43-invalid\n'
+                '\t bytes_received:100\n')
+        self.assertEqual(parse_ss_sockets(text), {(5, "10.0.0.2:1 1.1.1.1:443"): (100, 0)})
+
     def test_process_name_does_not_add_socket_owners(self):
         text = ('ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 '
                 'users:(("worker,pid=99,fd=2",pid=5,fd=1)) sk:a\n'

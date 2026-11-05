@@ -85,6 +85,8 @@ Table rates, bars, and graphs use non-loopback TCP socket counters from `ss`, in
 
 Malformed socket byte counters and counters outside the unsigned 64-bit range are ignored until a valid value is available. Socket owners with invalid process IDs are skipped.
 
+Malformed socket cookies and inodes are ignored when identifying TCP sockets. bandctl falls back to the inode or the socket endpoints when available.
+
 The kernel does not move an existing socket into the new cgroup, so bandctl also matches the process's open connections by address and port. A connected UDP socket's filter takes priority over an unconnected socket's filter on the same address and port. By default, an existing UDP socket bound to `0.0.0.0` or `::` is not reliably matched by this filter. Start the TUI with `sudo bandctl --match-wildcard` to match those UDP sockets by local port within their address family. This can also shape traffic from other processes sharing that port. Filters for specifically bound sockets take priority over the wildcard port match. The wildcard match ignores the remote address and port for connected wildcard-bound UDP sockets. TCP and UDP sockets bound to a specific local address keep their normal matching. A socket opened later is marked by the cgroup rule as soon as it exists, and the address list catches up within about a second.
 
 For the CLI, start the session with `sudo bandctl --match-wildcard limit <pid> --down 30` or put the option before the first `import` command. The option applies to the whole session and is not included in exported settings. Later commands can omit it. If an existing session was started without the option, a command that explicitly requests it fails. Stop that session and start a new one to change the setting.
