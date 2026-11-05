@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Refuse symlinks at the uninstall wrapper before changing an install.
+
 - Check command conflicts before replacing an existing installation.
 
 - Detect a running bandctl even when its arguments name install or uninstall files.

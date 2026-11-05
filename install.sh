@@ -122,7 +122,10 @@ check_command_destination() {
 
 check_wrapper_destination() {
   local dest=$1
-  if [ -e "$dest" ] && ! grep -F -q "$PREFIX/uninstall.sh" "$dest"; then
+  if [ -L "$dest" ]; then
+    die "$dest already exists and is not a bandctl install"
+  fi
+  if [ -e "$dest" ] && { [ ! -f "$dest" ] || ! grep -F -q "$PREFIX/uninstall.sh" "$dest"; }; then
     die "$dest already exists and is not a bandctl install"
   fi
 }

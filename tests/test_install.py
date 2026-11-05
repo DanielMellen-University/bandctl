@@ -108,6 +108,33 @@ class ScriptTests(unittest.TestCase):
             self.assertTrue(attempted.exists())
             self.assertNotIn("already exists", result.stderr)
 
+    def test_install_refuses_uninstall_wrapper_symlinks_before_replacing_venv(self):
+        for exists in (False, True):
+            with self.subTest(target_exists=exists), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                prefix, bindir, tools = root / "install", root / "bin", root / "tools"
+                (prefix / "venv").mkdir(parents=True)
+                bindir.mkdir()
+                tools.mkdir()
+                existing = prefix / "venv" / "existing"
+                existing.write_text("keep", encoding="utf-8")
+                target = root / "foreign"
+                if exists:
+                    target.write_text(f"{prefix}/uninstall.sh\nkeep", encoding="utf-8")
+                (bindir / "bandctl-uninstall").symlink_to(target)
+                python = tools / "python3"
+                python.write_text("#!/bin/sh\n[ \"$1\" = -c ] && exit 0\nexit 1\n", encoding="utf-8")
+                python.chmod(0o755)
+                result = _run(["bash", str(INSTALL), "--prefix", str(prefix), "--bindir", str(bindir),
+                               "--skip-deps"], env=_quiet_ps(tools))
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("already exists", result.stderr)
+                self.assertEqual(existing.read_text(encoding="utf-8"), "keep")
+                if exists:
+                    self.assertEqual(target.read_text(encoding="utf-8"), f"{prefix}/uninstall.sh\nkeep")
+                else:
+                    self.assertFalse(target.exists())
+
     def test_uninstall_removes_only_its_own_files(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
