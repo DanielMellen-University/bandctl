@@ -12,7 +12,7 @@ import ipaddress
 import re
 import subprocess
 
-_PID_RE = re.compile(r'\("(?:\\.|[^"\\])*",pid=(\d+)(?=,|\))')
+_PID_RE = re.compile(r'\("(?:\\.|[^"\\])*",pid=([0-9]+)(?=,|\))')
 _QUOTED_RE = re.compile(r'"(?:\\.|[^"\\])*"')
 _SOCKET_COOKIE_RE = re.compile(r"\bsk:([0-9a-fA-F]+)\b")
 _SOCKET_INODE_RE = re.compile(r"\bino:(\d+)\b")
@@ -256,8 +256,11 @@ def _socket_pids(line: str) -> list[int]:
         return []
     found: list[int] = []
     for match in _PID_RE.finditer(line):
-        pid = int(match.group(1))
-        if pid not in found:
+        digits = match.group(1)
+        if len(digits) > 10:
+            continue
+        pid = int(digits)
+        if 0 < pid <= 0x7FFFFFFF and pid not in found:
             found.append(pid)
     return found
 

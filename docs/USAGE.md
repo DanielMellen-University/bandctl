@@ -77,7 +77,7 @@ The status line and the log confirm the share, for example `pid 4242 download 30
 
 Table rates, bars, and graphs use non-loopback TCP socket counters from `ss`, including traffic on other interfaces. They do not show UDP traffic, although bandctl can shape it. A UDP-only process may be hidden by the 1% filter; press `n` or search to find it. These estimates can differ from the actual throughput of the shaped class.
 
-Socket byte counters outside the unsigned 64-bit range are ignored until a valid value is available.
+Socket byte counters outside the unsigned 64-bit range are ignored until a valid value is available. Socket owners with invalid process IDs are skipped.
 
 The kernel does not move an existing socket into the new cgroup, so bandctl also matches the process's open connections by address and port. A connected UDP socket's filter takes priority over an unconnected socket's filter on the same address and port. By default, an existing UDP socket bound to `0.0.0.0` or `::` is not reliably matched by this filter. Start the TUI with `sudo bandctl --match-wildcard` to match those UDP sockets by local port within their address family. This can also shape traffic from other processes sharing that port. Filters for specifically bound sockets take priority over the wildcard port match. The wildcard match ignores the remote address and port for connected wildcard-bound UDP sockets. TCP and UDP sockets bound to a specific local address keep their normal matching. A socket opened later is marked by the cgroup rule as soon as it exists, and the address list catches up within about a second.
 

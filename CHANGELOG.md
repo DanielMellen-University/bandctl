@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Skip invalid socket owners so other traffic can still be sampled.
+
 - Ignore out-of-range socket counters instead of failing rate sampling.
 
 - Clean other owned resources while an unconfirmed root qdisc remains untouched.

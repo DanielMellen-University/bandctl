@@ -28,6 +28,20 @@ ESTAB 0 0 192.168.1.97:10 9.9.9.9:443 users:(("old",pid=4,fd=1))
 
 
 class ParseTests(unittest.TestCase):
+    def test_invalid_socket_owner_does_not_interrupt_other_traffic(self):
+        for invalid in ("0", "9" * 5000, str(2**31)):
+            with self.subTest(length=len(invalid)):
+                text = (f'ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 users:(("bad",pid={invalid},fd=1),("good",pid=6,fd=2)) sk:a\n'
+                        '\t bytes_received:100\n'
+                        'ESTAB 0 0 10.0.0.2:2 1.1.1.1:443 users:(("good",pid=5,fd=1)) sk:b\n'
+                        '\t bytes_received:200\n')
+                self.assertEqual(parse_ss(text), {5: (200, 0), 6: (100, 0)})
+                self.assertEqual(parse_ss_sockets(text), {(5, "sk:b"): (200, 0), (6, "sk:a"): (100, 0)})
+                sampler = TrafficSampler()
+                sampler.rates(text, 1)
+                self.assertEqual(sampler.rates(text.replace('received:200', 'received:210'), 2),
+                                 {5: (80.0, 0.0), 6: (0.0, 0.0)})
+
     def test_out_of_range_counters_are_ignored(self):
         header = 'ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 users:(("a",pid=5,fd=1)) sk:a\n'
         for invalid in (str(2**64), "9" * 5000):
