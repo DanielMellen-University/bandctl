@@ -696,6 +696,14 @@ class Shaper:
                 return False
             if status != "same":
                 raise ShaperError(f"cannot verify pid {share.pid}")
+            try:
+                cgroup = self._read_cgroup(share.pid)
+            except ShaperError as exc:
+                if isinstance(exc.__cause__, FileNotFoundError) and not self._pid_alive(share.pid):
+                    return False
+                raise
+            if cgroup != f"/bandctl/bandctl-{share.pid}":
+                return False
         self._restore_pid(share.pid, share.original_cgroup)
         return True
 
@@ -800,6 +808,15 @@ class Shaper:
                                 pending_pids.add(pid)
                                 pending_error = f"cannot verify pid {pid}"
                                 notes.append(pending_error)
+                                continue
+                            try:
+                                cgroup = self._read_cgroup(pid)
+                            except ShaperError as exc:
+                                if not isinstance(exc.__cause__, FileNotFoundError) or self._pid_alive(pid):
+                                    pending_pids.add(pid)
+                                    pending_error = str(exc)
+                                raise
+                            if cgroup != f"/bandctl/bandctl-{pid}":
                                 continue
                         try:
                             self._restore_pid(pid, str(original))

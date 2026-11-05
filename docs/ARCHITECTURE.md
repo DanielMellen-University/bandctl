@@ -122,6 +122,8 @@ Members of one group use the same minor, so their leaf rules and flower filters 
 
 Before moving a process or replacing a root qdisc, the shaper records the recovery information and refuses the operation if that write fails. State updates use a private temporary file and an atomic replace so a failed update preserves the old file. Recovery restores a recorded PID to its original cgroup only if it is still in its bandctl leaf and its start time matches the saved value. Old state files lack start times, so recovery checks only the leaf for those processes. During the final scrub, bandctl checks each remaining process is still in its leaf before moving it to the root cgroup. If its cgroup cannot be read, cleanup reports the error and keeps the leaf for retry. A process can still move or exit after the check.
 
+For a recorded PID with a saved start time, removal and recovery check its cgroup again after the identity check and leave it alone if it moved. If that second cgroup read fails for a live process, cleanup keeps the leaf and state for a retry.
+
 ## UI
 
 If user lookup fails, the process scan shows the numeric UID and continues.

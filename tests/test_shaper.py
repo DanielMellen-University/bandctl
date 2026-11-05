@@ -1592,6 +1592,51 @@ class ApplyTests(unittest.TestCase):
         original = "/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs"
         self.assertEqual(host.files[original], "42\n")
 
+    def test_recover_leaves_process_that_moves_during_identity_check(self):
+        shaper, host = _shaper()
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+        host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42\n"
+        original = "/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs"
+        read = host.read
+
+        def move_during_check(path):
+            if path == "/proc/42/stat":
+                host.files["/proc/42/cgroup"] = "0::/other.slice\n"
+            return read(path)
+
+        with patch.object(host, "read", side_effect=move_during_check):
+            again = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+            notes = again.recover()
+        self.assertIsNone(again.recovery_error)
+        self.assertNotIn("restored pid 42", notes)
+        self.assertNotIn(original, host.files)
+        self.assertEqual(host.files["/proc/42/cgroup"], "0::/other.slice\n")
+
+    def test_recover_keeps_state_when_second_cgroup_read_fails(self):
+        shaper, host = _shaper()
+        host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+        shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+        host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42\n"
+        read = host.read
+        cgroup_reads = 0
+
+        def fail_second_read(path):
+            nonlocal cgroup_reads
+            if path == "/proc/42/cgroup":
+                cgroup_reads += 1
+                if cgroup_reads == 2:
+                    raise PermissionError("read denied")
+            return read(path)
+
+        with patch.object(host, "read", side_effect=fail_second_read):
+            again = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+            again.recover()
+        self.assertIn("read denied", again.recovery_error)
+        self.assertIn("/run/bandctl.json", host.files)
+        self.assertNotIn("/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs", host.files)
+        self.assertIn("/sys/fs/cgroup/bandctl/bandctl-42", host.dirs)
+
     def test_recover_old_state_checks_cgroup_before_restoring(self):
         shaper, host = _shaper()
         original = "/user.slice/user-1000.slice/session-1.scope"
@@ -3237,6 +3282,32 @@ class CleanupTests(unittest.TestCase):
                 original = "/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs"
                 self.assertNotIn(original, host.files)
                 self.assertIn("/run/bandctl.json", host.files)
+
+    def test_restore_leaves_process_that_moves_during_identity_check(self):
+        for operation in ("remove", "teardown"):
+            with self.subTest(operation=operation):
+                shaper, host = _shaper()
+                host.files["/proc/42/stat"] = "42 (curl) S " + "0 " * 18 + "100"
+                shaper.apply(42, None, 10, None, 100_000_000, expected_start_ticks=100)
+                read = host.read
+                stat_reads = 0
+
+                def move_during_check(path):
+                    nonlocal stat_reads
+                    if path == "/proc/42/stat":
+                        stat_reads += 1
+                        if stat_reads == 2:
+                            host.files["/proc/42/cgroup"] = "0::/new.slice\n"
+                    return read(path)
+
+                with patch.object(host, "read", side_effect=move_during_check):
+                    if operation == "remove":
+                        shaper.remove(42)
+                    else:
+                        shaper.teardown()
+                original = "/sys/fs/cgroup/user.slice/user-1000.slice/session-1.scope/cgroup.procs"
+                self.assertNotIn(original, host.files)
+                self.assertEqual(host.files["/proc/42/cgroup"], "0::/new.slice\n")
 
     def test_teardown_does_not_move_a_process_that_left_its_leaf(self):
         shaper, host = _shaper()

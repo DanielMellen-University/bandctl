@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Recheck cgroup membership after verifying a process during removal and recovery.
+
 - Skip invalid socket owners so other traffic can still be sampled.
 
 - Ignore out-of-range socket counters instead of failing rate sampling.
