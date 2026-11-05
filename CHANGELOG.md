@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Use a fallback lock when a broken install cannot load the session lock.
+
 - Check the new command before replacing existing install scripts during an upgrade.
 
 - Preserve unrelated files and saved backups in the install directory on uninstall.

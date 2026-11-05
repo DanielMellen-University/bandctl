@@ -561,6 +561,42 @@ class ScriptTests(unittest.TestCase):
             self.assertIn("recovery was skipped", result.stderr)
             self.assertFalse(prefix.exists())
 
+    def test_uninstall_with_unimportable_session_lock_uses_fallback_lock(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prefix, bindir, tools = root / "install", root / "bin", root / "tools"
+            venv_bin = prefix / "venv" / "bin"
+            venv_bin.mkdir(parents=True)
+            bindir.mkdir()
+            tools.mkdir()
+            (prefix / "install-stamp").write_text(f"PREFIX={prefix}\nBINDIR={bindir}\n", encoding="utf-8")
+            (venv_bin / "python").symlink_to(sys.executable)
+            package = root / "bandctl"
+            package.mkdir()
+            (package / "__init__.py").write_text("", encoding="utf-8")
+            (root / "sitecustomize.py").write_text(
+                "import os\n"
+                "original_open = os.open\n"
+                "def redirected_open(path, flags, mode=0o777, *, dir_fd=None):\n"
+                "    if path == '/run/bandctl.lock': path = os.environ['TEST_BANDCTL_LOCK']\n"
+                "    return original_open(path, flags, mode, dir_fd=dir_fd)\n"
+                "os.open = redirected_open\n", encoding="utf-8")
+            env = _quiet_ps(tools)
+            env["PYTHONPATH"] = str(root)
+            env["TEST_BANDCTL_LOCK"] = str(root / "lock")
+            command = ["bash", str(UNINSTALL), "--prefix", str(prefix), "--bindir", str(bindir)]
+
+            with open(root / "lock", "w") as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                busy = _run(command, env=env, cwd=root)
+            self.assertNotEqual(busy.returncode, 0)
+            self.assertTrue(prefix.exists())
+            result = _run(command, env=env, cwd=root)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("recovery was skipped", result.stderr)
+            self.assertNotIn("Traceback", result.stderr)
+            self.assertFalse(prefix.exists())
+
     def test_nonroot_uninstall_skips_privileged_recovery(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

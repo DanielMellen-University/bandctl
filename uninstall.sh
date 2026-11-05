@@ -180,14 +180,21 @@ def safe(text):
     return "".join("?" if ord(c) < 32 or 127 <= ord(c) <= 159 else c for c in text)
 
 try:
+    skip_reason = "installed Python is missing"
     if recover == "1":
-        from bandctl.session_lock import SessionLock
-        lock = SessionLock()
+        try:
+            from bandctl.session_lock import SessionLock
+        except ImportError:
+            skip_reason = "installed bandctl cannot be imported"
+            recover = "0"
+            lock = fallback_lock()
+        else:
+            lock = SessionLock()
     else:
         lock = fallback_lock()
     with lock:
         if recover == "0":
-            print("bandctl uninstall: installed Python is missing; recovery was skipped.", file=sys.stderr)
+            print("bandctl uninstall: " + skip_reason + "; recovery was skipped.", file=sys.stderr)
             print("Reinstall bandctl and start it to retry cleanup.", file=sys.stderr)
         if recover == "1":
             try:

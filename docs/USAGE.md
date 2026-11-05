@@ -21,7 +21,7 @@ To remove it, quit any open bandctl (`q` drops the limits), then:
 sudo bandctl-uninstall
 ```
 
-Uninstall removes the installed virtual environment, scripts, and commands. It removes `/opt/bandctl` if empty and leaves other files in place. Move those files before reinstalling to the same directory. It also tries to clear a crashed run's qdisc, nft table, and cgroup. Root uninstall holds the session lock until it finishes removing files and stops if another session owns it. A non-root uninstall of a custom install skips recovery and the root session lock. If the installed Python is missing, root uninstall needs `python3` to take the lock and skips recovery. Uninstall warns when it skips recovery or cleanup fails, and keeps any recovery file. Reinstall bandctl and start it as root to retry cleanup. `iproute2` and `nftables` stay.
+Uninstall removes the installed virtual environment, scripts, and commands. It removes `/opt/bandctl` if empty and leaves other files in place. Move those files before reinstalling to the same directory. It also tries to clear a crashed run's qdisc, nft table, and cgroup. Root uninstall holds the session lock until it finishes removing files and stops if another session owns it. A non-root uninstall of a custom install skips recovery and the root session lock. If the installed Python is missing, root uninstall needs `python3` to take the lock and skips recovery. It also skips recovery if the installed session lock cannot be imported, using a fallback lock. Uninstall warns when it skips recovery or cleanup fails, and keeps any recovery file. Reinstall bandctl and start it as root to retry cleanup. `iproute2` and `nftables` stay.
 
 A checkout can skip the installer:
 
