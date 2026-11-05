@@ -107,7 +107,7 @@ The header shows the detected link speed from `/sys/class/net/<iface>/speed`. Th
 
 A malformed speed or one too large to fit in the supported capacity range is also treated as unknown.
 
-When `ip route` is unavailable, times out, or returns invalid UTF-8, bandctl picks the active IPv4 default route with the lowest metric from `/proc/net/route`. If the fallback table is not valid UTF-8, pass a valid interface with `--iface`. Interface names must be valid UTF-8 and cannot contain whitespace or control characters, so recovery can safely read them.
+When `ip route` is unavailable, times out, or returns truncated or invalid UTF-8 output, bandctl picks the active IPv4 default route with the lowest metric from `/proc/net/route`. If the fallback table is not valid UTF-8, pass a valid interface with `--iface`. Interface names must be valid UTF-8 and cannot contain whitespace or control characters, so recovery can safely read them.
 
 If the fallback routing table is truncated, bandctl does not choose an interface from it. Pass a valid interface with `--iface`.
 

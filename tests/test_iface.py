@@ -80,6 +80,13 @@ class LookupTests(unittest.TestCase):
             name = default_iface(run=lambda _args: "", proc_route=path)
         self.assertEqual(name, "wlan0")
 
+    def test_truncated_ip_route_falls_back_without_using_partial_device(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "route"
+            path.write_text("Iface Destination Gateway Flags RefCnt Use Metric Mask\n"
+                            "wlan0 00000000 0 0001 0 0 10 00000000\n", encoding="utf-8")
+            self.assertEqual(default_iface(run=lambda _args: "default dev eth", proc_route=path), "wlan0")
+
     def test_ip_timeout_falls_back_to_proc_route(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "route"

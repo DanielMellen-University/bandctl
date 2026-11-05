@@ -15,6 +15,8 @@ class IfaceError(RuntimeError):
 
 def parse_ip_route(text: str) -> str | None:
     """First ``dev`` on a ``default`` line from ``ip route show default``."""
+    if text and not text.endswith("\n"):
+        return None
     for line in text.split("\n"):
         if not line.startswith("default "):
             continue
