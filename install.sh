@@ -109,6 +109,27 @@ if bandctl_is_running; then
   die "bandctl is running. Quit it with q first, then install again."
 fi
 
+check_command_destination() {
+  local dest=$1 current
+  if [ -e "$dest" ] || [ -L "$dest" ]; then
+    current=$(readlink -m "$dest" 2>/dev/null || true)
+    case "$current" in
+      "$PREFIX"/*) ;;
+      *) die "$dest already exists and is not a bandctl install" ;;
+    esac
+  fi
+}
+
+check_wrapper_destination() {
+  local dest=$1
+  if [ -e "$dest" ] && ! grep -F -q "$PREFIX/uninstall.sh" "$dest"; then
+    die "$dest already exists and is not a bandctl install"
+  fi
+}
+
+check_command_destination "$BINDIR/bandctl"
+check_wrapper_destination "$BINDIR/bandctl-uninstall"
+
 need_deps() {
   command -v python3 >/dev/null 2>&1 || return 0
   python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' || return 0
@@ -144,14 +165,7 @@ chmod 755 "$PREFIX"
 
 place_command() {
   local dest=$1
-  if [ -e "$dest" ] || [ -L "$dest" ]; then
-    local current
-    current=$(readlink -f "$dest" 2>/dev/null || true)
-    case "$current" in
-      "$PREFIX"/*) ;;
-      *) die "$dest already exists and is not a bandctl install" ;;
-    esac
-  fi
+  check_command_destination "$dest"
   ln -sfn "$PREFIX/venv/bin/bandctl" "$dest"
 }
 
@@ -164,9 +178,7 @@ cp "$SRC/uninstall.sh" "$PREFIX/uninstall.sh"
 chmod 755 "$PREFIX/uninstall.sh"
 
 wrapper="$BINDIR/bandctl-uninstall"
-if [ -e "$wrapper" ] && ! grep -F -q "$PREFIX/uninstall.sh" "$wrapper"; then
-  die "$wrapper already exists and is not a bandctl install"
-fi
+check_wrapper_destination "$wrapper"
 cat > "$wrapper" << EOF
 #!/bin/sh
 exec "$PREFIX/uninstall.sh" --prefix "$PREFIX" --bindir "$BINDIR" "\$@"

@@ -68,6 +68,46 @@ class ScriptTests(unittest.TestCase):
             self.assertIn(str(INSTALL), text)
             self.assertIn("--skip-deps", text)
 
+    def test_install_checks_command_conflicts_before_replacing_venv(self):
+        for command in ("bandctl", "bandctl-uninstall"):
+            with self.subTest(command=command), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                prefix, bindir, tools = root / "install", root / "bin", root / "tools"
+                (prefix / "venv").mkdir(parents=True)
+                bindir.mkdir()
+                tools.mkdir()
+                existing = prefix / "venv" / "existing"
+                existing.write_text("keep", encoding="utf-8")
+                (bindir / command).write_text("foreign command", encoding="utf-8")
+                attempted = root / "venv-attempted"
+                python = tools / "python3"
+                python.write_text(f"#!/bin/sh\n[ \"$1\" = -c ] && exit 0\ntouch {attempted}\nexit 1\n", encoding="utf-8")
+                python.chmod(0o755)
+                result = _run(["bash", str(INSTALL), "--prefix", str(prefix), "--bindir", str(bindir),
+                               "--skip-deps"], env=_quiet_ps(tools))
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("already exists", result.stderr)
+                self.assertEqual(existing.read_text(encoding="utf-8"), "keep")
+                self.assertFalse(attempted.exists())
+
+    def test_install_allows_its_dangling_command_link_before_rebuilding_venv(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prefix, bindir, tools = root / "install", root / "bin", root / "tools"
+            prefix.mkdir()
+            bindir.mkdir()
+            tools.mkdir()
+            (bindir / "bandctl").symlink_to(prefix / "venv" / "bin" / "bandctl")
+            attempted = root / "venv-attempted"
+            python = tools / "python3"
+            python.write_text(f"#!/bin/sh\n[ \"$1\" = -c ] && exit 0\ntouch {attempted}\nexit 1\n", encoding="utf-8")
+            python.chmod(0o755)
+            result = _run(["bash", str(INSTALL), "--prefix", str(prefix), "--bindir", str(bindir),
+                           "--skip-deps"], env=_quiet_ps(tools))
+            self.assertNotEqual(result.returncode, 0)
+            self.assertTrue(attempted.exists())
+            self.assertNotIn("already exists", result.stderr)
+
     def test_uninstall_removes_only_its_own_files(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

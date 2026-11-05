@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Check command conflicts before replacing an existing installation.
+
 - Detect a running bandctl even when its arguments name install or uninstall files.
 
 - Let non-root uninstall remove a custom install without accessing the root session lock.
