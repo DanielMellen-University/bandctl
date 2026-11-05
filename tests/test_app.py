@@ -635,6 +635,34 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(BandctlApp, "screen_stack", new_callable=PropertyMock, return_value=[]):
             app.on_data_table_row_highlighted(event)
 
+    async def test_repeated_manual_refresh_does_not_cancel_active_rule_work(self):
+        import asyncio
+
+        app = _app(FakeShaper())
+        async with app.run_test(size=(100, 30)):
+            entered = asyncio.Event()
+            release = asyncio.Event()
+            completed = asyncio.Event()
+            calls = []
+
+            async def apply_rules(procs):
+                calls.append(procs)
+                entered.set()
+                await release.wait()
+                completed.set()
+
+            with patch.object(app, "_apply_rules", side_effect=apply_rules):
+                app.action_refresh_now()
+                try:
+                    await asyncio.wait_for(entered.wait(), 2)
+                    app.action_refresh_now()
+                    await asyncio.sleep(0.1)
+                    self.assertEqual(len(calls), 1)
+                    release.set()
+                    await asyncio.wait_for(completed.wait(), 2)
+                finally:
+                    release.set()
+
     async def test_late_refresh_after_screen_closes_is_ignored(self):
         app = _app(FakeShaper())
         with patch.object(BandctlApp, "screen_stack", new_callable=PropertyMock, return_value=[]):

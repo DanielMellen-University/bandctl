@@ -373,7 +373,8 @@ class BandctlApp(App):
         self._render()
 
     def action_refresh_now(self) -> None:
-        self.run_worker(self._refresh(), exclusive=True)
+        # Do not cancel a refresh while its background work is still running.
+        self.run_worker(self._refresh())
 
     def action_edit_rules(self) -> None:
         if not self.is_root:

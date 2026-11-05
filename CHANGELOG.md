@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep an active refresh running when another manual refresh is requested.
+
 - Report worker startup errors that the error stream cannot encode.
 
 - Replace unpaired surrogates in terminal output to keep error reporting usable.
