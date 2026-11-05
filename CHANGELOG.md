@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Clear pending share edits when the selected process changes or its PID is reused.
+
 - Keep socket filters when a socket descriptor has malformed brackets.
 
 - Keep recovery state when a qdisc query is truncated or reports multiple roots.

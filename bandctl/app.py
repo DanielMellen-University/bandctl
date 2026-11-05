@@ -330,8 +330,9 @@ class BandctlApp(App):
             pid = int(str(event.row_key.value))
         except (TypeError, ValueError):
             return
+        previous = self._selected
         self._selected = pid
-        self._fill_inputs(pid)
+        self._fill_inputs(pid, force=previous != pid)
         # Limited rows are orange except the cursor. Repaint now, otherwise
         # the previous row stays plain and this one stays orange for a second.
         self._render_table()
@@ -533,6 +534,8 @@ class BandctlApp(App):
             for proc in procs:
                 previous = self._process_starts.get(proc.pid)
                 if previous is not None and proc.start_ticks is not None and previous != proc.start_ticks:
+                    if proc.pid == self._selected:
+                        self._fill_inputs(proc.pid, force=True)
                     self._history.forget(proc.pid)
                     self._sampler.forget_total(proc.pid, keep_observed=self._rates_source is None and not self._ss_failed)
                     usage.pop(proc.pid, None)
@@ -829,7 +832,10 @@ class BandctlApp(App):
                 table.add_row(*[self._cell(proc, key, share) for key, _label, _width in columns], key=str(proc.pid))
             self._shown = pids
             if self._selected not in pids:
+                previous = self._selected
                 self._selected = pids[0] if pids else None
+                if self._selected != previous:
+                    self._fill_inputs(self._selected, force=True)
             if self._selected is not None:
                 table.move_cursor(row=table.get_row_index(str(self._selected)), animate=False)
         else:
@@ -868,11 +874,15 @@ class BandctlApp(App):
             return Text(text)
         return text
 
-    def _fill_inputs(self, pid: int) -> None:
+    def _fill_inputs(self, pid: int | None, *, force: bool = False) -> None:
         focused = self.focused
-        if focused in (self.query_one("#down-pct"), self.query_one("#up-pct")):
+        if not force and focused in (self.query_one("#down-pct"), self.query_one("#up-pct")):
             return
         share = self.shaper.shares.get(pid) if self.shaper else None
+        if force and share is not None:
+            proc = self._proc(pid)
+            if proc is None or share.start_ticks != proc.start_ticks:
+                share = None
         self.query_one("#down-pct", Input).value = "" if not share or share.down_pct is None else str(share.down_pct)
         self.query_one("#up-pct", Input).value = "" if not share or share.up_pct is None else str(share.up_pct)
 

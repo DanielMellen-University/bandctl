@@ -93,7 +93,7 @@ If bandctl cannot scan socket tables or process descriptors, or a socket table i
 
 Socket inode fields and socket descriptor links must use canonical unsigned decimal numbers within the 64-bit range. A malformed socket descriptor or inode leaves the existing filters in place until a later scan succeeds.
 
-`r` requests a `/proc` rescan. If a refresh is already running, no extra scan is started. The table also refreshes every second. The selection stays on the same pid.
+`r` requests a `/proc` rescan. If a refresh is already running, no extra scan is started. The table also refreshes every second. The selection stays on the same pid. If PID reuse is detected or the selected process changes, pending percent edits are cleared.
 
 ## Capacity
 

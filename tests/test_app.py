@@ -1136,6 +1136,82 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             await app._refresh()
             self.assertNotIn(42, app._sampler.totals)
 
+    async def test_selecting_another_process_clears_focused_share_edits(self):
+        app = _app(FakeShaper())
+        async with app.run_test(size=(100, 30)) as pilot:
+            app._show_all = True
+            app._render()
+            await pilot.pause()
+            app._selected = 42
+            down = app.query_one("#down-pct", Input)
+            up = app.query_one("#up-pct", Input)
+            down.value, up.value = "30", "10"
+            down.focus()
+            await pilot.pause()
+            self.assertIs(app.focused, down)
+            event = SimpleNamespace(data_table=app.query_one("#procs", DataTable),
+                                    row_key=SimpleNamespace(value="7"))
+            app.on_data_table_row_highlighted(event)
+            self.assertEqual(app._selected, 7)
+            self.assertEqual((down.value, up.value), ("", ""))
+
+    async def test_automatic_selection_change_clears_focused_share_edits(self):
+        processes = [ProcessInfo(42, "old", "old", "user", 1, 10)]
+        app = BandctlApp(iface="eth0", shaper=FakeShaper(), processes=lambda: list(processes),
+                         link_bps=100_000_000, is_root=True, rates=lambda: {42: (5_000_000, 0)})
+        async with app.run_test(size=(100, 30)) as pilot:
+            app._show_all = True
+            await pilot.pause()
+            down = app.query_one("#down-pct", Input)
+            up = app.query_one("#up-pct", Input)
+            down.value, up.value = "30", "10"
+            down.focus()
+            await pilot.pause()
+            self.assertIs(app.focused, down)
+            processes[0] = ProcessInfo(43, "new", "new", "user", 1, 20)
+            await app._refresh()
+            self.assertEqual(app._selected, 43)
+            self.assertEqual((down.value, up.value), ("", ""))
+
+    async def test_pid_reuse_clears_selected_process_share_edits(self):
+        processes = [ProcessInfo(42, "old", "old", "user", 1, 10)]
+        app = BandctlApp(iface="eth0", shaper=FakeShaper(), processes=lambda: list(processes),
+                         link_bps=100_000_000, is_root=True, rates=lambda: {42: (5_000_000, 0)})
+        async with app.run_test(size=(100, 30)) as pilot:
+            app._show_all = True
+            await pilot.pause()
+            down = app.query_one("#down-pct", Input)
+            up = app.query_one("#up-pct", Input)
+            down.value, up.value = "30", "10"
+            down.focus()
+            await pilot.pause()
+            self.assertIs(app.focused, down)
+            processes[0] = ProcessInfo(42, "new", "new", "user", 1, 20)
+            await app._refresh()
+            self.assertEqual(app._selected, 42)
+            self.assertEqual((down.value, up.value), ("", ""))
+
+    async def test_pid_reuse_shows_only_a_share_for_the_new_instance(self):
+        for share_start, expected in ((10, ("", "")), (20, ("40", "15"))):
+            with self.subTest(share_start=share_start):
+                processes = [ProcessInfo(42, "old", "old", "user", 1, 10)]
+                fake = FakeShaper()
+                app = BandctlApp(iface="eth0", shaper=fake, processes=lambda: list(processes),
+                                 link_bps=100_000_000, is_root=True, rates=lambda: {42: (5_000_000, 0)})
+                async with app.run_test(size=(100, 30)) as pilot:
+                    app._show_all = True
+                    await pilot.pause()
+                    down = app.query_one("#down-pct", Input)
+                    up = app.query_one("#up-pct", Input)
+                    down.value, up.value = "30", "10"
+                    down.focus()
+                    await pilot.pause()
+                    self.assertIs(app.focused, down)
+                    fake._shares[42] = Share(42, 40, 15, 10, "/", "new", share_start)
+                    processes[0] = ProcessInfo(42, "new", "new", "user", 1, 20)
+                    await app._refresh()
+                    self.assertEqual((down.value, up.value), expected)
+
     async def test_pid_reuse_during_ss_failure_forgets_socket_baselines(self):
         processes = [ProcessInfo(42, "old", "old", "user", 1, 10)]
         socket = ('ESTAB 0 0 10.0.0.2:1 1.1.1.1:443 users:(("x",pid=42,fd=1))\n'
