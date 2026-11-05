@@ -126,6 +126,28 @@ def _joined(host: FakeHost) -> list[str]:
 
 
 class ParseTests(unittest.TestCase):
+    def test_read_only_network_queries_report_timeouts(self):
+        import subprocess
+
+        host = LinuxHost()
+        for args in (["tc", "-s", "class", "show", "dev", "eth0"],
+                     ["tc", "qdisc", "show", "dev", "eth0"],
+                     ["ip", "link", "show", "ifb-bandctl"]):
+            with self.subTest(args=args), \
+                 patch("bandctl.shaper.subprocess.run", side_effect=subprocess.TimeoutExpired(args, 2)) as run:
+                with self.assertRaisesRegex(ShaperError, "timed out"):
+                    host.run(args)
+                self.assertEqual(run.call_args.kwargs["timeout"], 2)
+
+    def test_network_mutations_are_not_interrupted_by_query_timeout(self):
+        import subprocess
+
+        args = ["tc", "qdisc", "replace", "dev", "eth0", "root", "fq_codel"]
+        result = subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+        with patch("bandctl.shaper.subprocess.run", return_value=result) as run:
+            self.assertEqual(LinuxHost().run(args), "")
+        self.assertIsNone(run.call_args.kwargs["timeout"])
+
     def test_command_output_with_invalid_utf8_does_not_crash(self):
         host = LinuxHost()
         output = host.run([sys.executable, "-c", "import os; os.write(1, b'out\\xff')"])

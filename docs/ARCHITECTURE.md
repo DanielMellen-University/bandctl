@@ -143,6 +143,8 @@ Sizes come from the resize event, because `App.size` can still be the old size w
 
 The on-screen rate is each socket's counter delta times 8, divided by its sample interval, summed by PID. The first `ss` sample is a baseline and shows zero. `ss -tinpeH` supplies socket identities; a socket first seen later starts at zero. Upload uses sent bytes when acknowledged bytes are unavailable. A switch between these counters starts a new baseline so their different totals do not create a spike. The shaper also samples class byte counters, but the TUI does not use them for its rates.
 
+Read-only qdisc, class counter, and IFB queries time out after two seconds. Commands that change kernel state have no such timeout because a timed-out change could already have taken effect.
+
 `traffic.parse_ss_sockets` can identify individual TCP sockets by the `ss` socket cookie, then inode, then endpoint pair. This keeps counters for separate sockets distinct. Shared sockets are attributed to each listed process.
 
 The sampler accumulates observed socket deltas per PID. Live processes keep their totals while idle; totals for processes absent from scans expire after five minutes. When a scanned PID has a new start time, the app clears its previous total.

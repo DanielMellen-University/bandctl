@@ -1725,6 +1725,11 @@ class LinuxHost:
     """Real processes and the real sysfs. Used only while bandctl is root."""
 
     def run(self, args: list[str], input_text: str | None = None) -> str:
+        # A timed-out mutation may already have changed kernel state. Only
+        # bound queries whose failure cannot leave an untracked change.
+        query = args[:4] == ["tc", "-s", "class", "show"] or args[:3] in (
+            ["tc", "qdisc", "show"], ["ip", "link", "show"],
+        )
         try:
             proc = subprocess.run(
                 args,
@@ -1734,9 +1739,12 @@ class LinuxHost:
                 errors="replace",
                 capture_output=True,
                 check=False,
+                timeout=2 if query else None,
             )
         except FileNotFoundError as exc:
             raise ShaperError(f"command not found: {args[0]}", args) from exc
+        except subprocess.TimeoutExpired as exc:
+            raise ShaperError("command timed out", args) from exc
         if proc.returncode != 0:
             detail = (proc.stderr or proc.stdout or f"exit {proc.returncode}").strip()
             raise ShaperError(detail, args)
