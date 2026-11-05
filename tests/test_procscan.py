@@ -51,6 +51,11 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(parse_socket_inodes(TCP), {"555", "777"})
         self.assertEqual(parse_socket_inodes(TCP + "2: 0 0 0 0 0 0 0 0 ９９\n"), {"555", "777"})
 
+    def test_inode_numbers_are_canonical_and_fit_in_64_bits(self):
+        rows = "".join(f"2: 0 0 0 0 0 0 0 0 {inode}\n" for inode in
+                       ("0", "18446744073709551615", "00", "099", "18446744073709551616", "9" * 5000))
+        self.assertEqual(parse_socket_inodes(TCP + rows), {"0", "555", "777", "18446744073709551615"})
+
     @patch("sys.byteorder", "little")
     def test_tcp_flows_skip_listeners(self):
         text = (
