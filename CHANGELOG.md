@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Ignore malformed or out-of-range class byte counters during refresh.
+
 - Ignore malformed TCP byte counter tokens to avoid incorrect rates.
 
 - Correct the architecture notes on interface discovery and socket scan failures.

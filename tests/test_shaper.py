@@ -175,6 +175,16 @@ class ParseTests(unittest.TestCase):
                         + "class htb 1:11 parent 1:1\n Sent 1000 bytes 1 pkt\n")
                 self.assertEqual(parse_class_bytes(text), {11: 1000})
 
+    def test_class_bytes_ignore_invalid_ids_and_counters(self):
+        self.assertEqual(parse_class_bytes("class htb 1:10 root\n Sent 18446744073709551615 bytes 1 pkt\n"),
+                         {10: 2**64 - 1})
+        for class_id, count in (("9" * 5000, "10"), ("10", "9" * 5000),
+                                ("10", str(2**64)), ("10", "１２３")):
+            with self.subTest(class_id=class_id[:12], count=count[:12]):
+                text = (f"class htb 1:{class_id} root\n Sent {count} bytes 1 pkt\n"
+                        "class htb 1:11 root\n Sent 1000 bytes 1 pkt\n")
+                self.assertEqual(parse_class_bytes(text), {11: 1000})
+
     def test_unconnected_udp_flower_omits_the_remote(self):
         flow = SockFlow("udp", "ip", "10.0.0.8", 5353, "", 0)
         command = " ".join(
