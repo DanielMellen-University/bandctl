@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Check the new command before replacing existing install scripts during an upgrade.
+
 - Preserve unrelated files and saved backups in the install directory on uninstall.
 
 - Refuse nonempty install directories that are not marked as bandctl installs.

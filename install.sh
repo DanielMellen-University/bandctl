@@ -237,6 +237,7 @@ trap restore_venv EXIT
 
 python3 -m venv "$PREFIX/venv" || die "could not create a virtualenv. On Debian or Ubuntu install python3-venv, or re-run without --skip-deps."
 "$PREFIX/venv/bin/pip" install --disable-pip-version-check "$SRC"
+version=$("$PREFIX/venv/bin/bandctl" --version)
 
 place_command "$BINDIR/bandctl"
 check_managed_files
@@ -258,7 +259,6 @@ BINDIR=$BINDIR
 EOF
 chmod 644 "$PREFIX/install-stamp"
 
-version=$("$BINDIR/bandctl" --version)
 install_complete=1
 if [ -n "$backup" ]; then
   rm -rf -- "$backup"

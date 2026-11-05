@@ -315,6 +315,42 @@ class ScriptTests(unittest.TestCase):
             self.assertTrue((bindir / "bandctl").exists())
             self.assertEqual(list(prefix.glob(".venv-backup.*")), [])
 
+    def test_failed_version_check_preserves_previous_install_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prefix, bindir, tools = root / "install", root / "bin", root / "tools"
+            (prefix / "venv").mkdir(parents=True)
+            bindir.mkdir()
+            tools.mkdir()
+            (prefix / "venv" / "old").write_text("old venv", encoding="utf-8")
+            stamp = prefix / "install-stamp"
+            stamp.write_text(f"PREFIX={prefix}\nBINDIR={bindir}\n", encoding="utf-8")
+            uninstall = prefix / "uninstall.sh"
+            uninstall.write_text("old uninstall script\n", encoding="utf-8")
+            wrapper = bindir / "bandctl-uninstall"
+            wrapper.write_text(f"old wrapper {prefix}/uninstall.sh\n", encoding="utf-8")
+            command = bindir / "bandctl"
+            command.symlink_to(prefix / "venv" / "bin" / "bandctl")
+            python = tools / "python3"
+            python.write_text(
+                "#!/bin/sh\n"
+                '[ "$1" = -c ] && exit 0\n'
+                'mkdir -p "$3/bin"\n'
+                'printf "#!/bin/sh\\nexit 0\\n" > "$3/bin/pip"\n'
+                'printf "#!/bin/sh\\nexit 1\\n" > "$3/bin/bandctl"\n'
+                'chmod +x "$3/bin/pip" "$3/bin/bandctl"\n', encoding="utf-8")
+            python.chmod(0o755)
+
+            result = _run(["bash", str(INSTALL), "--prefix", str(prefix), "--bindir", str(bindir),
+                           "--skip-deps"], env=_quiet_ps(tools))
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual((prefix / "venv" / "old").read_text(encoding="utf-8"), "old venv")
+            self.assertEqual(uninstall.read_text(encoding="utf-8"), "old uninstall script\n")
+            self.assertEqual(wrapper.read_text(encoding="utf-8"), f"old wrapper {prefix}/uninstall.sh\n")
+            self.assertEqual(stamp.read_text(encoding="utf-8"), f"PREFIX={prefix}\nBINDIR={bindir}\n")
+            self.assertEqual(command.readlink(), prefix / "venv" / "bin" / "bandctl")
+
     def test_install_refuses_uninstall_wrapper_symlinks_before_replacing_venv(self):
         for exists in (False, True):
             with self.subTest(target_exists=exists), tempfile.TemporaryDirectory() as tmp:
