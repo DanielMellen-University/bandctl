@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Replace unpaired surrogates in terminal output to keep error reporting usable.
+
 - Reject empty or oversized CLI requests before starting a session.
 
 ## 0.2.4 (2026-11-05)

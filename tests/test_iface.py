@@ -239,6 +239,21 @@ class CommandLineTests(unittest.TestCase):
             self.assertIn("duplicate field bad?key", stderr.getvalue())
             self.assertNotIn("\x1b", stderr.getvalue())
 
+    def test_startup_config_error_with_surrogate_is_safe_for_utf8_stderr(self):
+        import contextlib
+        import io
+        from bandctl.__main__ import main
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            path.write_text('{"bad\\ud800key": 1, "bad\\ud800key": 2}')
+            buffer = io.BytesIO()
+            stderr = io.TextIOWrapper(buffer, encoding="utf-8", errors="strict")
+            with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit):
+                main(["--config", str(path)])
+            stderr.flush()
+            self.assertIn(b"duplicate field bad?key", buffer.getvalue())
+
     def test_startup_config_rejects_conflicting_iface(self):
         from bandctl.__main__ import main
         from bandctl.settings import Settings, write_settings

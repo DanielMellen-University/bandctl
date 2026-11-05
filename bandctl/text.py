@@ -2,5 +2,8 @@
 
 
 def terminal_text(text: str) -> str:
-    """Replace ASCII and C1 control characters with visible placeholders."""
-    return "".join("?" if ord(char) < 32 or 127 <= ord(char) <= 159 else char for char in text)
+    """Replace controls and unpaired surrogates with visible placeholders."""
+    return "".join(
+        "?" if ord(char) < 32 or 127 <= ord(char) <= 159 or 0xD800 <= ord(char) <= 0xDFFF else char
+        for char in text
+    )
