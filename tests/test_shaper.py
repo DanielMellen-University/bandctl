@@ -1312,6 +1312,24 @@ class ApplyTests(unittest.TestCase):
             self.assertEqual(shaper.sample()[42][1], 0.0)
             self.assertEqual(shaper.sample()[42][1], 800.0)
 
+    def test_invalid_class_counter_preserves_baseline_and_other_class_rates(self):
+        shaper, host = _shaper()
+        shaper.apply(42, None, 50, None, 100_000_000)
+        shaper.apply(43, None, 25, None, 100_000_000)
+
+        def counters(first, second):
+            return (f"class htb 1:10 parent 1:1\n Sent {first} bytes 1 pkt\n"
+                    f"class htb 1:11 parent 1:1\n Sent {second} bytes 1 pkt\n")
+
+        with patch.object(shaper, "_sync_flows"), \
+             patch("bandctl.shaper.time.monotonic", side_effect=[1.0, 2.0, 3.0]):
+            host.class_show["eth0"] = counters(100, 100)
+            self.assertEqual(shaper.sample(), {42: (0.0, 0.0), 43: (0.0, 0.0)})
+            host.class_show["eth0"] = counters("9" * 5000, 200)
+            self.assertEqual(shaper.sample(), {42: (0.0, 0.0), 43: (0.0, 800.0)})
+            host.class_show["eth0"] = counters(300, 300)
+            self.assertEqual(shaper.sample(), {42: (0.0, 800.0), 43: (0.0, 800.0)})
+
     def test_unrelated_class_does_not_replace_a_missing_counter_baseline(self):
         shaper, host = _shaper()
         shaper.apply(42, None, 50, None, 100_000_000)

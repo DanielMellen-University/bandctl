@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Test class rate recovery after a malformed counter without interrupting other classes.
+
 - Ignore malformed or out-of-range class byte counters during refresh.
 
 - Ignore malformed TCP byte counter tokens to avoid incorrect rates.
