@@ -3010,6 +3010,35 @@ class CleanupTests(unittest.TestCase):
         self.assertEqual(shaper._remove_tree(), [])
         self.assertNotIn("/sys/fs/cgroup/cgroup.procs", host.files)
 
+    def test_recovery_keeps_leaf_when_member_pid_is_malformed(self):
+        for invalid in ("042", "+42", "４２", "0", "-1", "2147483648", "9" * 5000):
+            with self.subTest(invalid=invalid[:20]):
+                shaper, host = _shaper()
+                leaf = "/sys/fs/cgroup/bandctl/bandctl-42"
+                host.dirs.update({"/sys/fs/cgroup/bandctl", leaf})
+                host.files[leaf + "/cgroup.procs"] = f"43\n{invalid}\n"
+                for pid in (42, 43):
+                    host.files[f"/proc/{pid}/cgroup"] = "0::/bandctl/bandctl-42\n"
+                    host.files[f"/proc/{pid}/stat"] = f"{pid} (child) S " + "0 " * 18 + "100"
+                host.files["/run/bandctl.json"] = json.dumps({
+                    "iface": "eth0", "root_replaced": False, "nft_owned": False,
+                    "ifb_owned": False, "ingress_owned": False, "pids": {},
+                })
+
+                shaper.recover()
+
+                self.assertIn("invalid pid", shaper.recovery_error or "")
+                self.assertIn(leaf, host.dirs)
+                self.assertIn("/run/bandctl.json", host.files)
+                self.assertNotIn("/sys/fs/cgroup/cgroup.procs", host.files)
+
+                host.files[leaf + "/cgroup.procs"] = "43\n"
+                retry = Shaper(iface="eth0", host=host, state_path="/run/bandctl.json")
+                retry.recover()
+                self.assertIsNone(retry.recovery_error)
+                self.assertEqual(host.files["/sys/fs/cgroup/cgroup.procs"], "43\n")
+                self.assertNotIn("/run/bandctl.json", host.files)
+
     def test_leaf_cleanup_does_not_move_a_reused_pid(self):
         shaper, host = _shaper()
         leaf = "/sys/fs/cgroup/bandctl/bandctl-42"
