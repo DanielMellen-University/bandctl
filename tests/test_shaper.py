@@ -567,6 +567,38 @@ class ImportGroupTests(unittest.TestCase):
         self.assertEqual(host.files["/sys/fs/cgroup/bandctl/bandctl-44/cgroup.procs"], "44\n")
         self.assertNotIn("/sys/fs/cgroup/bandctl/bandctl-43", host.dirs)
 
+    def test_import_rollback_reports_member_moved_elsewhere(self):
+        shaper, host = self.setup_shaper()
+        shaper.apply_group(Group("old", 20, None, (42,)), {42: 100}, 100_000_000, None)
+        settings = self.settings([Group("new", 30, None, (43,))])
+        sync = shaper._sync
+        attempts = 0
+
+        def fail_after_external_move():
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                host.files["/proc/42/cgroup"] = "0::/other.slice\n"
+                raise ShaperError("import failed")
+            return sync()
+
+        with patch.object(shaper, "_sync", side_effect=fail_after_external_move):
+            with self.assertRaisesRegex(ShaperError, "import failed.*rollback incomplete.*pid 42.*cgroup"):
+                shaper.replace_groups(settings, 100_000_000, None)
+        self.assertEqual(host.files["/proc/42/cgroup"], "0::/other.slice\n")
+        self.assertEqual(shaper.shares[42].group, "old")
+
+    def test_import_rollback_keeps_member_still_in_its_leaf(self):
+        shaper, host = self.setup_shaper()
+        shaper.apply_group(Group("old", 20, None, (42,)), {42: 100}, 100_000_000, None)
+        settings = self.settings([Group("new", 30, None, (43,))])
+        with patch.object(shaper, "_restore_share", side_effect=ShaperError("restore failed")):
+            with self.assertRaisesRegex(ShaperError, "restore failed") as error:
+                shaper.replace_groups(settings, 100_000_000, None)
+        self.assertNotIn("rollback incomplete", str(error.exception))
+        self.assertEqual(host.files["/proc/42/cgroup"], "0::/bandctl/bandctl-42\n")
+        self.assertEqual(shaper.shares[42].group, "old")
+
     def test_rollback_failure_reports_and_tracks_member(self):
         shaper, host = self.setup_shaper()
         settings = self.settings([Group("new", 30, None, (42,))])

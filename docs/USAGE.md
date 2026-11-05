@@ -139,6 +139,8 @@ bandctl checks a process identity again after reading its cgroup and before rest
 
 If a process leaves its original cgroup during removal rollback, bandctl leaves it there and reports an incomplete rollback.
 
+The same applies when a group member moves elsewhere during settings import rollback.
+
 ## Exit
 
 `q`, Ctrl+C, or SIGTERM starts cleanup. On SIGTERM, an in-progress TUI operation finishes first.

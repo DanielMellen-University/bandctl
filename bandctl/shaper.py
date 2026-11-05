@@ -465,6 +465,8 @@ class Shaper:
                             cgroup = self._read_cgroup(share.pid)
                             if cgroup == share.original_cgroup:
                                 self._move_to_leaf(share)
+                            elif cgroup != f"/bandctl/bandctl-{share.pid}":
+                                problems.append(f"pid {share.pid} left its original cgroup during rollback")
                         except (OSError, ShaperError) as move_error:
                             problems.append(f"cannot restore group for pid {share.pid}: {move_error}")
                 if any(share.pid in self._shares for share in attempted):
