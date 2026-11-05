@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep a regular command file inside the install directory during uninstall.
+
 - Use a fallback lock when a broken install cannot load the session lock.
 
 - Check the new command before replacing existing install scripts during an upgrade.

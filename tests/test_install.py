@@ -452,6 +452,26 @@ class ScriptTests(unittest.TestCase):
             self.assertFalse((prefix / "install-stamp").exists())
             self.assertIn("left", result.stderr)
 
+    def test_uninstall_preserves_regular_bandctl_command_inside_prefix(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prefix, tools = root / "install", root / "tools"
+            bindir = prefix / "bin"
+            bindir.mkdir(parents=True)
+            (prefix / "venv").mkdir()
+            tools.mkdir()
+            (prefix / "install-stamp").write_text(f"PREFIX={prefix}\nBINDIR={bindir}\n", encoding="utf-8")
+            command = bindir / "bandctl"
+            command.write_text("foreign command", encoding="utf-8")
+            env = _quiet_ps(tools)
+            (tools / "id").write_text("#!/bin/sh\nprintf '1000\\n'\n", encoding="utf-8")
+
+            result = _run(["bash", str(UNINSTALL), "--prefix", str(prefix), "--bindir", str(bindir)], env=env)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(command.read_text(encoding="utf-8"), "foreign command")
+            self.assertIn("left", result.stderr)
+
     def test_uninstall_warns_when_recovery_reports_failure(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

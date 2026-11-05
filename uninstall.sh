@@ -119,12 +119,14 @@ fi
 remove_install() {
 local PREFIX=$1 BINDIR=$2 link current wrapper
 link="$BINDIR/bandctl"
-if [ -L "$link" ] || [ -e "$link" ]; then
+if [ -L "$link" ]; then
   current=$(readlink -f "$link" 2>/dev/null || true)
   case "$current" in
     "$PREFIX"/*) rm -f "$link" ;;
     *) echo "bandctl uninstall: left $link in place (it is not this install)" >&2 ;;
   esac
+elif [ -e "$link" ]; then
+  echo "bandctl uninstall: left $link in place (it is not a symlink)" >&2
 fi
 
 wrapper="$BINDIR/bandctl-uninstall"
