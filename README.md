@@ -44,7 +44,7 @@ docs/            usage, architecture, testing
 ## Install
 
 The installer installs `python3`, `iproute2`, and `nftables` if they are missing, puts bandctl in `/opt/bandctl`, and links `bandctl` onto `PATH`.
-The install directory must be empty or contain a matching bandctl install stamp. Uninstall removes the whole install directory.
+The install directory must be empty or contain a matching bandctl install stamp. Uninstall removes the installed virtual environment and scripts, and leaves other files in place.
 
 ```
 curl -fsSL https://raw.githubusercontent.com/DanielMellen-University/bandctl/main/install.sh | sudo bash
@@ -77,7 +77,7 @@ Quit bandctl first if it is open. `q` removes the limits. Then:
 sudo bandctl-uninstall
 ```
 
-That deletes `/opt/bandctl` and the `bandctl` command. If the last run crashed, it also tries to clear the qdisc, nft table, and cgroup that run left behind. If cleanup fails, uninstall warns and keeps any recovery file. Reinstall bandctl and start it to retry cleanup. It does not remove `iproute2` or `nftables`.
+That removes the installed virtual environment, scripts, and `bandctl` command. It removes `/opt/bandctl` if the directory is empty and leaves other files there in place. If the last run crashed, it also tries to clear the qdisc, nft table, and cgroup that run left behind. If cleanup fails, uninstall warns and keeps any recovery file. Reinstall bandctl and start it to retry cleanup. It does not remove `iproute2` or `nftables`.
 
 ## Run from a checkout
 

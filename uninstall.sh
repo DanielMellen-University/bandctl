@@ -30,9 +30,9 @@ usage() {
 Usage: sudo bandctl-uninstall
        sudo ./uninstall.sh [--prefix DIR] [--bindir DIR]
 
-Removes the install directory and the bandctl commands. If bandctl is
-not running, it also clears rules left in /run/bandctl.json. iproute2
-and nftables stay installed.
+Removes installed files and the bandctl commands. Other files in the
+install directory are kept. If bandctl is not running, it also clears
+rules left in /run/bandctl.json. iproute2 and nftables stay installed.
 EOF
 }
 
@@ -132,7 +132,12 @@ if [ -f "$wrapper" ] && grep -F -q "$PREFIX/uninstall.sh" "$wrapper"; then
   rm -f "$wrapper"
 fi
 
-rm -rf "$PREFIX"
+rm -rf -- "$PREFIX/venv"
+rm -f -- "$PREFIX/uninstall.sh"
+rm -f -- "$PREFIX/install-stamp"
+if ! rmdir -- "$PREFIX" 2>/dev/null; then
+  echo "bandctl uninstall: left $PREFIX in place (not empty or cannot remove it)" >&2
+fi
 echo "Uninstalled bandctl"
 }
 export -f remove_install

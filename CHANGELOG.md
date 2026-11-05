@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Preserve unrelated files and saved backups in the install directory on uninstall.
+
 - Refuse nonempty install directories that are not marked as bandctl installs.
 
 - Remove the downloaded temporary checkout after a piped installation.

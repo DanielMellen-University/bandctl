@@ -390,6 +390,32 @@ class ScriptTests(unittest.TestCase):
             self.assertEqual(foreign.read_text(encoding="utf-8"), "keep\n")
             self.assertIn("Uninstalled", result.stdout)
 
+    def test_uninstall_preserves_other_files_inside_install_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prefix, bindir, tools = root / "install", root / "bin", root / "tools"
+            (prefix / "venv").mkdir(parents=True)
+            bindir.mkdir()
+            tools.mkdir()
+            (prefix / "install-stamp").write_text(f"PREFIX={prefix}\nBINDIR={bindir}\n", encoding="utf-8")
+            (prefix / "uninstall.sh").write_text("installed script", encoding="utf-8")
+            (prefix / ".notes").write_text("keep", encoding="utf-8")
+            backup = prefix / ".venv-backup.saved"
+            backup.mkdir()
+            (backup / "previous").write_text("keep", encoding="utf-8")
+            env = _quiet_ps(tools)
+            (tools / "id").write_text("#!/bin/sh\nprintf '1000\\n'\n", encoding="utf-8")
+
+            result = _run(["bash", str(UNINSTALL), "--prefix", str(prefix), "--bindir", str(bindir)], env=env)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((prefix / ".notes").read_text(encoding="utf-8"), "keep")
+            self.assertEqual((backup / "previous").read_text(encoding="utf-8"), "keep")
+            self.assertFalse((prefix / "venv").exists())
+            self.assertFalse((prefix / "uninstall.sh").exists())
+            self.assertFalse((prefix / "install-stamp").exists())
+            self.assertIn("left", result.stderr)
+
     def test_uninstall_warns_when_recovery_reports_failure(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
