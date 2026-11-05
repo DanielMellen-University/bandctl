@@ -3,6 +3,7 @@ import errno
 import io
 import socket
 import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -11,6 +12,13 @@ from unittest.mock import Mock, patch
 
 from bandctl.cli_client import _ping, ensure_session, wait_for_stop
 from bandctl.session_lock import SessionLockError
+
+
+def _worker_start(worker):
+    def start(_command, **kwargs):
+        kwargs["stderr"].write(worker.stderr.getvalue())
+        return worker
+    return start
 
 
 class ClientTests(unittest.TestCase):
@@ -98,10 +106,32 @@ class ClientTests(unittest.TestCase):
         worker.poll.return_value = 1
         with patch("bandctl.cli_client._ping", return_value=None), \
              patch("bandctl.cli_client.check_iface", return_value="eth0"), \
-             patch("bandctl.cli_client.subprocess.Popen", return_value=worker):
+             patch("bandctl.cli_client.subprocess.Popen", side_effect=_worker_start(worker)):
             with self.assertRaisesRegex(ValueError, "lock is held"):
                 ensure_session("eth0", start=True)
         worker.terminate.assert_not_called()
+
+    def test_large_worker_startup_error_does_not_block_the_worker(self):
+        popen = subprocess.Popen
+        workers = []
+
+        def start_worker(_command, **kwargs):
+            worker = popen([sys.executable, "-c",
+                            "import sys; sys.stderr.write('startup failed: ' + 'x' * 131072)"],
+                           **kwargs)
+            workers.append(worker)
+            return worker
+
+        with patch("bandctl.cli_client._ping", return_value=None), \
+             patch("bandctl.cli_client.check_iface", return_value="eth0"), \
+             patch("bandctl.cli_client.subprocess.Popen", side_effect=start_worker):
+            try:
+                with self.assertRaisesRegex(ValueError, "startup failed:") as caught:
+                    ensure_session("eth0", start=True)
+                self.assertEqual(len(str(caught.exception)), 4096)
+            finally:
+                for worker in workers:
+                    worker.wait(timeout=3)
 
     def test_concurrent_start_waits_for_the_winning_session(self):
         worker = Mock()
@@ -109,7 +139,7 @@ class ClientTests(unittest.TestCase):
         worker.poll.return_value = 1
         with patch("bandctl.cli_client._ping", side_effect=[None, None, "eth0"]), \
              patch("bandctl.cli_client.check_iface", return_value="eth0"), \
-             patch("bandctl.cli_client.subprocess.Popen", return_value=worker), \
+             patch("bandctl.cli_client.subprocess.Popen", side_effect=_worker_start(worker)), \
              patch("bandctl.cli_client.time.sleep"):
             self.assertEqual(ensure_session("eth0", start=True), "eth0")
         worker.terminate.assert_not_called()
@@ -120,7 +150,7 @@ class ClientTests(unittest.TestCase):
         worker.poll.return_value = 1
         with patch("bandctl.cli_client._ping", return_value=None), \
              patch("bandctl.cli_client.check_iface", return_value="eth0"), \
-             patch("bandctl.cli_client.subprocess.Popen", return_value=worker), \
+             patch("bandctl.cli_client.subprocess.Popen", side_effect=_worker_start(worker)), \
              patch("bandctl.cli_client.time.monotonic", side_effect=[0, 1, 6]), \
              patch("bandctl.cli_client.time.sleep"):
             with self.assertRaisesRegex(ValueError, "another bandctl session is already running"):
@@ -132,7 +162,7 @@ class ClientTests(unittest.TestCase):
         worker.poll.return_value = 1
         with patch("bandctl.cli_client._ping", side_effect=[None, None, "wlan0"]), \
              patch("bandctl.cli_client.check_iface", return_value="eth0"), \
-             patch("bandctl.cli_client.subprocess.Popen", return_value=worker), \
+             patch("bandctl.cli_client.subprocess.Popen", side_effect=_worker_start(worker)), \
              patch("bandctl.cli_client.time.sleep"):
             with self.assertRaisesRegex(ValueError, "active session uses interface wlan0"):
                 ensure_session("eth0", start=True)

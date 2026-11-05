@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Report large worker startup errors without blocking on a full pipe.
+
 - Speed up rate planning for many overcommitted classes.
 
 - Reject truncated traffic samples to preserve socket counter baselines.

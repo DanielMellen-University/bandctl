@@ -59,6 +59,8 @@ Only one root bandctl session can control shaping at a time. A second root sessi
 
 CLI session checks and requests allow up to 30 seconds for a response from a busy worker. A timeout does not start a second session. If a newly started worker does not become ready in time, its readiness check fails, or the check finds a session on another interface, the worker may keep running. It may still be starting or handling another command. Check the session before retrying.
 
+Worker startup errors are limited to the first 4096 bytes when reported by the CLI.
+
 ## Not root
 
 The window still opens. A dialog shows the `sudo` command, including the interface, settings file, and wildcard option when supplied. After you dismiss it, the process list works. Apply and Remove are disabled. No cgroup, nft table, or qdisc is created.

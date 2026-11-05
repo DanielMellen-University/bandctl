@@ -5,6 +5,7 @@ from __future__ import annotations
 import errno
 import subprocess
 import sys
+import tempfile
 import time
 
 from bandctl.cli_transport import request
@@ -44,12 +45,15 @@ def ensure_session(iface: str | None, *, start: bool, socket_path: str = SOCKET_
     command = [sys.executable, "-m", "bandctl.cli_worker", "--iface", chosen]
     if match_wildcard:
         command.append("--match-wildcard")
-    worker = subprocess.Popen(command,
-                              stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
-                              start_new_session=True, close_fds=True)
-    deadline = time.monotonic() + 5.0
-    lock_error = None
-    try:
+    # A worker can report more than a pipe can hold before it exits. A private
+    # temporary file lets it finish even while the client waits for readiness.
+    # Leave a still-running worker alone: another client may already use it.
+    with tempfile.TemporaryFile(mode="w+b") as errors:
+        worker = subprocess.Popen(command,
+                                  stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=errors,
+                                  start_new_session=True, close_fds=True)
+        deadline = time.monotonic() + 5.0
+        lock_error = None
         while time.monotonic() < deadline:
             active = _ping(socket_path, match_wildcard=match_wildcard)
             if active is not None:
@@ -57,7 +61,8 @@ def ensure_session(iface: str | None, *, start: bool, socket_path: str = SOCKET_
                     raise ValueError(f"active session uses interface {active}")
                 return active
             if worker.poll() is not None and lock_error is None:
-                detail = worker.stderr.read(4096).decode("utf-8", errors="replace").strip() if worker.stderr else ""
+                errors.seek(0)
+                detail = errors.read(4096).decode("utf-8", errors="replace").strip()
                 if detail == "bandctl: another bandctl session is already running":
                     # Another CLI worker may own the lock but not have bound its socket yet.
                     lock_error = detail
@@ -65,11 +70,6 @@ def ensure_session(iface: str | None, *, start: bool, socket_path: str = SOCKET_
                     raise ValueError(detail or "could not start CLI session")
             time.sleep(0.05)
         raise ValueError(lock_error or "CLI session did not become ready; check the session before retrying")
-    finally:
-        # Another client may have connected since the last readiness check.
-        # Leave a running worker to finish startup or serve that client.
-        if worker.stderr is not None:
-            worker.stderr.close()
 
 
 def wait_for_stop(*, lock_path: str = "/run/bandctl.lock", timeout: float = 5.0) -> None:
