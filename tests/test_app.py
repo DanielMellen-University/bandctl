@@ -320,6 +320,8 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue(app.query_one("#apply", Button).disabled)
                 self.assertTrue(app.query_one("#remove", Button).disabled)
                 self.assertIsNone(app.shaper)
+                app._note("another warning", bad=True)
+                self.assertIn("recovery failed", app._status_text)
 
     async def test_recovery_without_route_leaves_unconfirmed_qdisc_alone(self):
         import json
@@ -361,6 +363,33 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn("forced failure", app._status_text)
                 self.assertTrue(app.query_one("#apply", Button).disabled)
                 self.assertTrue(app.query_one("#remove", Button).disabled)
+
+    async def test_recovery_failure_stays_visible_through_traffic_warning(self):
+        from bandctl.shaper import Shaper
+        from test_shaper import _shaper
+
+        previous, host = _shaper()
+        previous.apply(42, None, 10, None, 100_000_000)
+        host.fail_substr = "tc qdisc add dev eth0 root"
+        shaper = Shaper("eth0", host=host, state_path="/run/bandctl.json")
+        snapshot = [""]
+        app = BandctlApp(iface="eth0", processes=lambda: list(PROCS),
+                         link_bps=100_000_000, is_root=True)
+        with patch("bandctl.app.Shaper", return_value=shaper), \
+             patch("bandctl.app.read_ss", side_effect=lambda: snapshot[0]):
+            async with app.run_test(size=(80, 24)):
+                self.assertIn("recovery failed", app._status_text)
+                snapshot[0] = None
+                log = app.query_one("#log", RichLog)
+                with patch.object(log, "write", wraps=log.write) as write:
+                    await app._refresh()
+                    self.assertTrue(any("could not read traffic with ss" in str(call.args[0])
+                                        for call in write.call_args_list))
+                self.assertIn("recovery failed", app._status_text)
+                snapshot[0] = ""
+                await app._refresh()
+                self.assertIn("recovery failed", app._status_text)
+                self.assertTrue(app.query_one("#apply", Button).disabled)
 
     async def test_percent_sign_alone_does_not_clear_an_existing_cap(self):
         fake = FakeShaper()

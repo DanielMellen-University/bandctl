@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep a recovery failure visible when other TUI warnings change.
+
 - Retry TUI recovery even when no default interface is available.
 
 - Keep socket filters when a table has a noncanonical or out-of-range inode.

@@ -121,6 +121,7 @@ class BandctlApp(App):
         self.is_root = os.geteuid() == 0 if is_root is None else is_root
         self.iface = iface or ""
         self._iface_error: str | None = None
+        self._recovery_error: str | None = None
         self.shaper = shaper
         self.cleanup_errors: list[str] = []
         self.unit = Unit.MBIT
@@ -214,8 +215,9 @@ class BandctlApp(App):
             recovery_error = recovery_shaper.recovery_error
             if self.iface:
                 self.shaper = recovery_shaper
-        await self._refresh()
         recovery_error = recovery_error or getattr(self.shaper, "recovery_error", None)
+        self._recovery_error = recovery_error
+        await self._refresh()
         if recovery_error:
             self.query_one("#apply", Button).disabled = True
             self.query_one("#remove", Button).disabled = True
@@ -939,13 +941,11 @@ class BandctlApp(App):
         return None
 
     def _note(self, text: str, *, bad: bool = False) -> None:
-        self._status_text = text
-        self._status_bad = bad
+        self._status_text = self._recovery_error or text
+        self._status_bad = bool(self._recovery_error) or bad
         if self.is_mounted:
             self._paint_status()
             self._log(text)
-        else:
-            self._status_text = text
 
     def _paint_status(self) -> None:
         color = "#f0a35e" if self._status_bad else "#ffffff"
