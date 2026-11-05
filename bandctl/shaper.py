@@ -1441,7 +1441,7 @@ class Shaper:
             raise ShaperError(f"cannot read qdisc on {iface}: {exc.detail}", exc.command) from exc
         kind = parse_root_qdisc(text)
         if not kind:
-            raise ShaperError(f"no root qdisc on {iface}")
+            raise ShaperError(f"cannot determine root qdisc on {iface}")
         return kind
 
     def _class_bytes(self, dev: str) -> dict[int, int]:
@@ -1786,11 +1786,14 @@ def nft_script(shares: list[Share]) -> str:
 
 
 def parse_root_qdisc(text: str) -> str | None:
+    if not text.endswith("\n"):
+        return None
+    roots = []
     for line in text.splitlines():
         match = re.search(r"^qdisc\s+(\S+)\s+\S+\s+root\b", line)
         if match:
-            return match.group(1)
-    return None
+            roots.append(match.group(1))
+    return roots[0] if len(roots) == 1 else None
 
 
 def parse_class_bytes(text: str) -> dict[int, int]:

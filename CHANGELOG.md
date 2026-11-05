@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Keep recovery state when a qdisc query is truncated or reports multiple roots.
+
 - Keep an active refresh running when another manual refresh is requested.
 
 - Report worker startup errors that the error stream cannot encode.

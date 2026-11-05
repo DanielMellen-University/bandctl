@@ -1952,6 +1952,42 @@ class ApplyTests(unittest.TestCase):
         self.assertIn("/run/bandctl.json", host.files)
         self.assertFalse(any("qdisc del dev eth0 root" in command for command in _joined(host)))
 
+    def test_recovery_keeps_unconfirmed_qdisc_when_query_has_multiple_roots(self):
+        for second_kind in ("cake", "fq_codel"):
+            with self.subTest(second_kind=second_kind):
+                shaper, host = _shaper()
+                host.files["/run/bandctl.json"] = json.dumps({
+                    "iface": "eth0", "qdisc": "fq_codel", "root_replaced": True,
+                    "root_uncertain": True, "pids": {}, "nft_owned": True,
+                    "ifb_owned": True, "ingress_owned": True,
+                })
+                host.ifb_exists = True
+                host.qdisc = ("qdisc fq_codel 0: root refcnt 2\n"
+                              f"qdisc {second_kind} 1: root refcnt 2\n")
+                shaper.recover()
+                self.assertIsNotNone(shaper.recovery_error)
+                state = json.loads(host.files["/run/bandctl.json"])
+                self.assertTrue(state["root_uncertain"])
+                self.assertFalse(state["nft_owned"])
+                self.assertFalse(state["ifb_owned"])
+                self.assertFalse(state["ingress_owned"])
+                self.assertFalse(host.ifb_exists)
+                self.assertIn("nft delete table inet bandctl", _joined(host))
+                self.assertFalse(any(" dev eth0 root" in command for command in _joined(host)))
+
+    def test_recovery_keeps_unconfirmed_qdisc_when_query_is_truncated(self):
+        shaper, host = _shaper()
+        host.files["/run/bandctl.json"] = json.dumps({
+            "iface": "eth0", "qdisc": "fq_codel", "root_replaced": True,
+            "root_uncertain": True, "pids": {}, "nft_owned": False,
+            "ifb_owned": False, "ingress_owned": False,
+        })
+        host.qdisc = "qdisc fq_codel 0: root"
+        shaper.recover()
+        self.assertIsNotNone(shaper.recovery_error)
+        self.assertTrue(json.loads(host.files["/run/bandctl.json"])["root_uncertain"])
+        self.assertFalse(any(" dev eth0 root" in command for command in _joined(host)))
+
     def test_recovery_cleans_other_resources_when_root_qdisc_is_uncertain(self):
         shaper, host = _shaper()
         leaf = "/sys/fs/cgroup/bandctl/bandctl-42"
