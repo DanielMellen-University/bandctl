@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Preserve unrelated uninstall wrappers that mention the install path.
+
 - Recognize installed commands when the install path contains symlinks.
 
 - Keep a regular command file inside the install directory during uninstall.

@@ -404,7 +404,8 @@ class ScriptTests(unittest.TestCase):
             uninstall = prefix / "uninstall.sh"
             uninstall.write_text("old uninstall script\n", encoding="utf-8")
             wrapper = bindir / "bandctl-uninstall"
-            wrapper.write_text(f"old wrapper {prefix}/uninstall.sh\n", encoding="utf-8")
+            wrapper_text = f'#!/bin/sh\nexec "{prefix}/uninstall.sh" --prefix "{prefix}" --bindir "{bindir}" "$@"\n'
+            wrapper.write_text(wrapper_text, encoding="utf-8")
             command = bindir / "bandctl"
             command.symlink_to(prefix / "venv" / "bin" / "bandctl")
             python = tools / "python3"
@@ -423,7 +424,7 @@ class ScriptTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual((prefix / "venv" / "old").read_text(encoding="utf-8"), "old venv")
             self.assertEqual(uninstall.read_text(encoding="utf-8"), "old uninstall script\n")
-            self.assertEqual(wrapper.read_text(encoding="utf-8"), f"old wrapper {prefix}/uninstall.sh\n")
+            self.assertEqual(wrapper.read_text(encoding="utf-8"), wrapper_text)
             self.assertEqual(stamp.read_text(encoding="utf-8"), f"PREFIX={prefix}\nBINDIR={bindir}\n")
             self.assertEqual(command.readlink(), prefix / "venv" / "bin" / "bandctl")
 
@@ -454,6 +455,49 @@ class ScriptTests(unittest.TestCase):
                 else:
                     self.assertFalse(target.exists())
 
+    def test_install_preserves_unrelated_wrapper_mentioning_uninstall_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prefix, bindir, tools = root / "install", root / "bin", root / "tools"
+            prefix.mkdir()
+            bindir.mkdir()
+            tools.mkdir()
+            wrapper = bindir / "bandctl-uninstall"
+            contents = f"#!/bin/sh\necho 'See {prefix}/uninstall.sh'\n"
+            wrapper.write_text(contents, encoding="utf-8")
+            attempted = root / "venv-attempted"
+            python = tools / "python3"
+            python.write_text(f'#!/bin/sh\n[ "$1" = -c ] && exit 0\ntouch "{attempted}"\nexit 1\n', encoding="utf-8")
+            python.chmod(0o755)
+
+            result = _run(["bash", str(INSTALL), "--prefix", str(prefix), "--bindir", str(bindir),
+                           "--skip-deps"], env=_quiet_ps(tools))
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("already exists", result.stderr)
+            self.assertEqual(wrapper.read_text(encoding="utf-8"), contents)
+            self.assertFalse(attempted.exists())
+
+    def test_uninstall_preserves_unrelated_wrapper_mentioning_uninstall_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prefix, bindir, tools = root / "install", root / "bin", root / "tools"
+            prefix.mkdir()
+            bindir.mkdir()
+            tools.mkdir()
+            (prefix / "install-stamp").write_text(f"PREFIX={prefix}\nBINDIR={bindir}\n", encoding="utf-8")
+            wrapper = bindir / "bandctl-uninstall"
+            contents = f"#!/bin/sh\necho 'See {prefix}/uninstall.sh'\n"
+            wrapper.write_text(contents, encoding="utf-8")
+            env = _quiet_ps(tools)
+            (tools / "id").write_text("#!/bin/sh\nprintf '1000\\n'\n", encoding="utf-8")
+
+            result = _run(["bash", str(UNINSTALL), "--prefix", str(prefix), "--bindir", str(bindir)], env=env)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(wrapper.read_text(encoding="utf-8"), contents)
+            self.assertIn("left", result.stderr)
+
     def test_uninstall_removes_only_its_own_files(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -483,7 +527,7 @@ class ScriptTests(unittest.TestCase):
             (prefix / "uninstall.sh").write_text("#!/bin/sh\n", encoding="utf-8")
             (bindir / "bandctl").symlink_to(venv_bin / "bandctl")
             (bindir / "bandctl-uninstall").write_text(
-                f"#!/bin/sh\nexec {prefix}/uninstall.sh \"$@\"\n",
+                f'#!/bin/sh\nexec "{prefix}/uninstall.sh" --prefix "{prefix}" --bindir "{bindir}" "$@"\n',
                 encoding="utf-8",
             )
             foreign = bindir / "other"

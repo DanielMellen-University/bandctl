@@ -131,8 +131,12 @@ elif [ -e "$link" ]; then
 fi
 
 wrapper="$BINDIR/bandctl-uninstall"
-if [ -f "$wrapper" ] && grep -F -q "$PREFIX/uninstall.sh" "$wrapper"; then
+if [ -f "$wrapper" ] && [ ! -L "$wrapper" ] && cmp -s "$wrapper" <(
+  printf '#!/bin/sh\nexec "%s/uninstall.sh" --prefix "%s" --bindir "%s" "$@"\n' "$PREFIX" "$PREFIX" "$BINDIR"
+); then
   rm -f "$wrapper"
+elif [ -e "$wrapper" ] || [ -L "$wrapper" ]; then
+  echo "bandctl uninstall: left $wrapper in place (it is not this install)" >&2
 fi
 
 rm -rf -- "$PREFIX/venv"
