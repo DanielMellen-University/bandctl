@@ -96,6 +96,8 @@ tc filter add ... protocol ipv6 handle <minor> fw flowid 1:<minor>
 
 The previous root qdisc kind is read first. `fq_codel`, `pfifo_fast`, `mq`, `fq`, `pfifo`, `cake`, and `noqueue` may be replaced. An existing `htb` qdisc is refused. The kind is stored in `/run/bandctl.json` together with each pid's original cgroup path (`0::` from `/proc/<pid>/cgroup`).
 
+Cleanup adds the saved kind with default settings. It does not save or restore the previous qdisc's options, child qdiscs, classes, or filters.
+
 Download, first time any process has a download percent:
 
 ```

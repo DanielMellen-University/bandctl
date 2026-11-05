@@ -160,7 +160,7 @@ The same applies when a group member moves elsewhere during settings import roll
 - each process still in its bandctl cgroup is written back to its original cgroup
 - table `inet bandctl` is deleted
 - the ingress redirect and `ifb-bandctl` are deleted
-- if bandctl replaced the root qdisc, the HTB qdisc is deleted and the previous one (usually `fq_codel`) is added again. A root qdisc bandctl never replaced is not touched
+- if bandctl replaced the root qdisc, the HTB qdisc is deleted and the previous kind (usually `fq_codel`) is added with default settings. Previous custom settings, child qdiscs, classes, and filters are not restored. A root qdisc bandctl never replaced is not touched
 - `/sys/fs/cgroup/bandctl` is removed
 - `/run/bandctl.json` is removed
 

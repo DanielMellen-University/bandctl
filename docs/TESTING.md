@@ -44,7 +44,7 @@ CI (`.github/workflows/ci.yml`) runs the same command on Ubuntu for Python 3.10 
 
 ## Manual check, needs root
 
-Do this on a machine where losing the current qdisc for a minute is acceptable. It replaces the root qdisc and redirects ingress through IFB until you quit.
+Do this on a machine where losing the current root qdisc configuration is acceptable. The download check redirects ingress through IFB until you quit. The upload check replaces the root qdisc. Cleanup restores only the previous root qdisc kind with default settings. It does not restore custom options, child qdiscs, classes, or filters.
 
 1. Note the current qdisc: `tc qdisc show dev eth0` (use your interface).
 2. `sudo bandctl --iface eth0` after `sudo ./install.sh`, or `sudo .venv/bin/python -m bandctl --iface eth0` from a checkout.
@@ -53,19 +53,19 @@ Do this on a machine where losing the current qdisc for a minute is acceptable. 
 5. Select that `curl`, set download to `10`, leave upload blank, Apply.
 6. The download bar should move, and `tc -s class show dev ifb-bandctl` should show a class `1:10` (or the next minor) whose ceil is about 1 Mbit (10% of 10 Mbit) and whose byte counter increases. `tc filter show dev eth0 ingress` should include a flower filter for that curl socket. The socket was open before Apply, and the cgroup match does not see it.
 7. Press `q`.
-8. `tc qdisc show dev eth0` should be back to the qdisc from step 1. `nft list table inet bandctl` should fail with "No such file or directory". `ip link show ifb-bandctl` should fail the same way. `ls /sys/fs/cgroup/bandctl` should fail.
+8. `tc qdisc show dev eth0` should show the root qdisc from step 1 unchanged for this download-only check. `nft list table inet bandctl` should fail with "No such file or directory". `ip link show ifb-bandctl` should fail the same way. `ls /sys/fs/cgroup/bandctl` should fail.
 
-Upload-only is the same with a sender (`iperf3 -c` or similar) and `tc -s class show dev eth0`. No IFB device should appear.
+Upload-only is the same with a sender (`iperf3 -c` or similar) and `tc -s class show dev eth0`. No IFB device should appear. After exit, the root qdisc has the same kind as in step 1, with default settings.
 
 If you kill the process with `kill -9`, start bandctl once as root and quit. `/run/bandctl.json` from the crashed run is what the second start uses to restore the qdisc and the cgroups.
 
 ## Manual check of the command line, needs root
 
-Same warning as above: the root qdisc is replaced while a limit exists. These steps use the same curl download.
+The download-only steps below leave the root qdisc in place. An upload limit replaces it, with the same warning as above. These steps use the same curl download.
 
 1. Start the download from step 4 above. Note the PID with `bandctl list`.
 2. `sudo bandctl --iface eth0 limit <pid> --down 10`. It prints `pid <pid>: down 10%, up unlimited` and returns. If the header would say the link is unknown, the command fails and asks for a budget; import a settings file with a capacity budget first.
 3. Confirm the same `tc` and `nft` output as step 6 above. The limit stays after the command exits because a background session holds it.
 4. `sudo bandctl export settings.json`, then `sudo bandctl remove <pid>`, then `sudo bandctl import settings.json`. Export and import should each print the path.
-5. `sudo bandctl stop`. It prints `session stopped` after cleanup. The qdisc, nft table, IFB device, and cgroup should be gone, as in step 8.
+5. `sudo bandctl stop`. It prints `session stopped` after cleanup. The ingress redirect, nft table, IFB device, and cgroup should be gone, as in step 8.
 6. While a session is running, `sudo bandctl` (the TUI) should exit with "another bandctl session is already running".

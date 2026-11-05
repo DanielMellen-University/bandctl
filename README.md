@@ -64,6 +64,8 @@ sudo bandctl --iface wlan0
 
 bandctl has to be root to move processes between cgroups and to change qdiscs. Only one root bandctl session can control shaping at a time. The installer is what makes `sudo bandctl` find Textual. `sudo python -m bandctl` often does not.
 
+An upload share replaces the interface's root qdisc. Cleanup adds back the previous qdisc kind with default settings. It does not restore custom settings, child qdiscs, classes, or filters. Use an interface where losing that configuration is acceptable.
+
 Without root the UI still opens. It lists processes and tells you the exact command to re-run. Apply and remove stay disabled, and nothing is installed on the interface.
 
 ## Uninstall
@@ -168,7 +170,7 @@ A name must match exactly and identify one process; use a PID when names are amb
 
 The ceiling is a percent of capacity, not of whatever the link happens to be doing this second. Capacity is the detected link speed, unless you typed a budget. Several shares may add up to more than 100%. Each process still cannot pass its own percent. The guaranteed HTB rates are scaled down so they fit, and the status line says so.
 
-Rules exist only while bandctl is running. Exit restores each process still in its bandctl cgroup to the cgroup it had before, deletes the nftables table `inet bandctl`, deletes `ifb-bandctl`, and puts the previous root qdisc back if bandctl replaced it. A process moved elsewhere is left there. A qdisc bandctl never touched is left alone, even when another part of the cleanup fails. A crash writes `/run/bandctl.json`. The next start uses that file to finish the cleanup.
+Rules exist only while bandctl is running. Exit restores each process still in its bandctl cgroup to the cgroup it had before, deletes the nftables table `inet bandctl`, deletes `ifb-bandctl`, and adds back the previous root qdisc kind with default settings if bandctl replaced it. A process moved elsewhere is left there. A qdisc bandctl never touched is left alone, even when another part of the cleanup fails. A crash writes `/run/bandctl.json`. The next start uses that file to finish the cleanup.
 
 While an upload share is active, bandctl replaces the root qdisc on the chosen interface with HTB. Unmarked traffic can still use the full link. Do not point bandctl at an interface that already has an `htb` qdisc. It will refuse. A download share also requires that the interface has no existing ingress qdisc and that `ifb-bandctl` does not already exist.
 
