@@ -3095,6 +3095,28 @@ class CleanupTests(unittest.TestCase):
                 self.assertEqual(host.files["/sys/fs/cgroup/cgroup.procs"], "43\n")
                 self.assertNotIn("/run/bandctl.json", host.files)
 
+    def test_recovery_restores_saved_process_before_rejecting_member_list(self):
+        shaper, host = _shaper()
+        leaf = "/sys/fs/cgroup/bandctl/bandctl-42"
+        host.dirs.update({"/sys/fs/cgroup/bandctl", leaf})
+        host.files[leaf + "/cgroup.procs"] = "42\n43"
+        host.files["/proc/42/cgroup"] = "0::/bandctl/bandctl-42\n"
+        host.files["/proc/42/stat"] = "42 (parent) S " + "0 " * 18 + "100"
+        host.files["/proc/43/cgroup"] = "0::/bandctl/bandctl-42\n"
+        host.files["/run/bandctl.json"] = json.dumps({
+            "iface": "eth0", "root_replaced": False, "nft_owned": False,
+            "ifb_owned": False, "ingress_owned": False,
+            "pids": {"42": "/user.slice"}, "start_ticks": {"42": 100},
+        })
+
+        shaper.recover()
+
+        self.assertEqual(host.files["/sys/fs/cgroup/user.slice/cgroup.procs"], "42\n")
+        self.assertEqual(host.files["/proc/43/cgroup"], "0::/bandctl/bandctl-42\n")
+        self.assertIn("invalid pid", shaper.recovery_error or "")
+        self.assertIn(leaf, host.dirs)
+        self.assertIn("/run/bandctl.json", host.files)
+
     def test_leaf_cleanup_does_not_move_a_reused_pid(self):
         shaper, host = _shaper()
         leaf = "/sys/fs/cgroup/bandctl/bandctl-42"
