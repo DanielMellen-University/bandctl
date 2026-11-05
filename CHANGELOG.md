@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Refuse nonempty install directories that are not marked as bandctl installs.
+
 - Remove the downloaded temporary checkout after a piped installation.
 
 - Clarify which processes are restored before checking a leaf's member list.

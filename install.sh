@@ -150,6 +150,26 @@ check_command_destination "$BINDIR/bandctl"
 check_wrapper_destination "$BINDIR/bandctl-uninstall"
 check_managed_files
 
+if [ -e "$PREFIX/install-stamp" ]; then
+  [ -f "$PREFIX/install-stamp" ] || die "$PREFIX is not a bandctl install"
+  stamp_prefix=""
+  while IFS= read -r line; do
+    case "$line" in
+      PREFIX=*)
+        [ -z "$stamp_prefix" ] || die "invalid install stamp in $PREFIX"
+        stamp_prefix=${line#PREFIX=}
+        ;;
+    esac
+  done < "$PREFIX/install-stamp"
+  [ "$stamp_prefix" = "$PREFIX" ] || die "install stamp does not match $PREFIX"
+elif [ -d "$PREFIX" ]; then
+  if (shopt -s dotglob nullglob; entries=("$PREFIX"/*); ((${#entries[@]}))); then
+    die "$PREFIX is not a bandctl install and is not empty"
+  fi
+elif [ -e "$PREFIX" ] || [ -L "$PREFIX" ]; then
+  die "$PREFIX is not a bandctl install directory"
+fi
+
 need_deps() {
   command -v python3 >/dev/null 2>&1 || return 0
   python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' || return 0

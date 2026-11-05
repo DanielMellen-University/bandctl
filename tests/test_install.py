@@ -122,6 +122,46 @@ class ScriptTests(unittest.TestCase):
                 self.assertEqual(existing.read_text(encoding="utf-8"), "keep")
                 self.assertFalse(attempted.exists())
 
+    def test_install_refuses_nonempty_unowned_prefix(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prefix, bindir, tools = root / "install", root / "bin", root / "tools"
+            prefix.mkdir()
+            bindir.mkdir()
+            tools.mkdir()
+            existing = prefix / ".notes.txt"
+            existing.write_text("keep", encoding="utf-8")
+            attempted = root / "venv-attempted"
+            python = tools / "python3"
+            python.write_text(f'#!/bin/sh\n[ "$1" = -c ] && exit 0\ntouch "{attempted}"\nexit 1\n', encoding="utf-8")
+            python.chmod(0o755)
+
+            result = _run(["bash", str(INSTALL), "--prefix", str(prefix), "--bindir", str(bindir),
+                           "--skip-deps"], env=_quiet_ps(tools))
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("not a bandctl install", result.stderr)
+            self.assertEqual(existing.read_text(encoding="utf-8"), "keep")
+            self.assertFalse(attempted.exists())
+
+    def test_install_refuses_stamp_for_another_prefix(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            prefix, bindir, tools = root / "install", root / "bin", root / "tools"
+            (prefix / "venv").mkdir(parents=True)
+            bindir.mkdir()
+            tools.mkdir()
+            existing = prefix / "venv" / "existing"
+            existing.write_text("keep", encoding="utf-8")
+            (prefix / "install-stamp").write_text("PREFIX=/other/install\n", encoding="utf-8")
+
+            result = _run(["bash", str(INSTALL), "--prefix", str(prefix), "--bindir", str(bindir),
+                           "--skip-deps"], env=_quiet_ps(tools))
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("install stamp does not match", result.stderr)
+            self.assertEqual(existing.read_text(encoding="utf-8"), "keep")
+
     def test_install_refuses_regular_command_inside_prefix(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -234,6 +274,7 @@ class ScriptTests(unittest.TestCase):
             tools.mkdir()
             existing = prefix / "venv" / "existing"
             existing.write_text("keep", encoding="utf-8")
+            (prefix / "install-stamp").write_text(f"PREFIX={prefix}\nBINDIR={bindir}\n", encoding="utf-8")
             python = tools / "python3"
             python.write_text(
                 "#!/bin/sh\n"
@@ -257,6 +298,7 @@ class ScriptTests(unittest.TestCase):
             bindir.mkdir()
             tools.mkdir()
             (prefix / "venv" / "old").write_text("old", encoding="utf-8")
+            (prefix / "install-stamp").write_text(f"PREFIX={prefix}\nBINDIR={bindir}\n", encoding="utf-8")
             python = tools / "python3"
             python.write_text(
                 "#!/bin/sh\n"

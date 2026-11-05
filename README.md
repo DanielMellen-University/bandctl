@@ -44,6 +44,7 @@ docs/            usage, architecture, testing
 ## Install
 
 The installer installs `python3`, `iproute2`, and `nftables` if they are missing, puts bandctl in `/opt/bandctl`, and links `bandctl` onto `PATH`.
+The install directory must be empty or contain a matching bandctl install stamp. Uninstall removes the whole install directory.
 
 ```
 curl -fsSL https://raw.githubusercontent.com/DanielMellen-University/bandctl/main/install.sh | sudo bash
