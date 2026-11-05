@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.2.5 (2026-11-05)
+
 - Apply automatic rules to reused PIDs after old limits are retired.
 
 - Keep unpaired surrogates from hiding uninstall recovery errors.
