@@ -145,9 +145,9 @@ The on-screen rate is each socket's counter delta times 8, divided by its sample
 
 Read-only qdisc, class counter, and IFB queries time out after two seconds. Commands that change kernel state have no such timeout because a timed-out change could already have taken effect.
 
-Before replacing a root qdisc, recovery state records the intended replacement. If the command fails and a follow-up query confirms the original qdisc kind is still present, the state clears that ownership flag. An inconclusive query leaves the flag in place.
+Before replacing a root qdisc, recovery state records the intended replacement as uncertain. A successful command clears the uncertainty. If the command fails and a follow-up query confirms the original qdisc kind is still present, the state clears the ownership flag. An inconclusive query leaves it uncertain.
 
-An unconfirmed replacement blocks further upload setup and keeps recovery state through rollback and exit. Shutdown reports the uncertainty without changing the root qdisc. The next start retries recovery using the saved state.
+An unconfirmed replacement blocks further upload setup and keeps recovery state through rollback and exit. Shutdown reports the uncertainty without changing the root qdisc. On the next start, recovery clears the flag if the original qdisc kind is present. Otherwise it reports the uncertainty and leaves the state and root qdisc alone.
 
 `traffic.parse_ss_sockets` can identify individual TCP sockets by the `ss` socket cookie, then inode, then endpoint pair. This keeps counters for separate sockets distinct. Shared sockets are attributed to each listed process.
 

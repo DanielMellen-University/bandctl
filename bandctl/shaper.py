@@ -726,9 +726,11 @@ class Shaper:
                         raise ShaperError("invalid recovery state: invalid interface")
                     if "qdisc" in state and (not isinstance(state["qdisc"], str) or state["qdisc"] not in SAFE_QDISCS):
                         raise ShaperError("invalid recovery state: invalid qdisc")
-                    for field in ("root_replaced", "ifb_owned", "ingress_owned", "nft_owned"):
+                    for field in ("root_replaced", "root_uncertain", "ifb_owned", "ingress_owned", "nft_owned"):
                         if field in state and type(state[field]) is not bool:
                             raise ShaperError(f"invalid recovery state: {field} must be a boolean")
+                    if state.get("root_uncertain") and not state.get("root_replaced", True):
+                        raise ShaperError("invalid recovery state: inconsistent root qdisc ownership")
                     if ("ifb_owned" in state) != ("ingress_owned" in state):
                         raise ShaperError("invalid recovery state: incomplete download ownership")
             except ShaperError as exc:
@@ -756,6 +758,17 @@ class Shaper:
                     self._torn = True
                     self.recovery_error = "invalid recovery state: invalid start_ticks"
                     return [self.recovery_error]
+            if state and state.get("root_uncertain"):
+                try:
+                    if self._root_kind(state["iface"]) != state.get("qdisc", "fq_codel"):
+                        raise ShaperError("cannot verify root qdisc after failed replacement")
+                    self._record_recovery_fields(root_replaced=False, root_uncertain=False)
+                except ShaperError as exc:
+                    self._torn = True
+                    self.recovery_error = f"recovery failed: {exc}"
+                    return [self.recovery_error]
+                state["root_replaced"] = False
+                state["root_uncertain"] = False
             pending_pids: set[int] = set()
             pending_error: str | None = None
             if state and state.get("iface"):
@@ -1087,7 +1100,7 @@ class Shaper:
         if self._saved_qdisc is None:
             self._saved_qdisc = current if current in SAFE_QDISCS else "fq_codel"
         # Recovery must know the original qdisc before it may be replaced.
-        self._write_state(root_replaced=True, required=True)
+        self._write_state(root_replaced=True, root_uncertain=True, required=True)
         try:
             self._run(
                 ["tc", "qdisc", "replace", "dev", self.iface, "root", "handle", "1:", "htb", "default", "999"]
@@ -1099,7 +1112,7 @@ class Shaper:
                 observed = None
             if observed == current:
                 try:
-                    self._record_recovery_fields(root_replaced=False)
+                    self._record_recovery_fields(root_replaced=False, root_uncertain=False)
                 except ShaperError as state_error:
                     raise ShaperError(f"{replace_error}; cannot update recovery state: {state_error}") from replace_error
             else:
@@ -1107,6 +1120,7 @@ class Shaper:
                 raise ShaperError(f"{replace_error}; cannot verify root qdisc after failed replacement") from replace_error
             raise
         self._egress = True
+        self._record_recovery_fields(root_uncertain=False)
 
     def _ensure_ifb(self) -> None:
         if self._ifb_cleanup_error:
@@ -1253,7 +1267,7 @@ class Shaper:
             if not any(text in str(exc).lower() for text in ("no such file", "not found")):
                 raise
         self._run(["tc", "qdisc", "add", "dev", iface, "root", kind])
-        self._record_recovery_fields(root_replaced=False)
+        self._record_recovery_fields(root_replaced=False, root_uncertain=False)
         self._root_restore_failed = False
         self._egress = False
         self._drop_dev(iface)
@@ -1410,7 +1424,8 @@ class Shaper:
         except OSError as exc:
             raise ShaperError(str(exc), args) from exc
 
-    def _write_state(self, *, root_replaced: bool | None = None, required: bool = False) -> None:
+    def _write_state(self, *, root_replaced: bool | None = None, root_uncertain: bool | None = None,
+                     required: bool = False) -> None:
         if not self._shares and not self._egress and not self._ifb and not self._nft_owned:
             # Leaves may still contain inherited processes. Teardown removes
             # recovery state only after it has cleaned the cgroup tree.
@@ -1419,6 +1434,7 @@ class Shaper:
             "iface": self.iface,
             "qdisc": self._saved_qdisc or "fq_codel",
             "root_replaced": (self._egress or self._root_uncertain) if root_replaced is None else root_replaced,
+            "root_uncertain": self._root_uncertain if root_uncertain is None else root_uncertain,
             "ifb_owned": self._ifb_owned,
             "ingress_owned": self._ingress_owned,
             "nft_owned": self._nft_owned,

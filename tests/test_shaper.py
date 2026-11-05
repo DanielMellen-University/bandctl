@@ -1692,7 +1692,9 @@ class ApplyTests(unittest.TestCase):
         shaper.apply(42, 10, 10, 100_000_000, 100_000_000)
         self.assertEqual(len(recorded), 1)
         self.assertTrue(recorded[0]["root_replaced"])
+        self.assertTrue(recorded[0]["root_uncertain"])
         self.assertEqual(recorded[0]["qdisc"], "fq_codel")
+        self.assertFalse(json.loads(host.files["/run/bandctl.json"])["root_uncertain"])
 
     def test_failed_root_replace_does_not_leave_stale_recovery_ownership(self):
         shaper, host = _shaper()
@@ -1772,6 +1774,32 @@ class ApplyTests(unittest.TestCase):
                 self.assertTrue(any("root qdisc" in note and "cannot verify" in note for note in notes))
                 self.assertIn("/run/bandctl.json", host.files)
                 self.assertFalse(any("qdisc del dev eth0 root" in command for command in _joined(host)))
+
+    def test_recovery_does_not_replace_unconfirmed_root_qdisc(self):
+        shaper, host = _shaper()
+        host.files["/run/bandctl.json"] = json.dumps({
+            "iface": "eth0", "qdisc": "fq_codel", "root_replaced": True,
+            "root_uncertain": True, "pids": {}, "nft_owned": False,
+            "ifb_owned": False, "ingress_owned": False,
+        })
+        host.qdisc = "qdisc cake 0: root refcnt 2\n"
+        notes = shaper.recover()
+        self.assertTrue(any("cannot verify root qdisc" in note for note in notes))
+        self.assertIsNotNone(shaper.recovery_error)
+        self.assertIn("/run/bandctl.json", host.files)
+        self.assertFalse(any("qdisc del dev eth0 root" in command for command in _joined(host)))
+
+    def test_recovery_clears_uncertainty_if_original_root_qdisc_is_present(self):
+        shaper, host = _shaper()
+        host.files["/run/bandctl.json"] = json.dumps({
+            "iface": "eth0", "qdisc": "fq_codel", "root_replaced": True,
+            "root_uncertain": True, "pids": {}, "nft_owned": False,
+            "ifb_owned": False, "ingress_owned": False,
+        })
+        shaper.recover()
+        self.assertIsNone(shaper.recovery_error)
+        self.assertNotIn("/run/bandctl.json", host.files)
+        self.assertFalse(any("qdisc del dev eth0 root" in command for command in _joined(host)))
 
     def test_recover_older_state_restores_saved_root_qdisc(self):
         shaper, host = _shaper()
