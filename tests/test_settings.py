@@ -30,6 +30,18 @@ class SettingsTests(unittest.TestCase):
             with self.subTest(changed=changed), self.assertRaises(ValueError):
                 loads(changed)
 
+    def test_rejects_unsupported_version_and_non_list_fields(self):
+        data = json.loads(dumps(self.settings()))
+        data["version"] = 2
+        with self.assertRaisesRegex(ValueError, "unsupported settings version"):
+            loads(json.dumps(data))
+        for field in ("rules", "groups"):
+            changed = json.loads(json.dumps(data))
+            changed["version"] = 1
+            changed[field] = {}
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "must be a list"):
+                loads(json.dumps(changed))
+
     def test_rejects_bad_rule_or_schedule(self):
         data = json.loads(dumps(self.settings()))
         for field, value in (("name", None), ("down", True), ("start", "25:00"), ("end", None)):
