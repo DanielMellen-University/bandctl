@@ -45,6 +45,14 @@ class SettingsTests(unittest.TestCase):
             with self.subTest(collection=collection), self.assertRaises(ValueError):
                 loads(json.dumps(data))
 
+    def test_rejects_lone_surrogate_interface_name(self):
+        data = json.loads(dumps(self.settings()))
+        data["interface"] = "\ud800"
+        with self.assertRaisesRegex(ValueError, "invalid interface"):
+            loads(json.dumps(data))
+        with self.assertRaisesRegex(ValueError, "invalid interface"):
+            Settings("\ud800", None, None, (), ())
+
     def test_rejects_bad_budgets_interface_and_pid_identity(self):
         data = json.loads(dumps(self.settings()))
         for field, value in (("interface", "../bad"), ("down_budget_bps", 0), ("up_budget_bps", True)):
