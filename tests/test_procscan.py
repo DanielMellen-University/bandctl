@@ -88,6 +88,15 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(flow.remote_port, 0)
         self.assertEqual(flow.remote_ip, "")
 
+    def test_non_strict_parse_skips_bad_rows_instead_of_failing(self):
+        header = "sl local_address rem_address st tx rx tr retr uid timeout inode\n"
+        good = "0: 0800000A:0050 04030201:01BB 01 0 0 0 0 0 14\n"
+        bad_inode = "1: 0800000A:0050 04030201:01BB 01 0 0 0 0 0 nope\n"
+        bad_endpoint = "2: ZZZZ:0050 04030201:01BB 01 0 0 0 0 0 15\n"
+        zero_port = "3: 0800000A:0000 04030201:01BB 01 0 0 0 0 0 16\n"
+        flows = parse_proc_net(header + bad_inode + bad_endpoint + zero_port + good, "tcp", "ip")
+        self.assertEqual(set(flows), {"14"})
+
     def test_flows_skip_ports_outside_valid_range(self):
         header = "sl local_address rem_address st tx rx tr retr uid timeout inode\n"
         rows = (
@@ -149,6 +158,9 @@ class ParseTests(unittest.TestCase):
     def test_user(self):
         self.assertEqual(user_from_status("Uid:\t0\t0\t0\t0\n"), "root")
         self.assertEqual(user_from_status("Name:\tnobody\n", fallback_uid=999999), "999999")
+
+    def test_user_without_a_uid_is_unknown(self):
+        self.assertEqual(user_from_status("Name:\tnobody\n"), "?")
 
     def test_invalid_status_uid_uses_fallback(self):
         for uid in ("9" * 5000, "4294967296", "１２３"):
