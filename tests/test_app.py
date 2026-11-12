@@ -1346,6 +1346,81 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("user", app._cols)
             self.assertLessEqual(table.virtual_size.width, table.size.width)
 
+    async def test_enter_in_a_budget_field_commits_budgets(self):
+        app = _app(FakeShaper())
+        async with app.run_test(size=(80, 24)) as pilot:
+            field = app.query_one("#down-budget", Input)
+            field.focus()
+            field.value = "50"
+            await pilot.press("enter")
+            self.assertEqual(app._down_budget, 50_000_000)
+            self.assertIn("capacity updated", app._status_text)
+
+    async def test_apply_note_reports_over_committed_shares(self):
+        fake = FakeShaper()
+        fake._shares[42] = Share(42, 60, None, 42, "/", start_ticks=42)
+        app = _app(fake)
+        async with app.run_test(size=(80, 24)):
+            app._selected = 7
+            app.query_one("#down-pct", Input).value = "60"
+            app.action_apply_limit()
+            self.assertIn("120%", app._status_text)
+
+    async def test_refresh_re_reads_link_speed(self):
+        fake = FakeShaper()
+        app = BandctlApp(iface="eth0", shaper=fake, processes=lambda: list(PROCS),
+                         is_root=True, rates=_rates)
+        with patch("bandctl.app.link_speed_bps", return_value=100_000_000) as speed:
+            async with app.run_test(size=(80, 24)):
+                self.assertEqual(app._detected_bps, 100_000_000)
+                speed.return_value = 250_000_000
+                await app._refresh()
+                self.assertEqual(app._detected_bps, 250_000_000)
+
+    async def test_refresh_expires_processes_unseen_for_300_seconds(self):
+        app = _app(FakeShaper())
+        async with app.run_test(size=(80, 24)):
+            app._process_seen[999] = 0
+            app._process_starts[999] = 5
+            await app._refresh()
+            self.assertNotIn(999, app._process_seen)
+            self.assertNotIn(999, app._process_starts)
+
+    async def test_auto_rule_candidate_with_a_matching_share_is_marked_handled(self):
+        from bandctl.rules import AutoRule
+
+        fake = FakeShaper()
+        proc = ProcessInfo(42, "steam", "steam", "user", 1, 200)
+        app = BandctlApp(iface="eth0", shaper=fake, processes=lambda: [proc],
+                         link_bps=100_000_000, is_root=True, rates=lambda: {})
+        async with app.run_test(size=(100, 30)):
+            app._rules = [AutoRule("steam", 30, None)]
+            candidates = app._rule_tracker.candidates
+
+            def add_matching_limit(*args, **kwargs):
+                result = candidates(*args, **kwargs)
+                fake._shares[42] = Share(42, 30, None, 10, "/", start_ticks=200)
+                return result
+
+            with patch.object(app._rule_tracker, "candidates", side_effect=add_matching_limit):
+                await app._apply_rules([proc])
+            self.assertEqual(fake.applied, [])
+            self.assertIn((42, 200), app._rule_tracker._handled)
+
+    async def test_detail_titles_for_no_selection_and_a_vanished_process(self):
+        app = _app(FakeShaper())
+        async with app.run_test(size=(80, 24)):
+            app._selected = None
+            app._show_all = True
+            app._paint_detail()
+            self.assertEqual(str(app.query_one("#detail-title", Static).render()), "Select a process")
+        gone = BandctlApp(iface="eth0", shaper=FakeShaper(), processes=lambda: [],
+                          link_bps=100_000_000, is_root=True, rates=lambda: {})
+        async with gone.run_test(size=(80, 24)):
+            gone._selected = 42
+            gone._paint_detail()
+            self.assertEqual(str(gone.query_one("#detail-title", Static).render()), "pid 42 is gone")
+
 
 # Many rows, long command lines, and two shares, so every part of the
 # screen has something to show.
