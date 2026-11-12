@@ -77,7 +77,9 @@ class BudgetTests(unittest.TestCase):
 class ConversionTests(unittest.TestCase):
     def test_format_byte_counts(self):
         for count, expected in ((-1, "0 B"), (999, "999 B"), (1000, "1.00 kB"),
-                                (1_500_000, "1.50 MB"), (12_500_000_000, "12.5 GB")):
+                                (999500, "1.00 MB"), (999999, "1.00 MB"),
+                                (1_500_000, "1.50 MB"), (999999999, "1.00 GB"),
+                                (12_500_000_000, "12.5 GB")):
             with self.subTest(count=count):
                 self.assertEqual(format_bytes(count), expected)
     def test_thirty_percent_of_100_mbit(self):
