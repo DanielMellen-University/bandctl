@@ -240,6 +240,32 @@ class ParseTests(unittest.TestCase):
         self.assertIn("hook prerouting", script)
 
 
+class GuardBranchTests(unittest.TestCase):
+    def test_apply_with_no_percent_rejects_both_directions(self):
+        shaper, _host = _shaper()
+        with self.assertRaisesRegex(ShaperError, "download percent"):
+            shaper.apply(42, None, None, 100_000_000, 100_000_000)
+        self.assertEqual(shaper.shares, {})
+
+    def test_set_capacities_with_no_shares_just_records_caps(self):
+        shaper, host = _shaper()
+        shaper.set_capacities(100_000_000, 50_000_000)
+        self.assertEqual((shaper._down_cap, shaper._up_cap), (100_000_000, 50_000_000))
+        self.assertEqual(host.commands, [])
+
+    def test_class_bytes_returns_empty_when_tc_fails(self):
+        shaper, host = _shaper()
+        host.fail_substr = "tc -s class show"
+        self.assertEqual(shaper._class_bytes("eth0"), {})
+
+    def test_pid_flows_returns_empty_when_fd_dir_is_gone_and_process_is_gone(self):
+        shaper, host = _shaper()
+        del host.files["/proc/42/cgroup"]
+        shaper._shares[42] = Share(42, 30, None, 10, "/", start_ticks=42)
+        with patch.object(host, "listdir", side_effect=FileNotFoundError("/proc/42/fd")):
+            self.assertEqual(shaper._pid_flows(42, {}), [])
+
+
 class ShutdownRaceTests(unittest.TestCase):
     def test_apply_waiting_for_lock_does_not_run_after_teardown(self):
         shaper, host = _shaper()
