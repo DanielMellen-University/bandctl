@@ -82,6 +82,12 @@ class ConversionTests(unittest.TestCase):
                                 (12_500_000_000, "12.5 GB")):
             with self.subTest(count=count):
                 self.assertEqual(format_bytes(count), expected)
+    def test_percent_to_bps_rejects_out_of_range_percent_and_capacity(self):
+        for percent, capacity in ((0, 100_000_000), (101, 100_000_000),
+                                  (50, 0), (50, -1)):
+            with self.subTest(percent=percent, capacity=capacity), self.assertRaises(RateError):
+                percent_to_bps(percent, capacity)
+
     def test_thirty_percent_of_100_mbit(self):
         capacity = 100_000_000
         bps = percent_to_bps(30, capacity)
@@ -101,6 +107,9 @@ class ConversionTests(unittest.TestCase):
 
 
 class PlanTests(unittest.TestCase):
+    def test_empty_plan_returns_no_classes(self):
+        self.assertEqual(htb_plan([], 100_000_000), ([], [], 100_000))
+
     def test_rejects_rates_too_small_for_htb_classes(self):
         for ceils, parent in (([0], 1), ([999], 10_000), ([1000, 1000], 2000),
                               ([1000, 1000], 2999)):
