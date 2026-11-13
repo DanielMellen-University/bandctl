@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shlex
+import time
 import unittest
 from types import SimpleNamespace
 from unittest.mock import PropertyMock, patch
@@ -1380,7 +1381,7 @@ class AppTests(unittest.IsolatedAsyncioTestCase):
     async def test_refresh_expires_processes_unseen_for_300_seconds(self):
         app = _app(FakeShaper())
         async with app.run_test(size=(80, 24)):
-            app._process_seen[999] = 0
+            app._process_seen[999] = time.monotonic() - 301
             app._process_starts[999] = 5
             await app._refresh()
             self.assertNotIn(999, app._process_seen)

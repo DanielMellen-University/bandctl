@@ -52,29 +52,18 @@ class TransportTests(unittest.TestCase):
             self.assertFalse(Path(path).exists())
 
     def test_deeply_nested_request_is_rejected_without_stopping_server(self):
-        # A payload that fits the 16 KiB read limit parses without hitting
-        # the decoder's recursion limit, so the nested-too-deeply branch is
-        # only reachable when the decoder itself fails; inject that failure.
-        real_loads = json.loads
-
-        def flaky_loads(data, *args, **kwargs):
-            if data.startswith("["):
-                raise RecursionError("nesting too deep")
-            return real_loads(data, *args, **kwargs)
-
         with tempfile.TemporaryDirectory() as directory:
             path = str(Path(directory) / "session.sock")
             thread = threading.Thread(target=serve, args=(Mock(), path))
             thread.start()
             wait_ready(path)
             try:
-                with patch("bandctl.cli_transport.json.loads", side_effect=flaky_loads):
-                    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
-                        client.connect(path)
-                        client.sendall(b"[" * 2000 + b"]" * 2000 + b"\n")
-                        response = real_loads(client.recv(4096))
-                        self.assertFalse(response["ok"])
-                        self.assertIn("nested too deeply", response["error"])
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                    client.connect(path)
+                    client.sendall(b"[" * 2000 + b"]" * 2000 + b"\n")
+                    response = json.loads(client.recv(4096))
+                    self.assertFalse(response["ok"])
+                    self.assertIn("nested too deeply", response["error"])
                 self.assertTrue(request(path, {"command": "stop"})["ok"])
             finally:
                 if thread.is_alive():
