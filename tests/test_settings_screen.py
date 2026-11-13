@@ -12,6 +12,17 @@ from test_group_screen import group_app
 
 
 class SettingsScreenTests(unittest.IsolatedAsyncioTestCase):
+    async def test_close_dismisses_with_no_settings(self):
+        app, shaper, host = group_app()
+        async with app.run_test(size=(80, 24)) as pilot:
+            with patch.object(app, "_settings_closed") as closed:
+                await pilot.press("x")
+                self.assertIsInstance(app.screen, SettingsScreen)
+                await pilot.click("#settings-close")
+                await pilot.pause()
+                closed.assert_called_once_with(None)
+            self.assertNotIsInstance(app.screen, SettingsScreen)
+
     async def test_export_preserves_leading_spaces_and_rejects_blank_path(self):
         app, shaper, host = group_app()
         async with app.run_test(size=(80, 24)) as pilot:

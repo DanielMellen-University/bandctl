@@ -266,6 +266,35 @@ class WorkerTests(unittest.TestCase):
             with SessionLock(lock_path):
                 pass
 
+    def test_stale_socket_probe_failure_is_reported(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "socket")
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
+                listener.bind(path)
+                listener.listen()
+                with patch("bandctl.cli_worker.socket.socket") as factory:
+                    probe = factory.return_value.__enter__.return_value
+                    probe.connect.side_effect = OSError("probe failed")
+                    with self.assertRaisesRegex(RuntimeError, "cannot check session socket"):
+                        _remove_stale_socket(path)
+            self.assertTrue(Path(path).exists())
+
+    def test_stale_socket_change_during_probe_is_refused(self):
+        import os
+        from types import SimpleNamespace
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "socket")
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as listener:
+                listener.bind(path)
+                info = os.lstat(path)
+                changed = SimpleNamespace(st_dev=info.st_dev, st_ino=info.st_ino + 1,
+                                          st_mode=info.st_mode, st_uid=info.st_uid)
+                with patch("bandctl.cli_worker.os.lstat", side_effect=[info, changed]):
+                    with self.assertRaisesRegex(RuntimeError, "session socket changed"):
+                        _remove_stale_socket(path)
+            self.assertTrue(Path(path).exists())
+
     def test_stale_cleanup_refuses_a_regular_file_or_live_socket(self):
         with tempfile.TemporaryDirectory() as directory:
             path = str(Path(directory) / "socket")

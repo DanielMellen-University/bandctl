@@ -51,6 +51,52 @@ class TransportTests(unittest.TestCase):
             self.assertFalse(thread.is_alive())
             self.assertFalse(Path(path).exists())
 
+    def test_deeply_nested_request_is_rejected_without_stopping_server(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "session.sock")
+            thread = threading.Thread(target=serve, args=(Mock(), path))
+            thread.start()
+            wait_ready(path)
+            try:
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                    client.connect(path)
+                    client.sendall(b"[" * 2000 + b"]" * 2000 + b"\n")
+                    response = json.loads(client.recv(4096))
+                    self.assertFalse(response["ok"])
+                    self.assertIn("nested too deeply", response["error"])
+                self.assertTrue(request(path, {"command": "stop"})["ok"])
+            finally:
+                if thread.is_alive():
+                    try:
+                        request(path, {"command": "stop"})
+                    except Exception:
+                        pass
+                thread.join(timeout=3)
+            self.assertFalse(thread.is_alive())
+
+    def test_on_stop_failure_becomes_an_error_response(self):
+        for error in (OSError("teardown failed"), RuntimeError("teardown failed")):
+            with self.subTest(error=type(error).__name__):
+                with tempfile.TemporaryDirectory() as directory:
+                    path = str(Path(directory) / "session.sock")
+                    session = Mock()
+                    session.iface = "eth0"
+
+                    def on_stop(_error=error):
+                        raise _error
+
+                    thread = threading.Thread(target=serve, args=(session, path),
+                                              kwargs={"on_stop": on_stop})
+                    thread.start()
+                    wait_ready(path)
+                    try:
+                        response = request(path, {"command": "stop"})
+                        self.assertFalse(response["ok"])
+                        self.assertIn("teardown failed", response["error"])
+                    finally:
+                        thread.join(timeout=3)
+                    self.assertFalse(thread.is_alive())
+
     def test_malformed_request_does_not_stop_server(self):
         with tempfile.TemporaryDirectory() as directory:
             path = str(Path(directory) / "session.sock")

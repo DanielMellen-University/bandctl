@@ -36,6 +36,10 @@ class CliSessionTests(unittest.TestCase):
             self.session.limit("42", "30", None)
         self.assertFalse(self.shaper.shares)
 
+    def test_remove_without_a_limit_reports_no_limit(self):
+        with self.assertRaisesRegex(ShaperError, "has no limit"):
+            self.session.remove("42")
+
     def test_remove_does_not_target_a_reused_pid(self):
         self.session.limit("42", "30", None)
         self.procs[0] = ProcessInfo(42, "other", "", "user", 0, 101)

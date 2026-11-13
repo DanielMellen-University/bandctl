@@ -63,6 +63,17 @@ class SettingsSessionTests(unittest.TestCase):
                     import_session(path, self.shaper, "eth0", 100_000_000, self.procs)
             self.assertEqual(read_settings(path).rules[0].name, "work")
 
+    def test_unreadable_boot_id_is_reported(self):
+        from bandctl.settings_session import _boot_id
+
+        del self.host.files["/proc/sys/kernel/random/boot_id"]
+        with self.assertRaisesRegex(ValueError, "cannot read the current boot ID"):
+            _boot_id(self.shaper)
+        self.shaper.apply_group(Group("work", 30, None, (42,)), {42: 100}, 100_000_000, None)
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ValueError, "cannot read the current boot ID"):
+                export_session(Path(directory) / "settings.json", self.shaper, "eth0", None, None, [])
+
     def test_deeply_nested_settings_are_rejected_without_changing_limits(self):
         self.shaper.apply_group(Group("work", 30, None, (42,)), {42: 100}, 100_000_000, None)
         previous = self.shaper.shares
