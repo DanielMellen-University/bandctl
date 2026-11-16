@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from bandctl.cli_transport import _read_line, request, serve
+from bandctl.cli_transport import MAX_REQUEST_DEPTH, _check_json_depth, _read_line, request, serve
 
 
 def wait_ready(path):
@@ -23,7 +23,42 @@ def wait_ready(path):
     raise RuntimeError("socket did not become ready")
 
 
+class JsonDepthTests(unittest.TestCase):
+    def test_brackets_inside_strings_do_not_count(self):
+        text = json.dumps({"text": "[{" * (MAX_REQUEST_DEPTH + 1) + "}]"})
+        _check_json_depth(text)
+
+    def test_escaped_quotes_and_backslashes_do_not_end_strings(self):
+        for value in ('"' + "[{" * (MAX_REQUEST_DEPTH + 1),
+                      '\\"' + "[{" * (MAX_REQUEST_DEPTH + 1),
+                      "\\"):
+            with self.subTest(value=value):
+                text = "[" * (MAX_REQUEST_DEPTH - 1) + json.dumps([value]) + "]" * (MAX_REQUEST_DEPTH - 1)
+                _check_json_depth(text)
+
+    def test_depth_exactly_at_limit_passes(self):
+        for opening, closing in (("[", "]"), ('{"key":', "}")):
+            with self.subTest(opening=opening):
+                _check_json_depth(opening * MAX_REQUEST_DEPTH + "0" + closing * MAX_REQUEST_DEPTH)
+
+    def test_depth_above_limit_fails(self):
+        for opening, closing in (("[", "]"), ('{"key":', "}")):
+            with self.subTest(opening=opening):
+                text = opening * (MAX_REQUEST_DEPTH + 1) + "0" + closing * (MAX_REQUEST_DEPTH + 1)
+                with self.assertRaisesRegex(ValueError, "request is nested too deeply"):
+                    _check_json_depth(text)
+
+
 class TransportTests(unittest.TestCase):
+    def test_nested_response_is_rejected_before_json_decoding(self):
+        data = b'{"ok":true,"result":' + b"[" * MAX_REQUEST_DEPTH + b"0" + b"]" * MAX_REQUEST_DEPTH + b"}"
+        with patch("bandctl.cli_transport.socket.socket"), patch(
+            "bandctl.cli_transport._read_line", return_value=data
+        ), patch("bandctl.cli_transport.json.loads") as loads:
+            with self.assertRaisesRegex(ValueError, "invalid session response"):
+                request("unused", {"command": "ping"})
+            loads.assert_not_called()
+
     def test_deeply_nested_response_is_invalid(self):
         with patch("bandctl.cli_transport.socket.socket"), patch(
             "bandctl.cli_transport._read_line", return_value=b"[" * 2000 + b"]" * 2000
@@ -50,6 +85,52 @@ class TransportTests(unittest.TestCase):
                 thread.join(timeout=3)
             self.assertFalse(thread.is_alive())
             self.assertFalse(Path(path).exists())
+
+    def test_deeply_nested_request_is_rejected_without_stopping_server(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = str(Path(directory) / "session.sock")
+            thread = threading.Thread(target=serve, args=(Mock(), path))
+            thread.start()
+            wait_ready(path)
+            try:
+                with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+                    client.connect(path)
+                    client.sendall(b"[" * 2000 + b"]" * 2000 + b"\n")
+                    response = json.loads(client.recv(4096))
+                    self.assertFalse(response["ok"])
+                    self.assertIn("nested too deeply", response["error"])
+                self.assertTrue(request(path, {"command": "stop"})["ok"])
+            finally:
+                if thread.is_alive():
+                    try:
+                        request(path, {"command": "stop"})
+                    except Exception:
+                        pass
+                thread.join(timeout=3)
+            self.assertFalse(thread.is_alive())
+
+    def test_on_stop_failure_becomes_an_error_response(self):
+        for error in (OSError("teardown failed"), RuntimeError("teardown failed")):
+            with self.subTest(error=type(error).__name__):
+                with tempfile.TemporaryDirectory() as directory:
+                    path = str(Path(directory) / "session.sock")
+                    session = Mock()
+                    session.iface = "eth0"
+
+                    def on_stop(_error=error):
+                        raise _error
+
+                    thread = threading.Thread(target=serve, args=(session, path),
+                                              kwargs={"on_stop": on_stop})
+                    thread.start()
+                    wait_ready(path)
+                    try:
+                        response = request(path, {"command": "stop"})
+                        self.assertFalse(response["ok"])
+                        self.assertIn("teardown failed", response["error"])
+                    finally:
+                        thread.join(timeout=3)
+                    self.assertFalse(thread.is_alive())
 
     def test_malformed_request_does_not_stop_server(self):
         with tempfile.TemporaryDirectory() as directory:

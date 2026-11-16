@@ -208,6 +208,17 @@ class ParseTests(unittest.TestCase):
         self.assertEqual(parse_ss(text), {6: (200, 30)})
         self.assertEqual(parse_ss_sockets(text), {(6, "sk:b"): (200, 30)})
 
+    def test_endpoints_with_fewer_than_two_colon_parts_are_empty(self):
+        from bandctl.traffic import _endpoints
+
+        self.assertEqual(_endpoints("tcp 0 0 127.0.0.1:80 users:((\"curl\",pid=42,fd=3))"), ("", ""))
+
+    def test_loopback_check_falls_back_to_127_prefix_for_unparsable_hosts(self):
+        from bandctl.traffic import _is_loopback
+
+        self.assertTrue(_is_loopback("127.0.0.999:1234"))
+        self.assertFalse(_is_loopback("example.invalid:1234"))
+
     def test_sums_sockets_and_skips_loopback_and_unowned(self):
         found = parse_ss(_SS)
         self.assertEqual(found[42], (7500, 2500))

@@ -173,6 +173,22 @@ class WarningTests(unittest.TestCase):
                     ensure.assert_not_called()
                     self.assertIn(error, stderr.getvalue())
 
+    def test_import_rejects_iface_mismatch_before_starting_session(self):
+        import tempfile
+        from pathlib import Path
+        from bandctl.__main__ import main
+        from bandctl.settings import Settings, write_settings
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "settings.json"
+            write_settings(path, Settings("eth0", None, None, (), ()))
+            stderr = io.StringIO()
+            with patch("os.geteuid", return_value=0), \
+                 patch("bandctl.cli_client.ensure_session") as ensure, contextlib.redirect_stderr(stderr):
+                self.assertEqual(main(["--iface", "wlan0", "import", str(path)]), 1)
+            ensure.assert_not_called()
+            self.assertIn("--iface differs from the settings file interface", stderr.getvalue())
+
     def test_wildcard_option_reaches_cli_session_start(self):
         from bandctl.__main__ import main
         response = {"ok": True, "result": {"pid": 42, "down": 30, "up": None}}

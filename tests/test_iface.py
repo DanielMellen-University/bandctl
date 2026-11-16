@@ -50,6 +50,9 @@ class ParseTests(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertIsNone(parse_speed_mbps(value))
 
+    def test_speed_returns_none_for_over_long_digit_string(self):
+        self.assertIsNone(parse_speed_mbps("9" * 5000))
+
     def test_proc_route_skips_invalid_flags_and_metrics(self):
         header = "Iface Destination Gateway Flags RefCnt Use Metric Mask\n"
         good = "eth0 00000000 00000000 0001 0 0 100 00000000\n"
@@ -96,6 +99,24 @@ class LookupTests(unittest.TestCase):
                             "wlan0 00000000 0 0001 0 0 10 00000000", encoding="utf-8")
             with self.assertRaisesRegex(IfaceError, "no default route"):
                 default_iface(run=lambda _args: "default dev eth", proc_route=path)
+
+    def test_nonzero_ip_route_falls_back_to_proc_route(self):
+        from bandctl.iface import _run
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "route"
+            path.write_text("Iface Destination Gateway Flags RefCnt Use Metric Mask\nwlan0 00000000 0 0001 0 0 10 00000000\n", encoding="utf-8")
+            failed = subprocess.CompletedProcess(["ip", "route", "show", "default"], 1,
+                                                 stdout="default dev eth0\n")
+            with patch("bandctl.iface.subprocess.run", return_value=failed):
+                self.assertEqual(_run(["ip", "route", "show", "default"]), "")
+                self.assertEqual(default_iface(proc_route=path), "wlan0")
+
+    def test_unreadable_proc_route_raises(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            missing = Path(tmp) / "no-such-route"
+            with self.assertRaisesRegex(IfaceError, "could not read the routing table"):
+                default_iface(run=lambda _args: "", proc_route=missing)
 
     def test_ip_timeout_falls_back_to_proc_route(self):
         with tempfile.TemporaryDirectory() as tmp:

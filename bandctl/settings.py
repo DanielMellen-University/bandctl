@@ -38,6 +38,7 @@ class Settings:
 
     def __post_init__(self) -> None:
         if (not isinstance(self.iface, str) or not self.iface or self.iface in (".", "..")
+                or any(0xD800 <= ord(char) <= 0xDFFF for char in self.iface)
                 or len(self.iface.encode("utf-8")) > 15 or "/" in self.iface
                 or any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in self.iface)):
             raise ValueError("invalid interface name")

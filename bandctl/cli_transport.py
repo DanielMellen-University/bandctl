@@ -12,6 +12,30 @@ from bandctl.cli_protocol import dispatch
 
 _MAX_MESSAGE = 16_384
 _MAX_RESPONSE = _MAX_MESSAGE * 2
+MAX_REQUEST_DEPTH = 64
+
+
+def _check_json_depth(text: str, *, label: str = "request") -> None:
+    """Bound container nesting before decoding; leave JSON validation to loads."""
+    depth = 0
+    in_string = False
+    escaped = False
+    for char in text:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+        elif char == '"':
+            in_string = True
+        elif char in "[{":
+            depth += 1
+            if depth > MAX_REQUEST_DEPTH:
+                raise ValueError(f"{label} is nested too deeply")
+        elif char in "]}":
+            depth -= 1
 
 
 def _read_line(connection: socket.socket, *, limit: int = _MAX_MESSAGE) -> bytes:
@@ -58,7 +82,9 @@ def request(path: str, payload: dict, *, timeout: float = 3.0) -> dict:
         connection.sendall(encoded)
         data = _read_line(connection, limit=_MAX_RESPONSE)
     try:
-        response = json.loads(data.decode("utf-8"))
+        text = data.decode("utf-8")
+        _check_json_depth(text, label="session response")
+        response = json.loads(text)
     except (ValueError, UnicodeDecodeError, RecursionError) as exc:
         raise ValueError("invalid session response") from exc
     if not isinstance(response, dict) or type(response.get("ok")) is not bool:
@@ -129,7 +155,9 @@ def serve(session, path: str, *, interval: float = 1.0, on_stop=None, stop_reque
                         connection.settimeout(0.5)
                         try:
                             try:
-                                payload = json.loads(_read_line(connection).decode("utf-8"))
+                                text = _read_line(connection).decode("utf-8")
+                                _check_json_depth(text)
+                                payload = json.loads(text)
                             except RecursionError as exc:
                                 raise ValueError("request is nested too deeply") from exc
                             response, stopping = dispatch(session, payload)

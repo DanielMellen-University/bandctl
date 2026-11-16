@@ -106,10 +106,16 @@ def format_bytes(count: int) -> str:
         return f"{count} B"
     value = float(count)
     suffix = "B"
-    for suffix in ("kB", "MB", "GB", "TB", "PB", "EB"):
+    units = ("kB", "MB", "GB", "TB", "PB", "EB")
+    for suffix in units:
         value /= 1_000
         if value < 1_000:
             break
+    # Rounding to the display precision can push the value to 1000
+    # ("1000 kB"); promote to the next unit instead.
+    while value >= 999.5 and suffix != "EB":
+        value /= 1_000
+        suffix = units[units.index(suffix) + 1]
     if value >= 100:
         return f"{value:.0f} {suffix}"
     if value >= 10:

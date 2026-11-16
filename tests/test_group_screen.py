@@ -130,6 +130,31 @@ class GroupScreenTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(app.screen.changed)
             self.assertIn("cannot verify pid 99", str(app.screen.query_one("#group-status", Static).render()))
 
+    async def test_create_rejects_bad_pid_lists(self):
+        app, shaper, host = group_app()
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.press("g")
+            for pids in ("", "1,,2", "abc"):
+                with self.subTest(pids=pids):
+                    app.screen.query_one("#group-name", Input).value = "work"
+                    app.screen.query_one("#group-pids", Input).value = pids
+                    app.screen.query_one("#group-down", Input).value = "30"
+                    await pilot.click("#group-create")
+                    self.assertFalse(shaper.shares)
+                    self.assertIn("enter PIDs separated by commas",
+                                  str(app.screen.query_one("#group-status", Static).render()))
+
+    async def test_add_rejects_anything_other_than_one_pid(self):
+        app, shaper, host = group_app()
+        async with app.run_test(size=(80, 24)) as pilot:
+            await pilot.press("g")
+            app.screen.query_one("#group-name", Input).value = "work"
+            app.screen.query_one("#group-pids", Input).value = "42, 43"
+            await pilot.click("#group-add")
+            self.assertFalse(shaper.shares)
+            self.assertIn("enter one PID to add",
+                          str(app.screen.query_one("#group-status", Static).render()))
+
     async def test_group_counts_once_for_overcommit(self):
         app, shaper, host = group_app()
         async with app.run_test(size=(80, 24)) as pilot:

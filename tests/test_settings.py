@@ -30,6 +30,18 @@ class SettingsTests(unittest.TestCase):
             with self.subTest(changed=changed), self.assertRaises(ValueError):
                 loads(changed)
 
+    def test_rejects_unsupported_version_and_non_list_fields(self):
+        data = json.loads(dumps(self.settings()))
+        data["version"] = 2
+        with self.assertRaisesRegex(ValueError, "unsupported settings version"):
+            loads(json.dumps(data))
+        for field in ("rules", "groups"):
+            changed = json.loads(json.dumps(data))
+            changed["version"] = 1
+            changed[field] = {}
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "must be a list"):
+                loads(json.dumps(changed))
+
     def test_rejects_bad_rule_or_schedule(self):
         data = json.loads(dumps(self.settings()))
         for field, value in (("name", None), ("down", True), ("start", "25:00"), ("end", None)):
@@ -44,6 +56,14 @@ class SettingsTests(unittest.TestCase):
             data[collection][0]["name"] = "bad\udfffname"
             with self.subTest(collection=collection), self.assertRaises(ValueError):
                 loads(json.dumps(data))
+
+    def test_rejects_lone_surrogate_interface_name(self):
+        data = json.loads(dumps(self.settings()))
+        data["interface"] = "\ud800"
+        with self.assertRaisesRegex(ValueError, "invalid interface"):
+            loads(json.dumps(data))
+        with self.assertRaisesRegex(ValueError, "invalid interface"):
+            Settings("\ud800", None, None, (), ())
 
     def test_rejects_bad_budgets_interface_and_pid_identity(self):
         data = json.loads(dumps(self.settings()))
